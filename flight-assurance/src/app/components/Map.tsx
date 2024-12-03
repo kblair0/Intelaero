@@ -75,6 +75,7 @@ const Map = () => {
         mapRef.current!.fitBounds(bounds, {
           padding: 50, // Optional padding around the line
           duration: 1000, // Duration of the zoom animation
+          pitch: 45, // Pitch of the map
         });
       });
     }
@@ -84,7 +85,7 @@ const Map = () => {
     if (mapContainerRef.current) {
       mapRef.current = new mapboxgl.Map({
         container: mapContainerRef.current,
-        style: "mapbox://styles/mapbox/streets-v11",
+        style: "mapbox://styles/jackmckew2/cm481344h00en01rcewr60wj5",
         center: [0, 0],
         zoom: 2,
       });
