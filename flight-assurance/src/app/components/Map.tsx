@@ -115,8 +115,7 @@ const Map = () => {
 
       addGeoJSONToMap(data);
     } catch (error) {
-
-    //   console.error("Error loading example GeoJSON:", error);
+        console.log("Error loading example GeoJSON:", error);
     }
   };
 
