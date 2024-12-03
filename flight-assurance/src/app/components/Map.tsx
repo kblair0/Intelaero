@@ -56,8 +56,10 @@ const Map = () => {
           },
         });
         // Calculate the bounds of the line
+        // @ts-expect-error lineMetrics is enabled
         const coordinates = feature.geometry.coordinates;
         const bounds = coordinates.reduce(
+          // @ts-expect-error lineMetrics is enabled
           (acc, coord) => {
             const [lng, lat] = coord;
             acc[0] = Math.min(acc[0], lng);
