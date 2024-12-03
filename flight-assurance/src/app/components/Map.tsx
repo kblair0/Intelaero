@@ -10,6 +10,17 @@ const Map = () => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
 
+  // Enable free tilt and rotation
+  useEffect(() => {
+    if (mapRef.current) {
+      mapRef.current.dragRotate.enable();
+      mapRef.current.touchZoomRotate.enableRotation();
+
+      // Add zoom and rotation controls to the map.
+      mapRef.current.addControl(new mapboxgl.NavigationControl());
+    }
+  }, []);
+
   const onDrop = (acceptedFiles: File[]) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -75,7 +86,8 @@ const Map = () => {
         mapRef.current!.fitBounds(bounds, {
           padding: 50, // Optional padding around the line
           duration: 1000, // Duration of the zoom animation
-          pitch: 45, // Pitch of the map
+          pitch: 70, // Pitch of the map
+          zoom: 13
         });
       });
     }
@@ -87,7 +99,7 @@ const Map = () => {
         container: mapContainerRef.current,
         style: "mapbox://styles/jackmckew2/cm481344h00en01rcewr60wj5",
         center: [0, 0],
-        zoom: 2,
+        zoom: 2.5,
       });
     }
 
@@ -95,6 +107,18 @@ const Map = () => {
       mapRef.current?.remove();
     };
   }, []);
+
+  const loadExampleGeoJSON = async () => {
+    try {
+      const response = await fetch("/example.geojson"); // Path to your example file
+      const data = await response.json();
+
+      addGeoJSONToMap(data);
+    } catch (error) {
+
+    //   console.error("Error loading example GeoJSON:", error);
+    }
+  };
 
   return (
     <div>
@@ -105,7 +129,13 @@ const Map = () => {
         <input {...getInputProps()} />
         <p>Drag & drop GeoJSON files here, or click to select files</p>
       </div>
-      <div ref={mapContainerRef} style={{ height: "100vh", width: "100%" }} />
+      <button
+        onClick={loadExampleGeoJSON}
+        className="absolute top-4 left-4 bg-blue-500 text-white px-4 py-2 rounded shadow hover:bg-blue-600"
+      >
+        Show Me an Example
+      </button>
+      <div ref={mapContainerRef} style={{ height: "80vh", width: "100%" }} />
     </div>
   );
 };
