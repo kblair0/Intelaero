@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import mapboxgl from "mapbox-gl";
 import { useDropzone } from "react-dropzone";
 import "mapbox-gl/dist/mapbox-gl.css";
+import * as turf from "@turf/turf";
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN!;
 
@@ -100,6 +101,21 @@ const Map = () => {
           mapRef.current!.removeLayer(layerId);
           mapRef.current!.removeSource(layerId);
         }
+
+        // @ts-expect-error coordinates definite exists
+        const coordinates = feature.geometry.coordinates;
+        // Calculate the total distance covered by the line
+        const line = turf.lineString(
+          coordinates.map((coord: [number, number]) => [coord[0], coord[1]])
+        );
+
+        const totalDistance = turf.length(line, { units: "kilometers" });
+
+        // Calculate battery percentage based on the total distance
+        const batteryPerKm = 10; // e.g., 10% of battery per km
+        const batteryPercentage = totalDistance * batteryPerKm;
+        console.log(batteryPercentage);
+
         mapRef.current!.addSource(layerId, {
           type: "geojson",
           data: feature,
@@ -123,8 +139,6 @@ const Map = () => {
           },
         });
         // Calculate the bounds of the line
-        // @ts-expect-error lineMetrics is enabled
-        const coordinates = feature.geometry.coordinates;
         const bounds = coordinates.reduce(
           // @ts-expect-error lineMetrics is enabled
           (acc, coord) => {
