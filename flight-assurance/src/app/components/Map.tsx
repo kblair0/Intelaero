@@ -28,7 +28,6 @@ const parseQGCFile = (content: string): GeoJSON.FeatureCollection => {
       coordinates.push([longitude, latitude, elevation]); // Format: [lon, lat, alt]
     }
   }
-  console.log(coordinates);
 
   // Convert to GeoJSON format
   return {
@@ -64,7 +63,6 @@ const Map = () => {
   const onDrop = (acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
     const fileExtension = file.name.split(".").pop()?.toLowerCase() || "";
-    console.log(fileExtension);
 
     const reader = new FileReader();
     reader.onload = () => {
