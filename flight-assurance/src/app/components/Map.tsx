@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import { useDropzone } from "react-dropzone";
 import "mapbox-gl/dist/mapbox-gl.css";
@@ -47,6 +47,10 @@ const parseQGCFile = (content: string): GeoJSON.FeatureCollection => {
 };
 
 const Map = () => {
+  const [flightTime, setFlightTime] = useState<number>(30); // Estimated flight time (minutes)
+  const [requiredSpeed, setRequiredSpeed] = useState<number | null>(null); // Required speed to complete the flight in the estimated time
+  const [totalDistance, setTotalDistance] = useState<number>(0);
+
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
 
@@ -88,6 +92,15 @@ const Map = () => {
     },
     onDrop,
   });
+  const calculateRequiredSpeed = (
+    totalDistance: number,
+    flightTime: number
+  ) => {
+    // Calculate speed required to complete the distance in the estimated flight time
+    const requiredSpeed = totalDistance / (flightTime / 60);
+
+    return requiredSpeed;
+  };
 
   const addGeoJSONToMap = (geojson: GeoJSON.FeatureCollection) => {
     if (mapRef.current && geojson.type === "FeatureCollection") {
@@ -110,11 +123,7 @@ const Map = () => {
         );
 
         const totalDistance = turf.length(line, { units: "kilometers" });
-
-        // Calculate battery percentage based on the total distance
-        const batteryPerKm = 10; // e.g., 10% of battery per km
-        const batteryPercentage = totalDistance * batteryPerKm;
-        console.log(batteryPercentage);
+        setTotalDistance(totalDistance);
 
         mapRef.current!.addSource(layerId, {
           type: "geojson",
@@ -164,6 +173,14 @@ const Map = () => {
   };
 
   useEffect(() => {
+    // Calculate battery usage based on the total distance, speed, and safety allowance
+    const speedRequired = calculateRequiredSpeed(totalDistance, flightTime);
+
+    // Set battery left state
+    setRequiredSpeed(speedRequired);
+  }, [flightTime, totalDistance]);
+
+  useEffect(() => {
     if (mapContainerRef.current) {
       mapRef.current = new mapboxgl.Map({
         container: mapContainerRef.current,
@@ -201,13 +218,37 @@ const Map = () => {
           files
         </p>
       </div>
+      {/* Sliders */}
+      <div className="flex flex-col items-center">
+        <div className="flex flex-col items-center">
+          <label className="text-lg">Flight Time (minutes): {flightTime}</label>
+          <input
+            type="range"
+            min="5"
+            max="120"
+            value={flightTime}
+            onChange={(e) => setFlightTime(parseInt(e.target.value))}
+            className="slider w-64"
+          />
+        </div>
+
+        {/* Battery Percentage Display */}
+        <div className="mt-6 text-center py-8">
+          <p className="text-4xl font-semibold">
+            Speed Required:{" "}
+            {requiredSpeed !== null
+              ? `${requiredSpeed.toFixed(2)} km/h`
+              : "N/A"}
+          </p>
+        </div>
+      </div>
       <button
         onClick={loadExampleGeoJSON}
         className="absolute top-4 left-4 bg-blue-500 text-white px-4 py-2 rounded shadow hover:bg-blue-600"
       >
         Show Me an Example
       </button>
-      <div ref={mapContainerRef} style={{ height: "80vh", width: "100%" }} />
+      <div ref={mapContainerRef} style={{ height: "65vh", width: "100%" }} />
     </div>
   );
 };
