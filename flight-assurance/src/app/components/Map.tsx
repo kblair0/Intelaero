@@ -6,6 +6,46 @@ import "mapbox-gl/dist/mapbox-gl.css";
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN!;
 
+// Function to parse QGC WPL file format into GeoJSON
+const parseQGCFile = (content: string): GeoJSON.FeatureCollection => {
+  const lines = content.trim().split("\n");
+  const coordinates = [];
+
+  // Skip the header (first two lines)
+  for (let i = 2; i < lines.length; i++) {
+    const parts = lines[i].split("\t");
+    const latitude = parseFloat(parts[8]);
+    const longitude = parseFloat(parts[9]);
+    const elevation = parseFloat(parts[10]);
+
+    if (
+      !isNaN(latitude) &&
+      !isNaN(longitude) &&
+      !isNaN(elevation) &&
+      latitude !== 0 &&
+      longitude !== 0
+    ) {
+      coordinates.push([longitude, latitude, elevation]); // Format: [lon, lat, alt]
+    }
+  }
+  console.log(coordinates);
+
+  // Convert to GeoJSON format
+  return {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        properties: { name: "Drone Flight Path" },
+        geometry: {
+          type: "LineString",
+          coordinates,
+        },
+      },
+    ],
+  };
+};
+
 const Map = () => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -22,18 +62,31 @@ const Map = () => {
   }, []);
 
   const onDrop = (acceptedFiles: File[]) => {
+    const file = acceptedFiles[0];
+    const fileExtension = file.name.split(".").pop()?.toLowerCase() || "";
+    console.log(fileExtension);
+
     const reader = new FileReader();
     reader.onload = () => {
       if (reader.result) {
-        const geojson = JSON.parse(reader.result as string);
-        addGeoJSONToMap(geojson);
+        if (fileExtension === "waypoints") {
+          const qgcToGeojson = parseQGCFile(reader.result as string);
+          addGeoJSONToMap(qgcToGeojson);
+        }
+        if (fileExtension === "geojson") {
+          const geojson = JSON.parse(reader.result as string);
+          addGeoJSONToMap(geojson);
+        }
       }
     };
     acceptedFiles.forEach((file) => reader.readAsText(file));
   };
 
   const { getRootProps, getInputProps } = useDropzone({
-    accept: { "application/geo+json": [".geojson"] },
+    accept: {
+      "application/geo+json": [".geojson"],
+      "application/waypoints": [".waypoints"],
+    },
     onDrop,
   });
 
@@ -44,6 +97,11 @@ const Map = () => {
       );
       features.forEach((feature, idx) => {
         const layerId = `line-${idx}`;
+        // Remove existing layer and source if they exist
+        if (mapRef.current!.getSource(layerId)) {
+          mapRef.current!.removeLayer(layerId);
+          mapRef.current!.removeSource(layerId);
+        }
         mapRef.current!.addSource(layerId, {
           type: "geojson",
           data: feature,
@@ -87,7 +145,7 @@ const Map = () => {
           padding: 50, // Optional padding around the line
           duration: 1000, // Duration of the zoom animation
           pitch: 70, // Pitch of the map
-          zoom: 13
+          zoom: 13,
         });
       });
     }
@@ -115,7 +173,7 @@ const Map = () => {
 
       addGeoJSONToMap(data);
     } catch (error) {
-        console.log("Error loading example GeoJSON:", error);
+      console.log("Error loading example GeoJSON:", error);
     }
   };
 
@@ -126,7 +184,10 @@ const Map = () => {
         style={{ border: "2px dashed gray", padding: "1rem", margin: "1rem" }}
       >
         <input {...getInputProps()} />
-        <p>Drag & drop GeoJSON files here, or click to select files</p>
+        <p>
+          Drag & drop GeoJSON or Mission Planner files here, or click to select
+          files
+        </p>
       </div>
       <button
         onClick={loadExampleGeoJSON}
