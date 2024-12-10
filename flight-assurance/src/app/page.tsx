@@ -1,4 +1,5 @@
-import Map from "./components/Map";
+import BatteryCalculator from "./components/BatteryCalculator";
+// import Map from "./components/Map";
 
 export default function Home() {
   return (
@@ -8,7 +9,8 @@ export default function Home() {
           Flight Assurance
         </h1>
       </div>
-      <Map />
+      {/* <Map /> */}
+      <BatteryCalculator />
     </div>
   );
 }
