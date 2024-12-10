@@ -46,13 +46,21 @@ const parseQGCFile = (content: string): GeoJSON.FeatureCollection => {
   };
 };
 
-const Map = () => {
-  const [flightTime, setFlightTime] = useState<number>(30); // Estimated flight time (minutes)
-  const [requiredSpeed, setRequiredSpeed] = useState<number | null>(null); // Required speed to complete the flight in the estimated time
+const Map = ({
+  estimatedFlightDistance,
+}: {
+  estimatedFlightDistance: number;
+}) => {
   const [totalDistance, setTotalDistance] = useState<number>(0);
+  const [startMarker, setStartMarker] = useState<mapboxgl.Marker | null>(null);
+  const [endMarker, setEndMarker] = useState<mapboxgl.Marker | null>(null);
+  const [showTick, setShowTick] = useState(false); // New state to manage the tick display
+
+  const lineRef = useRef<GeoJSON.FeatureCollection | null>(null);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
+  const markerRef = useRef<mapboxgl.Marker | null>(null); // Ref to store the marker instance
 
   // Enable free tilt and rotation
   useEffect(() => {
@@ -92,15 +100,6 @@ const Map = () => {
     },
     onDrop,
   });
-  const calculateRequiredSpeed = (
-    totalDistance: number,
-    flightTime: number
-  ) => {
-    // Calculate speed required to complete the distance in the estimated flight time
-    const requiredSpeed = totalDistance / (flightTime / 60);
-
-    return requiredSpeed;
-  };
 
   const addGeoJSONToMap = (geojson: GeoJSON.FeatureCollection) => {
     if (mapRef.current && geojson.type === "FeatureCollection") {
@@ -141,9 +140,7 @@ const Map = () => {
               ["linear"],
               ["line-progress"],
               0,
-              "#00FF00", // Green at the start
-              1,
-              "#FF0000", // Red at the end
+              "#FFFF00",
             ],
           },
         });
@@ -166,19 +163,44 @@ const Map = () => {
           padding: 50, // Optional padding around the line
           duration: 1000, // Duration of the zoom animation
           pitch: 70, // Pitch of the map
-          zoom: 13,
+          zoom: 12.5,
         });
+
+        // Create markers at the start and end of the line
+        const startCoord = coordinates[0];
+        const endCoord = coordinates[coordinates.length - 1];
+        // Create start marker
+        if (!startMarker) {
+          const newStartMarker = new mapboxgl.Marker({ color: "green" })
+            .setLngLat(startCoord)
+            .setPopup(
+              new mapboxgl.Popup({ closeButton: false }).setHTML(
+                "'<strong style=\"color: black;\">Start</strong>'"
+              )
+            )
+            .addTo(mapRef.current!);
+          newStartMarker.togglePopup();
+          setStartMarker(newStartMarker);
+        }
+
+        // Create end marker
+        if (!endMarker) {
+          const newEndMarker = new mapboxgl.Marker({ color: "red" })
+            .setLngLat(endCoord)
+            .setPopup(
+              new mapboxgl.Popup({ closeButton: false }).setHTML(
+                "'<strong style=\"color: black;\">Finish</strong>'"
+              )
+            )
+            .addTo(mapRef.current!);
+          newEndMarker.togglePopup();
+          setEndMarker(newEndMarker);
+        }
       });
+
+      lineRef.current = geojson;
     }
   };
-
-  useEffect(() => {
-    // Calculate battery usage based on the total distance, speed, and safety allowance
-    const speedRequired = calculateRequiredSpeed(totalDistance, flightTime);
-
-    // Set battery left state
-    setRequiredSpeed(speedRequired);
-  }, [flightTime, totalDistance]);
 
   useEffect(() => {
     if (mapContainerRef.current) {
@@ -206,49 +228,100 @@ const Map = () => {
     }
   };
 
+  // Update the marker position when the estimated distance changes
+  useEffect(() => {
+    if (lineRef.current && estimatedFlightDistance > 0) {
+      const line = turf.lineString(
+        // @ts-expect-error Why
+        lineRef.current.features[0].geometry.coordinates.map(
+          (coord: [number, number]) => [coord[0], coord[1]]
+        )
+      );
+      const distanceAlongLine = turf.along(line, estimatedFlightDistance, {
+        units: "kilometers",
+      });
+      const point = distanceAlongLine.geometry.coordinates;
+
+      // Check if the estimated flight distance is greater than the total distance
+      if (estimatedFlightDistance > totalDistance) {
+        setShowTick(true); // Show the green tick
+        if (markerRef.current) {
+          markerRef.current.remove(); // Remove the marker
+          markerRef.current = null; // Clear the marker ref
+        }
+      } else {
+        setShowTick(false); // Hide the green tick
+
+        // Update marker position on map
+        if (markerRef.current) {
+          markerRef.current.setLngLat([point[0], point[1]]);
+        } else {
+          // If marker does not exist yet, create it
+          if (mapRef.current) {
+            const popup = new mapboxgl.Popup({ closeButton: false })
+              .setHTML(
+                '<strong style="color: black;">❌ Estimated finish</strong>'
+              ) // Red Cross Emoji
+              .setMaxWidth("none");
+
+            const newMarker = new mapboxgl.Marker()
+              .setLngLat([point[0], point[1]])
+              .addTo(mapRef.current);
+
+            newMarker.setPopup(popup).togglePopup(); // Automatically show the popup
+
+            markerRef.current = newMarker; // Store marker instance in ref
+          }
+        }
+      }
+    }
+  }, [estimatedFlightDistance, totalDistance]);
+
   return (
     <div>
-      <div
-        {...getRootProps()}
-        style={{ border: "2px dashed gray", padding: "1rem", margin: "1rem" }}
-      >
-        <input {...getInputProps()} />
-        <p>
-          Drag & drop GeoJSON or Mission Planner files here, or click to select
-          files
-        </p>
-      </div>
-      {/* Sliders */}
-      <div className="flex flex-col items-center">
-        <div className="flex flex-col items-center">
-          <label className="text-lg">Flight Time (minutes): {flightTime}</label>
-          <input
-            type="range"
-            min="5"
-            max="120"
-            value={flightTime}
-            onChange={(e) => setFlightTime(parseInt(e.target.value))}
-            className="slider w-64"
-          />
+      <div className="flex items-center">
+        {/* Component 1: Dropzone */}
+        <div className="flex-1 px-16 py-10">
+          <div
+            {...getRootProps()}
+            className="border-dashed border-2 text-white px-4 py-4 rounded shadow hover:bg-blue-600"
+          >
+            <input {...getInputProps()} />
+            <p>
+              Drag & drop GeoJSON or Mission Planner files here, or click to
+              select files
+            </p>
+          </div>
         </div>
 
-        {/* Battery Percentage Display */}
-        <div className="mt-6 text-center py-8">
-          <p className="text-4xl font-semibold">
-            Speed Required:{" "}
-            {requiredSpeed !== null
-              ? `${requiredSpeed.toFixed(2)} km/h`
-              : "N/A"}
-          </p>
+        {/* Component 2: Button for Example */}
+        <div className="flex-4 px-8 py-10">
+          <button
+            onClick={loadExampleGeoJSON}
+            className="bg-blue-500 text-white px-4 py-2 rounded shadow hover:bg-blue-600"
+          >
+            Show Me an Example
+          </button>
         </div>
       </div>
-      <button
-        onClick={loadExampleGeoJSON}
-        className="absolute top-4 left-4 bg-blue-500 text-white px-4 py-2 rounded shadow hover:bg-blue-600"
-      >
-        Show Me an Example
-      </button>
-      <div ref={mapContainerRef} style={{ height: "65vh", width: "100%" }} />
+      <div className="flex justify-center items-center my-4">
+        {showTick ? (
+          <>
+            <p className="text-green-500">
+              ✅ Flight distance exceeds the total distance! (
+              {totalDistance.toFixed(2)}km)
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-red-500">
+              ❌ Flight distance does not exceed the total distance! (
+              {totalDistance.toFixed(2)}km)
+            </p>
+          </>
+        )}
+      </div>
+      <div ref={mapContainerRef} style={{ height: "70vh", width: "100%" }} />
     </div>
   );
 };
