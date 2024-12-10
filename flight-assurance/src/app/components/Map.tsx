@@ -52,8 +52,6 @@ const Map = ({
   estimatedFlightDistance: number;
 }) => {
   const [totalDistance, setTotalDistance] = useState<number>(0);
-  const [startMarker, setStartMarker] = useState<mapboxgl.Marker | null>(null);
-  const [endMarker, setEndMarker] = useState<mapboxgl.Marker | null>(null);
   const [showTick, setShowTick] = useState(false); // New state to manage the tick display
 
   const lineRef = useRef<GeoJSON.FeatureCollection | null>(null);
@@ -61,6 +59,8 @@ const Map = ({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markerRef = useRef<mapboxgl.Marker | null>(null); // Ref to store the marker instance
+  const startMarkerRef = useRef<mapboxgl.Marker | null>(null); // Ref to store the marker instance
+  const endMarkerRef = useRef<mapboxgl.Marker | null>(null); // Ref to store the marker instance
 
   // Enable free tilt and rotation
   useEffect(() => {
@@ -170,31 +170,39 @@ const Map = ({
         const startCoord = coordinates[0];
         const endCoord = coordinates[coordinates.length - 1];
         // Create start marker
-        if (!startMarker) {
-          const newStartMarker = new mapboxgl.Marker({ color: "green" })
-            .setLngLat(startCoord)
-            .setPopup(
-              new mapboxgl.Popup({ closeButton: false }).setHTML(
-                "'<strong style=\"color: black;\">Start</strong>'"
+        if (startMarkerRef.current) {
+          startMarkerRef.current.setLngLat(startCoord);
+        } else {
+          if (mapRef.current) {
+            const newStartMarker = new mapboxgl.Marker({ color: "green" })
+              .setLngLat(startCoord)
+              .setPopup(
+                new mapboxgl.Popup({ closeButton: false }).setHTML(
+                  "'<strong style=\"color: black;\">Start</strong>'"
+                )
               )
-            )
-            .addTo(mapRef.current!);
-          newStartMarker.togglePopup();
-          setStartMarker(newStartMarker);
+              .addTo(mapRef.current!);
+            newStartMarker.togglePopup();
+            startMarkerRef.current = newStartMarker;
+          }
         }
 
         // Create end marker
-        if (!endMarker) {
-          const newEndMarker = new mapboxgl.Marker({ color: "red" })
-            .setLngLat(endCoord)
-            .setPopup(
-              new mapboxgl.Popup({ closeButton: false }).setHTML(
-                "'<strong style=\"color: black;\">Finish</strong>'"
+        if (endMarkerRef.current) {
+          endMarkerRef.current.setLngLat(endCoord);
+        } else {
+          if (mapRef.current) {
+            const newEndMarker = new mapboxgl.Marker({ color: "red" })
+              .setLngLat(endCoord)
+              .setPopup(
+                new mapboxgl.Popup({ closeButton: false }).setHTML(
+                  "'<strong style=\"color: black;\">Finish</strong>'"
+                )
               )
-            )
-            .addTo(mapRef.current!);
-          newEndMarker.togglePopup();
-          setEndMarker(newEndMarker);
+              .addTo(mapRef.current!);
+            newEndMarker.togglePopup();
+            endMarkerRef.current = newEndMarker;
+          }
         }
       });
 
