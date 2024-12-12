@@ -3,19 +3,59 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #ffffff; /* White background */
+  --foreground: #d4af37; /* Gold foreground */
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #ffffff; /* Keep background white even in dark mode */
+    --foreground: #d4af37; /* Keep gold color for text */
   }
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--foreground); /* Gold text */
+  background: var(--background); /* White background */
+  font-family: 'Ubuntu', Arial, Helvetica, sans-serif; /* Use Ubuntu font */
 }
+
+p {
+  color: black;
+}
+
+label {
+  color: black;
+}
+
+span {
+  color: black;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--foreground); 
+}
+/* Inputs */ 
+input[type="number"] {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background-color: #f9f9f9;
+  border: 1px solid #d4af37;
+  color: #000;
+  border-radius: 0.375rem;
+  font-size: 1rem;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+input[type="number"]:focus {
+  border-color: #d4af37;
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.4);
+}
+
+input[type="number"]::placeholder {
+  color: #aaa;
+  font-style: italic;
+}
+
+

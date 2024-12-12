@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import Map from "./Map";
 
 const BatteryCalculator: React.FC = () => {
-  const [batteryCapacity, setBatteryCapacity] = useState<string>("2800"); // Use string to allow empty input
+  const [batteryCapacity, setBatteryCapacity] = useState<string>("28000"); // Use string to allow empty input
   const [dischargeRate, setDischargeRate] = useState<string>("700"); // Use string to allow empty input
   const [assumedSpeed, setAssumedSpeed] = useState<string>("20"); // Default assumed speed
   const [showSpeedInput, setShowSpeedInput] = useState<boolean>(false);
@@ -44,7 +44,7 @@ const BatteryCalculator: React.FC = () => {
           </label>
           <input
             type="number"
-            className="w-full px-3 py-2 bg-gray-800 rounded text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+
             value={batteryCapacity}
             onChange={(e) => setBatteryCapacity(e.target.value)}
             placeholder="Enter capacity"
@@ -57,7 +57,7 @@ const BatteryCalculator: React.FC = () => {
           </label>
           <input
             type="number"
-            className="w-full px-3 py-2 bg-gray-800 rounded text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+
             value={dischargeRate}
             onChange={(e) => setDischargeRate(e.target.value)}
             placeholder="Enter discharge rate"
@@ -84,7 +84,7 @@ const BatteryCalculator: React.FC = () => {
           <div>
             <input
               type="number"
-              className="w-full px-3 py-2 bg-gray-800 rounded text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+
               value={assumedSpeed}
               onChange={(e) => setAssumedSpeed(e.target.value)}
               placeholder="Enter speed"

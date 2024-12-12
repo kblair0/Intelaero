@@ -214,16 +214,42 @@ const Map = ({
     if (mapContainerRef.current) {
       mapRef.current = new mapboxgl.Map({
         container: mapContainerRef.current,
-        style: "mapbox://styles/jackmckew2/cm481344h00en01rcewr60wj5",
+        style: "mapbox://styles/mapbox-map-design/ckhqrf2tz0dt119ny6azh975y", // 3D map style
         center: [0, 0],
         zoom: 2.5,
+        projection: "globe", // Optional: Set the map to globe projection
+      });
+  
+      mapRef.current.on("load", () => {
+        // Add the DEM source for terrain
+        mapRef.current!.addSource("mapbox-dem", {
+          type: "raster-dem",
+          url: "mapbox://mapbox.mapbox-terrain-dem-v1",
+          tileSize: 512,
+          maxzoom: 14,
+        });
+  
+        // Ensure the source is available before applying terrain
+        mapRef.current!.setTerrain({ source: "mapbox-dem", exaggeration: 1.5 });
+  
+        // Optional: Add a sky layer for atmospheric realism
+        mapRef.current!.addLayer({
+          id: "sky",
+          type: "sky",
+          paint: {
+            "sky-type": "atmosphere",
+            "sky-atmosphere-sun": [0.0, 90.0],
+            "sky-atmosphere-sun-intensity": 15,
+          },
+        });
       });
     }
-
+  
     return () => {
       mapRef.current?.remove();
     };
   }, []);
+  
 
   const loadExampleGeoJSON = async () => {
     try {
@@ -292,7 +318,7 @@ const Map = ({
         <div className="flex-1 px-16 py-10">
           <div
             {...getRootProps()}
-            className="border-dashed border-2 text-white px-4 py-4 rounded shadow hover:bg-blue-600"
+            className="border-dashed border-2 text-black px-4 py-4 rounded shadow bg-white hover:bg-blue-600"
           >
             <input {...getInputProps()} />
             <p>
@@ -329,7 +355,7 @@ const Map = ({
           </>
         )}
       </div>
-      <div ref={mapContainerRef} style={{ height: "70vh", width: "100%" }} />
+      <div ref={mapContainerRef} style={{ height: "70vh", width: "100%", marginBottom: "100px", }} />
     </div>
   );
 };

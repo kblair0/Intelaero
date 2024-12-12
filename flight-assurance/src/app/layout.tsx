@@ -1,21 +1,16 @@
 import type { Metadata } from "next";
-import localFont from "next/font/local";
+import { Ubuntu } from "next/font/google";
 import "./globals.css";
 
-const geistSans = localFont({
-  src: "./fonts/GeistVF.woff",
-  variable: "--font-geist-sans",
-  weight: "100 900",
-});
-const geistMono = localFont({
-  src: "./fonts/GeistMonoVF.woff",
-  variable: "--font-geist-mono",
-  weight: "100 900",
+const ubuntu = Ubuntu({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "700"], // Use desired font weights
+  variable: "--font-ubuntu",
 });
 
 export const metadata: Metadata = {
-  title: "Flight Assurance",
-  description: "Fly safe with Flight Assurance",
+  title: "Inte.Aero Flight Assurance",
+  description: "Fly Safe with Intel.Aero",
 };
 
 export default function RootLayout({
@@ -24,12 +19,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
-      </body>
+    <html lang="en" className={ubuntu.variable}>
+      <body className="antialiased">{children}</body>
     </html>
   );
 }
