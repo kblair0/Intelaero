@@ -5,7 +5,7 @@ import { useDropzone } from "react-dropzone";
 import "mapbox-gl/dist/mapbox-gl.css";
 import * as turf from "@turf/turf";
 
-mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN!;
+mapboxgl.accessToken = "pk.eyJ1IjoiaW50ZWxhZXJvIiwiYSI6ImNtM2EwZzY3ODB5bDgyam9yOTZ1ajE2YWsifQ.b9w33legWjEDzezOZx1N4g";
 
 // Function to parse QGC WPL file format into GeoJSON
 const parseQGCFile = (content: string): GeoJSON.FeatureCollection => {
