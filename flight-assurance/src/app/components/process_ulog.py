@@ -10,8 +10,8 @@ vehicle_position = ulog.get_dataset("vehicle_local_position").data
 battery_status = ulog.get_dataset("battery_status").data
 
 # Create DataFrame for position/velocity and battery data
-df_position = pd.DataFrame(vehicle_position, columns=["timestamp","vx","vy","vz","z"])
-df_battery = pd.DataFrame(battery_status, columns=["timestamp","voltage_v","current_a"])
+df_position = pd.DataFrame(vehicle_position, columns=["timestamp", "vx", "vy", "vz", "z"])
+df_battery = pd.DataFrame(battery_status, columns=["timestamp", "voltage_v", "current_a"])
 
 # Convert timestamps to seconds from start
 t0_pos = df_position["timestamp"].iloc[0]
@@ -39,15 +39,15 @@ thresholds = {
 
 # Conditions for phase classification
 conditions = [
-    ( (abs(df_combined["vz"]) < thresholds["ground_vel"]) &
-      (abs(df_combined["horizontal_velocity"]) < thresholds["ground_vel"]) &
-      (df_combined["altitude"] < thresholds["altitude_min"]) ),
-    ( (df_combined["horizontal_velocity"] > thresholds["cruise_vel"]) &
-      (df_combined["altitude"] >= thresholds["altitude_min"]) ),
+    ((abs(df_combined["vz"]) < thresholds["ground_vel"]) &
+     (abs(df_combined["horizontal_velocity"]) < thresholds["ground_vel"]) &
+     (df_combined["altitude"] < thresholds["altitude_min"])),
+    ((df_combined["horizontal_velocity"] > thresholds["cruise_vel"]) &
+     (df_combined["altitude"] >= thresholds["altitude_min"])),
     (df_combined["vz"] > thresholds["descend_vz"]),
     (df_combined["vz"] < thresholds["climb_vz"]),
-    ( (abs(df_combined["vz"]) < thresholds["ground_vel"]) &
-      (df_combined["altitude"] >= thresholds["altitude_min"]) )
+    ((abs(df_combined["vz"]) < thresholds["ground_vel"]) &
+     (df_combined["altitude"] >= thresholds["altitude_min"]))
 ]
 
 choices = ["On the Ground", "Cruising", "Descending", "Climbing", "Hovering"]
@@ -85,6 +85,9 @@ total_mAh = df_combined["mAh"].sum()
 total_time = df_combined["time"].iloc[-1] - df_combined["time"].iloc[0]
 avg_mAh_per_s = total_mAh / total_time
 
+# Calculate total draw per minute
+total_draw_per_minute = total_mAh / (total_time / 60)
+
 # Exclude "On the Ground" for non-ground calculations
 non_ground = df_combined[df_combined["raw_phase"] != "On the Ground"]
 total_mAh_non_ground = non_ground["mAh"].sum()
@@ -118,6 +121,17 @@ df_phase = pd.DataFrame(phase_data).groupby("Phase", as_index=False).agg({
     "DiffofAvg(%)": "mean",
     "PctTime of Flight(%)": "sum"
 })
+
+# Add total flight summary
+summary_data = {
+    "Phase": "Total Flight Summary",
+    "TotalTime(s)": total_time,
+    "Total Draw(mAh)": total_mAh,
+    "Total Draw per Minute(mAh)": total_draw_per_minute
+}
+
+# Append the summary data to the final JSON output
+df_phase = pd.concat([df_phase, pd.DataFrame([summary_data])], ignore_index=True)
 
 # Output to JSON
 df_phase.to_json("../../../public/phase_analysis.json", orient="records")

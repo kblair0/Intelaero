@@ -1,0 +1,116 @@
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+from pyulog import ULog
+import pandas as pd
+import numpy as np
+
+app = Flask(__name__)
+CORS(app, resources={r"/upload": {"origins": r"http://localhost:\d+"}})
+
+# Function to consolidate phases
+def consolidate_phases(df, time_threshold=1.0):
+    df = df[["time", "raw_phase", "time_delta"]]
+    consolidated = []
+    current_phase = df["raw_phase"].iloc[0]
+    start_time = df["time"].iloc[0]
+    total_time = 0
+
+    for _, row in df.iterrows():
+        if row["raw_phase"] == current_phase:
+            total_time += row["time_delta"]
+        else:
+            if total_time >= time_threshold:
+                consolidated.append((current_phase, start_time, row["time"]))
+            current_phase = row["raw_phase"]
+            start_time = row["time"]
+            total_time = row["time_delta"]
+
+    if total_time >= time_threshold:
+        consolidated.append((current_phase, start_time, df["time"].iloc[-1]))
+
+    return consolidated
+
+@app.route('/upload', methods=['POST'])
+def upload_file():
+    if 'file' not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    file = request.files['file']
+    try:
+        # Load ULog file
+        ulog = ULog(file)
+
+        # Extract datasets
+        vehicle_position = ulog.get_dataset("vehicle_local_position").data
+        battery_status = ulog.get_dataset("battery_status").data
+
+        # Create DataFrames
+        df_position = pd.DataFrame(vehicle_position, columns=["timestamp", "vx", "vy", "vz", "z"])
+        df_battery = pd.DataFrame(battery_status, columns=["timestamp", "voltage_v", "current_a"])
+
+        # Convert timestamps to seconds
+        t0_pos = df_position["timestamp"].iloc[0]
+        t0_bat = df_battery["timestamp"].iloc[0]
+        df_position["time"] = (df_position["timestamp"] - t0_pos) / 1e6
+        df_battery["time"] = (df_battery["timestamp"] - t0_bat) / 1e6
+
+        # Merge datasets
+        df_combined = pd.merge_asof(df_position.sort_values("time"),
+                                    df_battery.sort_values("time"), on="time", direction="nearest")
+        df_combined["horizontal_velocity"] = np.sqrt(df_combined["vx"]**2 + df_combined["vy"]**2)
+        df_combined["time_delta"] = df_combined["time"].diff().fillna(0)
+        df_combined["altitude"] = -df_combined["z"]
+        df_combined["mAh"] = (df_combined["current_a"] * df_combined["time_delta"]) / 3600
+
+        # Phase classification
+        thresholds = {"ground_vel": 0.1, "cruise_vel": 2.0, "altitude_min": 5.0, "climb_vz": -0.1, "descend_vz": 0.1}
+        conditions = [
+            ((abs(df_combined["vz"]) < thresholds["ground_vel"]) &
+             (abs(df_combined["horizontal_velocity"]) < thresholds["ground_vel"]) &
+             (df_combined["altitude"] < thresholds["altitude_min"])),
+            ((df_combined["horizontal_velocity"] > thresholds["cruise_vel"]) &
+             (df_combined["altitude"] >= thresholds["altitude_min"])),
+            (df_combined["vz"] > thresholds["descend_vz"]),
+            (df_combined["vz"] < thresholds["climb_vz"]),
+            ((abs(df_combined["vz"]) < thresholds["ground_vel"]) &
+             (df_combined["altitude"] >= thresholds["altitude_min"]))
+        ]
+        choices = ["On the Ground", "Cruising", "Descending", "Climbing", "Hovering"]
+        df_combined["raw_phase"] = np.select(conditions, choices, default="Unknown")
+
+        # Consolidate phases
+        consolidated_phases = consolidate_phases(df_combined)
+
+        # Exclude "On the Ground"
+        non_ground = df_combined[df_combined["raw_phase"] != "On the Ground"]
+        total_mAh_non_ground = non_ground["mAh"].sum()
+        total_time_non_ground = non_ground["time_delta"].sum()
+        total_avg_draw_non_ground = total_mAh_non_ground / total_time_non_ground
+
+        # Aggregate phase data
+        phase_data = []
+        for phase, start, end in consolidated_phases:
+            mask = (df_combined["time"] >= start) & (df_combined["time"] < end)
+            phase_df = df_combined[mask]
+            phase_duration = end - start
+            phase_mAh = phase_df["mAh"].sum()
+            avg_dr_phase = phase_mAh / phase_duration
+            phase_data.append({
+                "Phase": phase,
+                "TotalTime(s)": phase_duration,
+                "Total Draw(mAh)": phase_mAh,
+                "AvgDr(mAh/s)": avg_dr_phase
+            })
+
+        df_phase = pd.DataFrame(phase_data).groupby("Phase", as_index=False).sum()
+
+        return jsonify({
+            "total_avg_draw_non_ground": total_avg_draw_non_ground,
+            "phases": df_phase.to_dict(orient="records")
+        })
+
+    except Exception as e:
+        return jsonify({"error": f"Failed to process file: {str(e)}"}), 500
+
+if __name__ == "__main__":
+    app.run(debug=True)

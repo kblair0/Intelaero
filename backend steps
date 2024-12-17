@@ -1,0 +1,4 @@
+to start backend
+
+cd flight-assurance/flight-assurance/backend
+python app.py
