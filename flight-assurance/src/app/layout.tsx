@@ -9,8 +9,8 @@ const ubuntu = Ubuntu({
 });
 
 export const metadata: Metadata = {
-  title: "Inte.Aero Flight Assurance",
-  description: "Fly Safe with Intel.Aero",
+  title: "Inte.Aero",
+  description: "Intelligent Mission Assurance For RPAS",
 };
 
 export default function RootLayout({

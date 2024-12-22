@@ -1,202 +1,165 @@
 "use client";
-import React, { useState } from "react";
-import Map from "./Map";
-import FlightLogUploader from "./FlightLogUploader";
+import React, { useState, useEffect, useRef } from "react";
+import Map, { MapRef } from "./Map";
 
 const BatteryCalculator: React.FC = () => {
-  const [batteryCapacity, setBatteryCapacity] = useState<string>("28000"); // Use string to allow empty input
-  const [dischargeRate, setDischargeRate] = useState<string>("700"); // Use string to allow empty input
-  const [assumedSpeed, setAssumedSpeed] = useState<string>("20"); // Default assumed speed
+  const [batteryCapacity, setBatteryCapacity] = useState<string>("28000");
+  const [dischargeRate, setDischargeRate] = useState<string>("700");
+  const [assumedSpeed, setAssumedSpeed] = useState<string>("20");
   const [showSpeedInput, setShowSpeedInput] = useState<boolean>(false);
 
-  // New state for phase analysis
   const [averageDraw, setAverageDraw] = useState<number | null>(null);
   const [phaseData, setPhaseData] = useState<any[]>([]);
+  const [parsedDistance, setParsedDistance] = useState<number>(0);
 
-  // Parse input values or default to 0 if empty
-  const parsedBatteryCapacity = parseFloat(batteryCapacity) || 0;
-  const parsedDischargeRate = parseFloat(dischargeRate) || 0;
-  const parsedAssumedSpeed = parseFloat(assumedSpeed) || 20;
+  const mapRef = useRef<MapRef | null>(null);
 
-  // Calculate the estimated flight time
-  const flightTime =
-    parsedBatteryCapacity > 0 && parsedDischargeRate > 0
-      ? (parsedBatteryCapacity / parsedDischargeRate).toFixed(2)
-      : "0";
+  useEffect(() => {
+    const parsedBatteryCapacity = parseFloat(batteryCapacity) || 0;
+    const parsedDischargeRate = parseFloat(dischargeRate) || 0;
+    const parsedAssumedSpeed = parseFloat(assumedSpeed) || 20;
 
-  // Calculate the distance the drone can travel
-  const distance =
-    parsedBatteryCapacity > 0 && parsedDischargeRate > 0
-      ? ((Number(flightTime) / 60) * parsedAssumedSpeed).toFixed(2) // Convert flight time to hours
-      : "0";
-  const parsedDistance = parseFloat(distance) || 0;
+    const flightTime =
+      parsedBatteryCapacity > 0 && parsedDischargeRate > 0
+        ? (parsedBatteryCapacity / parsedDischargeRate).toFixed(2)
+        : "0";
 
-  // Handle the processed flight log data
-  const handleFileProcessing = (data: any) => {
-    console.log("Backend Response:", data); // Log to check the exact response
-  
-    if (Array.isArray(data)) {
-      // Backend returned the array directly
-      setPhaseData(data);
-    } else {
-      console.error("Unexpected response structure:", data);
-      setPhaseData([]); // Default to an empty array if response is unexpected
-    }
-  };   
+    const distance =
+      parsedBatteryCapacity > 0 && parsedDischargeRate > 0
+        ? ((Number(flightTime) / 60) * parsedAssumedSpeed).toFixed(2)
+        : "0";
+
+    setParsedDistance(parseFloat(distance) || 0);
+  }, [batteryCapacity, dischargeRate, assumedSpeed]);
+
+  const handleDataProcessed = (data: { averageDraw: number; phaseData: any[] }) => {
+    setAverageDraw(data.averageDraw);
+    setPhaseData(data.phaseData);
+  };
 
   return (
-    <div className="flex h-screen text-white">
-      {/* Map container */}
-      <div className="flex-1">
-        <div className="relative w-full h-full">
-          <Map estimatedFlightDistance={parsedDistance} />
+    <div className="flex flex-col md:flex-row min-h-screen text-white bg-gray-200">
+      {/* Map Section */}
+      <div className="w-full md:flex-1 md:h-full order-1 md:order-none">
+        <div className="relative w-full h-64 md:h-full">
+        <Map
+          ref={mapRef}
+          estimatedFlightDistance={parsedDistance}
+          onDataProcessed={handleDataProcessed}
+        />
         </div>
       </div>
 
-      <div className="w-1/3 p-6 overflow-y-auto">
-        <div>
-          <label className="block text-lg font-medium mb-2">
-            Battery capacity (mAh):
-          </label>
-          <input
-            type="number"
-            value={batteryCapacity}
-            onChange={(e) => setBatteryCapacity(e.target.value)}
-            placeholder="Enter capacity"
-          />
-        </div>
-
-        <div>
-          <label className="block text-lg font-medium mb-2">
-            Discharge rate (mAh/min):
-          </label>
-          <input
-            type="number"
-            value={dischargeRate}
-            onChange={(e) => setDischargeRate(e.target.value)}
-            placeholder="Enter discharge rate"
-          />
-        </div>
-
-        <div
-          className="flex items-center space-x-2 cursor-pointer"
-          onClick={() => setShowSpeedInput(!showSpeedInput)}
-        >
-          <span
-            className={`transform transition-transform ${
-              showSpeedInput ? "rotate-90" : "rotate-0"
-            }`}
-          >
-            ➤
-          </span>
-          <span className="text-sm font-medium">
-            Assumed speed: {assumedSpeed}km/h
-          </span>
-        </div>
-
-        {showSpeedInput && (
-          <div>
+      {/* Right Panel (Inputs/Results) */}
+      <div className="w-full md:w-1/3 p-6 overflow-y-auto bg-gray-300 rounded-md">
+        <div className="bg-white p-4 rounded-md shadow-md">
+          <h2 className="text-xl font-semibold mb-4">🚁 Flight Parameters</h2>
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-1">Battery capacity (mAh):</label>
             <input
+              className="w-full px-3 py-2 rounded bg-gray-600 text-white placeholder-gray-300"
               type="number"
-              value={assumedSpeed}
-              onChange={(e) => setAssumedSpeed(e.target.value)}
-              placeholder="Enter speed"
+              value={batteryCapacity}
+              onChange={(e) => setBatteryCapacity(e.target.value)}
+              placeholder="e.g. 28000"
             />
           </div>
-        )}
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-1">Discharge rate (mAh/min):</label>
+            <input
+              className="w-full px-3 py-2 rounded bg-gray-600 text-white placeholder-gray-300"
+              type="number"
+              value={dischargeRate}
+              onChange={(e) => setDischargeRate(e.target.value)}
+              placeholder="e.g. 700"
+            />
+          </div>
+          <div
+            className="flex items-center space-x-2 cursor-pointer mb-2"
+            onClick={() => setShowSpeedInput(!showSpeedInput)}
+          >
+            <span
+              className={`transform transition-transform ${
+                showSpeedInput ? "rotate-90" : "rotate-0"
+              }`}
+            >
+              ➤
+            </span>
+            <span className="text-sm font-medium">Assumed speed: {assumedSpeed} km/h</span>
+          </div>
+          {showSpeedInput && (
+            <div className="mb-4">
+              <input
+                className="w-full px-3 py-2 rounded bg-gray-600 text-white placeholder-gray-300"
+                type="number"
+                value={assumedSpeed}
+                onChange={(e) => setAssumedSpeed(e.target.value)}
+                placeholder="Enter speed"
+              />
+            </div>
+          )}
+        </div>
 
-        <div className="mt-8">
-          <h2 className="text-xl font-semibold mb-2">Results:</h2>
-          <p className="text-lg">
+        {/* Results Section */}
+        <div className="bg-white p-4 rounded-md shadow-md mt-4">
+          <h2 className="text-xl font-semibold mb-4">Results</h2>
+          <p className="text-sm mb-2">
             Estimated flight time:{" "}
-            <span className="font-bold">{flightTime} minutes</span>
+            <span className="font-bold">
+              {parseFloat(batteryCapacity) / parseFloat(dischargeRate) || 0} minutes
+            </span>
           </p>
-          <p className="text-lg">
+          <p className="text-sm mb-2">
             Estimated travel distance:{" "}
-            <span className="font-bold">{distance} km</span>
+            <span className="font-bold">{parsedDistance.toFixed(2)} km</span>
           </p>
         </div>
 
-        {/* Flight Log Uploader */}
-        <FlightLogUploader onProcessComplete={handleFileProcessing} />
-
-        {/* Display enhanced results */}
-        {averageDraw && (
-          <div className="mt-8">
-            <h2 className="text-xl font-semibold mb-2">Enhanced Battery Draw</h2>
-            <p className="text-lg">
-              Average Draw: <span className="font-bold">{averageDraw.toFixed(2)} mAh/s</span>
-            </p>
+        {/* Enhanced Estimates Section */}
+        {(averageDraw || (phaseData && phaseData.length > 0)) && (
+          <div className="bg-white p-4 rounded-md shadow-md mt-4">
+            <h2 className="text-xl font-semibold mb-4">🔋 Flight Analysis</h2>
+            {averageDraw && (
+              <p className="text-sm mb-2">
+                Average Draw:{" "}
+                <span className="font-bold">{(averageDraw * 60).toFixed(2)} mAh/min</span>
+              </p>
+            )}
+            {phaseData && phaseData.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse border border-gray-500 text-sm">
+                  <thead>
+                    <tr className="bg-gray-600 text-white">
+                      <th className="border border-gray-500 p-2">Phase</th>
+                      <th className="border border-gray-500 p-2">Total Time (s)</th>
+                      <th className="border border-gray-500 p-2">Total Draw (mAh)</th>
+                      <th className="border border-gray-500 p-2">Avg Draw (mAh/s)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {phaseData.map((phase, index) => (
+                      <tr
+                        key={index}
+                        className={index % 2 === 0 ? "bg-gray-100" : "bg-white"}
+                      >
+                        <td className="border border-gray-500 p-2">{phase.Phase}</td>
+                        <td className="border border-gray-500 p-2">
+                          {phase["TotalTime(s)"].toFixed(2)}
+                        </td>
+                        <td className="border border-gray-500 p-2">
+                          {phase["Total Draw(mAh)"].toFixed(2)}
+                        </td>
+                        <td className="border border-gray-500 p-2">
+                          {phase["AvgDr(mAh/s)"]?.toFixed(2) ?? "N/A"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
-
-{phaseData && phaseData.length > 0 && (
-  <>
-    {/* Top Summary Table */}
-    <div className="mb-6">
-      <h2 className="text-xl font-semibold mb-2">Total Flight Summary</h2>
-      <table className="w-full border-collapse border border-gray-300 text-black">
-        <thead>
-          <tr className="bg-gray-200">
-            <th className="border border-gray-300 p-2">Avg Logged Discharge Rate</th>
-            <th className="border border-gray-300 p-2">mAh/Min</th>
-          </tr>
-        </thead>
-        <tbody>
-          {phaseData
-            .filter((phase) => phase.Phase === "Total Flight Summary")
-            .map((summary, index) => (
-              <tr key={`summary-${index}`}>
-                <td className="border border-gray-300 p-2">Total Draw per Minute</td>
-                <td className="border border-gray-300 p-2">
-                  {summary["Total Draw per Minute(mAh)"]?.toFixed(2) ?? "N/A"}
-                </td>
-              </tr>
-            ))}
-        </tbody>
-      </table>
-    </div>
-
-    {/* Detailed Phase Analysis Table */}
-    <h2 className="text-xl font-semibold mb-2">Phase Analysis</h2>
-    <table className="w-full border-collapse border border-gray-300 text-black">
-      <thead>
-        <tr className="bg-gray-200">
-          <th className="border border-gray-300 p-2">Phase</th>
-          <th className="border border-gray-300 p-2">Total Time (s)</th>
-          <th className="border border-gray-300 p-2">Total Draw (mAh)</th>
-          <th className="border border-gray-300 p-2">Avg Draw (mAh/s)</th>
-          <th className="border border-gray-300 p-2">Diff From Avg (%)</th>
-          <th className="border border-gray-300 p-2">% Time of Flight</th>
-        </tr>
-      </thead>
-      <tbody>
-        {phaseData
-          .filter((phase) => phase.Phase !== "Total Flight Summary")
-          .map((phase, index) => (
-            <tr key={index}>
-              <td className="border border-gray-300 p-2">{phase.Phase}</td>
-              <td className="border border-gray-300 p-2">
-                {phase["TotalTime(s)"].toFixed(2)}
-              </td>
-              <td className="border border-gray-300 p-2">
-                {phase["Total Draw(mAh)"].toFixed(2)}
-              </td>
-              <td className="border border-gray-300 p-2">
-                {phase["AvgDr(mAh/s)"]?.toFixed(2) ?? "N/A"}
-              </td>
-              <td className="border border-gray-300 p-2">
-                {phase["DiffofAvg(%)"]?.toFixed(2) ?? "N/A"}%
-              </td>
-              <td className="border border-gray-300 p-2">
-                {phase["PctTime of Flight(%)"]?.toFixed(2)}%
-              </td>
-            </tr>
-          ))}
-      </tbody>
-    </table>
-  </>
-)}
       </div>
     </div>
   );

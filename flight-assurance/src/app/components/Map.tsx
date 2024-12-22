@@ -1,363 +1,300 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  forwardRef,
+  useImperativeHandle,
+} from "react";
 import mapboxgl from "mapbox-gl";
-import { useDropzone } from "react-dropzone";
 import "mapbox-gl/dist/mapbox-gl.css";
 import * as turf from "@turf/turf";
+import FlightLogUploader from "./FlightLogUploader";
+import FlightPlanUploader from "./FlightPlanUploader";
 
-mapboxgl.accessToken = "pk.eyJ1IjoiaW50ZWxhZXJvIiwiYSI6ImNtM2EwZzY3ODB5bDgyam9yOTZ1ajE2YWsifQ.b9w33legWjEDzezOZx1N4g";
+mapboxgl.accessToken =
+  "pk.eyJ1IjoiaW50ZWxhZXJvIiwiYSI6ImNtM2EwZzY3ODB5bDgyam9yOTZ1ajE2YWsifQ.b9w33legWjEDzezOZx1N4g";
 
-// Function to parse QGC WPL file format into GeoJSON
-const parseQGCFile = (content: string): GeoJSON.FeatureCollection => {
-  const lines = content.trim().split("\n");
-  const coordinates = [];
+export interface MapRef {
+  addGeoJSONToMap: (geojson: GeoJSON.FeatureCollection) => void;
+}
 
-  // Skip the header (first two lines)
-  for (let i = 2; i < lines.length; i++) {
-    const parts = lines[i].split("\t");
-    const latitude = parseFloat(parts[8]);
-    const longitude = parseFloat(parts[9]);
-    const elevation = parseFloat(parts[10]);
-
-    if (
-      !isNaN(latitude) &&
-      !isNaN(longitude) &&
-      !isNaN(elevation) &&
-      latitude !== 0 &&
-      longitude !== 0
-    ) {
-      coordinates.push([longitude, latitude, elevation]); // Format: [lon, lat, alt]
-    }
-  }
-
-  // Convert to GeoJSON format
-  return {
-    type: "FeatureCollection",
-    features: [
-      {
-        type: "Feature",
-        properties: { name: "Drone Flight Path" },
-        geometry: {
-          type: "LineString",
-          coordinates,
-        },
-      },
-    ],
-  };
-};
-
-const Map = ({
-  estimatedFlightDistance,
-}: {
+interface MapProps {
   estimatedFlightDistance: number;
-}) => {
-  const [totalDistance, setTotalDistance] = useState<number>(0);
-  const [showTick, setShowTick] = useState(false); // New state to manage the tick display
+  onDataProcessed?: (data: { averageDraw: number; phaseData: any[] }) => void; // Optional callback to send processed data
+}
 
-  const lineRef = useRef<GeoJSON.FeatureCollection | null>(null);
+const Map = forwardRef<MapRef, MapProps>(
+  ({ estimatedFlightDistance, onDataProcessed }, ref) => {
+    const [totalDistance, setTotalDistance] = useState<number>(0);
+    const [showTick, setShowTick] = useState(false);
 
-  const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<mapboxgl.Map | null>(null);
-  const markerRef = useRef<mapboxgl.Marker | null>(null); // Ref to store the marker instance
-  const startMarkerRef = useRef<mapboxgl.Marker | null>(null); // Ref to store the marker instance
-  const endMarkerRef = useRef<mapboxgl.Marker | null>(null); // Ref to store the marker instance
+    const lineRef = useRef<GeoJSON.FeatureCollection | null>(null);
+    const mapContainerRef = useRef<HTMLDivElement>(null);
+    const mapRef = useRef<mapboxgl.Map | null>(null);
+    const markerRef = useRef<mapboxgl.Marker | null>(null);
+    const startMarkerRef = useRef<mapboxgl.Marker | null>(null);
+    const endMarkerRef = useRef<mapboxgl.Marker | null>(null);
 
-  // Enable free tilt and rotation
-  useEffect(() => {
-    if (mapRef.current) {
-      mapRef.current.dragRotate.enable();
-      mapRef.current.touchZoomRotate.enableRotation();
-
-      // Add zoom and rotation controls to the map.
-      mapRef.current.addControl(new mapboxgl.NavigationControl());
-    }
-  }, []);
-
-  const onDrop = (acceptedFiles: File[]) => {
-    const file = acceptedFiles[0];
-    const fileExtension = file.name.split(".").pop()?.toLowerCase() || "";
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (reader.result) {
-        if (fileExtension === "waypoints") {
-          const qgcToGeojson = parseQGCFile(reader.result as string);
-          addGeoJSONToMap(qgcToGeojson);
-        }
-        if (fileExtension === "geojson") {
-          const geojson = JSON.parse(reader.result as string);
-          addGeoJSONToMap(geojson);
-        }
+    useEffect(() => {
+      if (mapRef.current) {
+        mapRef.current.dragRotate.enable();
+        mapRef.current.touchZoomRotate.enableRotation();
+        mapRef.current.addControl(new mapboxgl.NavigationControl());
       }
-    };
-    acceptedFiles.forEach((file) => reader.readAsText(file));
-  };
+    }, []);
 
-  const { getRootProps, getInputProps } = useDropzone({
-    accept: {
-      "application/geo+json": [".geojson"],
-      "application/waypoints": [".waypoints"],
-    },
-    onDrop,
-  });
-
-  const addGeoJSONToMap = (geojson: GeoJSON.FeatureCollection) => {
-    if (mapRef.current && geojson.type === "FeatureCollection") {
-      const features = geojson.features.filter(
-        (f) => f.geometry.type === "LineString"
-      );
-      features.forEach((feature, idx) => {
-        const layerId = `line-${idx}`;
-        // Remove existing layer and source if they exist
-        if (mapRef.current!.getSource(layerId)) {
-          mapRef.current!.removeLayer(layerId);
-          mapRef.current!.removeSource(layerId);
-        }
-
-        // @ts-expect-error coordinates definite exists
-        const coordinates = feature.geometry.coordinates;
-        // Calculate the total distance covered by the line
-        const line = turf.lineString(
-          coordinates.map((coord: [number, number]) => [coord[0], coord[1]])
+    const addGeoJSONToMap = (geojson: GeoJSON.FeatureCollection) => {
+      if (mapRef.current && geojson.type === "FeatureCollection") {
+        const features = geojson.features.filter(
+          (f) => f.geometry.type === "LineString"
         );
 
-        const totalDistance = turf.length(line, { units: "kilometers" });
-        setTotalDistance(totalDistance);
+        features.forEach((feature, idx) => {
+          const layerId = `line-${idx}`;
+          if (mapRef.current.getSource(layerId)) {
+            mapRef.current.removeLayer(layerId);
+            mapRef.current.removeSource(layerId);
+          }
 
-        mapRef.current!.addSource(layerId, {
-          type: "geojson",
-          data: feature,
-          lineMetrics: true,
-        });
-        mapRef.current!.addLayer({
-          id: layerId,
-          type: "line",
-          source: layerId,
-          paint: {
-            "line-width": 4,
-            "line-gradient": [
-              "interpolate",
-              ["linear"],
-              ["line-progress"],
-              0,
-              "#FFFF00",
-            ],
-          },
-        });
-        // Calculate the bounds of the line
-        const bounds = coordinates.reduce(
-          // @ts-expect-error lineMetrics is enabled
-          (acc, coord) => {
-            const [lng, lat] = coord;
-            acc[0] = Math.min(acc[0], lng);
-            acc[1] = Math.min(acc[1], lat);
-            acc[2] = Math.max(acc[2], lng);
-            acc[3] = Math.max(acc[3], lat);
-            return acc;
-          },
-          [Infinity, Infinity, -Infinity, -Infinity]
-        );
+          const coordinates = feature.geometry.coordinates as [
+            number,
+            number,
+            number?
+          ][];
 
-        // Zoom to the bounds of the line
-        mapRef.current!.fitBounds(bounds, {
-          padding: 50, // Optional padding around the line
-          duration: 1000, // Duration of the zoom animation
-          pitch: 70, // Pitch of the map
-          zoom: 12.5,
-        });
+          const line = turf.lineString(
+            coordinates.map((coord) => [coord[0], coord[1]])
+          );
+          const totalDistance = turf.length(line, { units: "kilometers" });
+          setTotalDistance(totalDistance);
 
-        // Create markers at the start and end of the line
-        const startCoord = coordinates[0];
-        const endCoord = coordinates[coordinates.length - 1];
-        // Create start marker
-        if (startMarkerRef.current) {
-          startMarkerRef.current.setLngLat(startCoord);
-        } else {
-          if (mapRef.current) {
+          mapRef.current.addSource(layerId, {
+            type: "geojson",
+            data: feature,
+            lineMetrics: true,
+          });
+          mapRef.current.addLayer({
+            id: layerId,
+            type: "line",
+            source: layerId,
+            paint: {
+              "line-width": 4,
+              "line-gradient": [
+                "interpolate",
+                ["linear"],
+                ["line-progress"],
+                0,
+                "#FFFF00",
+              ],
+            },
+          });
+
+          const bounds = coordinates.reduce(
+            (acc, coord) => {
+              const [lng, lat] = coord;
+              acc[0] = Math.min(acc[0], lng);
+              acc[1] = Math.min(acc[1], lat);
+              acc[2] = Math.max(acc[2], lng);
+              acc[3] = Math.max(acc[3], lat);
+              return acc;
+            },
+            [Infinity, Infinity, -Infinity, -Infinity] as number[]
+          );
+          mapRef.current.fitBounds(bounds as [number, number, number, number], {
+            padding: 50,
+            duration: 1000,
+            pitch: 70,
+            zoom: 12.5,
+          });
+
+          const startCoord = coordinates[0];
+          if (startMarkerRef.current) {
+            startMarkerRef.current.setLngLat(startCoord);
+          } else {
             const newStartMarker = new mapboxgl.Marker({ color: "green" })
               .setLngLat(startCoord)
               .setPopup(
                 new mapboxgl.Popup({ closeButton: false }).setHTML(
-                  "'<strong style=\"color: black;\">Start</strong>'"
+                  '<strong style="color: black;">Start</strong>'
                 )
               )
-              .addTo(mapRef.current!);
+              .addTo(mapRef.current);
             newStartMarker.togglePopup();
             startMarkerRef.current = newStartMarker;
           }
-        }
 
-        // Create end marker
-        if (endMarkerRef.current) {
-          endMarkerRef.current.setLngLat(endCoord);
-        } else {
-          if (mapRef.current) {
+          const endCoord = coordinates[coordinates.length - 1];
+          if (endMarkerRef.current) {
+            endMarkerRef.current.setLngLat(endCoord);
+          } else {
             const newEndMarker = new mapboxgl.Marker({ color: "red" })
               .setLngLat(endCoord)
               .setPopup(
                 new mapboxgl.Popup({ closeButton: false }).setHTML(
-                  "'<strong style=\"color: black;\">Finish</strong>'"
+                  '<strong style="color: black;">Finish</strong>'
                 )
               )
-              .addTo(mapRef.current!);
+              .addTo(mapRef.current);
             newEndMarker.togglePopup();
             endMarkerRef.current = newEndMarker;
           }
-        }
-      });
 
-      lineRef.current = geojson;
-    }
-  };
-
-  useEffect(() => {
-    if (mapContainerRef.current) {
-      mapRef.current = new mapboxgl.Map({
-        container: mapContainerRef.current,
-        style: "mapbox://styles/mapbox-map-design/ckhqrf2tz0dt119ny6azh975y", // 3D map style
-        center: [0, 0],
-        zoom: 2.5,
-        projection: "globe", // Optional: Set the map to globe projection
-      });
-  
-      mapRef.current.on("load", () => {
-        // Add the DEM source for terrain
-        mapRef.current!.addSource("mapbox-dem", {
-          type: "raster-dem",
-          url: "mapbox://mapbox.mapbox-terrain-dem-v1",
-          tileSize: 512,
-          maxzoom: 14,
+          lineRef.current = geojson;
         });
-  
-        // Ensure the source is available before applying terrain
-        mapRef.current!.setTerrain({ source: "mapbox-dem", exaggeration: 1.5 });
-  
-        // Optional: Add a sky layer for atmospheric realism
-        mapRef.current!.addLayer({
-          id: "sky",
-          type: "sky",
-          paint: {
-            "sky-type": "atmosphere",
-            "sky-atmosphere-sun": [0.0, 90.0],
-            "sky-atmosphere-sun-intensity": 15,
-          },
-        });
-      });
-    }
-  
-    return () => {
-      mapRef.current?.remove();
+      }
     };
-  }, []);
-  
 
-  const loadExampleGeoJSON = async () => {
-    try {
-      const response = await fetch("/example.geojson"); // Path to your example file
-      const data = await response.json();
+    useEffect(() => {
+      if (lineRef.current && estimatedFlightDistance > 0) {
+        const line = turf.lineString(
+          lineRef.current.features[0].geometry.coordinates.map(
+            (coord: [number, number]) => [coord[0], coord[1]]
+          )
+        );
+        const estimatedPoint = turf.along(line, estimatedFlightDistance, {
+          units: "kilometers",
+        });
 
-      addGeoJSONToMap(data);
-    } catch (error) {
-      console.log("Error loading example GeoJSON:", error);
-    }
-  };
-
-  // Update the marker position when the estimated distance changes
-  useEffect(() => {
-    if (lineRef.current && estimatedFlightDistance > 0) {
-      const line = turf.lineString(
-        // @ts-expect-error Why
-        lineRef.current.features[0].geometry.coordinates.map(
-          (coord: [number, number]) => [coord[0], coord[1]]
-        )
-      );
-      const distanceAlongLine = turf.along(line, estimatedFlightDistance, {
-        units: "kilometers",
-      });
-      const point = distanceAlongLine.geometry.coordinates;
-
-      // Check if the estimated flight distance is greater than the total distance
-      if (estimatedFlightDistance > totalDistance) {
-        setShowTick(true); // Show the green tick
-        if (markerRef.current) {
-          markerRef.current.remove(); // Remove the marker
-          markerRef.current = null; // Clear the marker ref
-        }
-      } else {
-        setShowTick(false); // Hide the green tick
-
-        // Update marker position on map
-        if (markerRef.current) {
-          markerRef.current.setLngLat([point[0], point[1]]);
+        if (estimatedFlightDistance > totalDistance) {
+          setShowTick(true);
+          if (markerRef.current) {
+            markerRef.current.remove();
+            markerRef.current = null;
+          }
         } else {
-          // If marker does not exist yet, create it
-          if (mapRef.current) {
-            const popup = new mapboxgl.Popup({ closeButton: false })
-              .setHTML(
-                '<strong style="color: black;">❌ Estimated finish</strong>'
-              ) // Red Cross Emoji
-              .setMaxWidth("none");
-
-            const newMarker = new mapboxgl.Marker()
-              .setLngLat([point[0], point[1]])
-              .addTo(mapRef.current);
-
-            newMarker.setPopup(popup).togglePopup(); // Automatically show the popup
-
-            markerRef.current = newMarker; // Store marker instance in ref
+          setShowTick(false);
+          const [lng, lat] = estimatedPoint.geometry.coordinates as [
+            number,
+            number
+          ];
+          if (markerRef.current) {
+            markerRef.current.setLngLat([lng, lat]);
+          } else {
+            markerRef.current = new mapboxgl.Marker({ color: "blue" })
+              .setLngLat([lng, lat])
+              .setPopup(
+                new mapboxgl.Popup({ closeButton: false }).setHTML(
+                  `<strong>Estimated Finish</strong>`
+                )
+              )
+              .addTo(mapRef.current!);
           }
         }
       }
-    }
-  }, [estimatedFlightDistance, totalDistance]);
+    }, [estimatedFlightDistance, totalDistance]);
 
-  return (
-    <div>
-      <div className="flex items-center">
-        {/* Component 1: Dropzone */}
-        <div className="flex-1 px-16 py-10">
-          <div
-            {...getRootProps()}
-            className="border-dashed border-2 text-black px-4 py-4 rounded shadow bg-white hover:bg-blue-600"
-          >
-            <input {...getInputProps()} />
-            <p>
-              Drag & drop GeoJSON or Mission Planner files here, or click to
-              select files
-            </p>
+    useImperativeHandle(ref, () => ({
+      addGeoJSONToMap,
+    }));
+
+    useEffect(() => {
+      if (mapContainerRef.current) {
+        mapRef.current = new mapboxgl.Map({
+          container: mapContainerRef.current,
+          style: "mapbox://styles/mapbox-map-design/ckhqrf2tz0dt119ny6azh975y",
+          center: [0, 0],
+          zoom: 2.5,
+          projection: "globe",
+        });
+      }
+      return () => {
+        mapRef.current?.remove();
+      };
+    }, []);
+
+    useEffect(() => {
+      if (mapContainerRef.current) {
+        mapRef.current = new mapboxgl.Map({
+          container: mapContainerRef.current,
+          style: "mapbox://styles/mapbox-map-design/ckhqrf2tz0dt119ny6azh975y",
+          center: [0, 0],
+          zoom: 2.5,
+          projection: "globe",
+        });
+    
+        mapRef.current.on("load", () => {
+          // Add terrain source
+          mapRef.current!.addSource("mapbox-dem", {
+            type: "raster-dem",
+            url: "mapbox://mapbox.mapbox-terrain-dem-v1",
+            tileSize: 512,
+            maxzoom: 14,
+          });
+    
+          // Enable terrain with exaggeration
+          mapRef.current!.setTerrain({ source: "mapbox-dem", exaggeration: 1.5 });
+    
+          // Add sky layer
+          mapRef.current!.addLayer({
+            id: "sky",
+            type: "sky",
+            paint: {
+              "sky-type": "atmosphere",
+              "sky-atmosphere-sun": [0.0, 90.0],
+              "sky-atmosphere-sun-intensity": 15,
+            },
+          });
+    
+          console.log("Terrain and sky layer added successfully");
+        });
+      }
+    
+      // Cleanup on unmount
+      return () => {
+        mapRef.current?.remove();
+      };
+    }, []);
+    
+    const handleFlightPlanUpload = (geojson: GeoJSON.FeatureCollection) => {
+      addGeoJSONToMap(geojson);
+    };
+
+    const handleFileProcessing = (data: any) => {
+      if (Array.isArray(data)) {
+        const totalDraw = data.reduce(
+          (sum, phase) => sum + (phase["Total Draw(mAh)"] || 0),
+          0
+        );
+        const totalTime = data.reduce(
+          (sum, phase) => sum + (phase["TotalTime(s)"] || 0),
+          0
+        );
+        const averageDraw = totalTime > 0 ? totalDraw / totalTime : 0;
+
+        if (onDataProcessed) {
+          onDataProcessed({ averageDraw, phaseData: data });
+        }
+      }
+    };
+
+    return (
+      <div>
+        <div className="flex flex-col md:flex-row gap-4 p-4 px-4 mt-4">
+          <div className="bg-gray-300 p-4 rounded-md w-full md:w-1/2">
+            <h2 className="text-xl font-semibold mb-4">Step 1: Upload Your Flight Plan</h2>
+            <FlightPlanUploader onPlanUploaded={handleFlightPlanUpload} />
+          </div>
+          <div className="bg-gray-300 p-4 rounded-md w-full md:w-1/2">
+            <h2 className="text-xl font-semibold mb-4">Step 2: Upload Your Flight Log</h2>
+            <FlightLogUploader onProcessComplete={handleFileProcessing} />
           </div>
         </div>
-
-        {/* Component 2: Button for Example */}
-        <div className="flex-4 px-8 py-10">
-          <button
-            onClick={loadExampleGeoJSON}
-            className="bg-blue-500 text-white px-4 py-2 rounded shadow hover:bg-blue-600"
-          >
-            Show Me an Example
-          </button>
+        <div>
+          {showTick ? (
+            <p>✅ Flight distance exceeds total distance</p>
+          ) : (
+            <p>❌ Flight distance does not exceed total distance</p>
+          )}
         </div>
+        <div
+          ref={mapContainerRef}
+          style={{ height: "70vh", width: "100%", marginBottom: "100px" }}
+        />
       </div>
-      <div className="flex justify-center items-center my-4">
-        {showTick ? (
-          <>
-            <p className="text-green-500">
-              ✅ Flight distance exceeds the total distance! (
-              {totalDistance.toFixed(2)}km)
-            </p>
-          </>
-        ) : (
-          <>
-            <p className="text-red-500">
-              ❌ Flight distance does not exceed the total distance! (
-              {totalDistance.toFixed(2)}km)
-            </p>
-          </>
-        )}
-      </div>
-      <div ref={mapContainerRef} style={{ height: "70vh", width: "100%", marginBottom: "100px", }} />
-    </div>
-  );
-};
+    );
+  }
+);
 
+Map.displayName = "Map";
 export default Map;
