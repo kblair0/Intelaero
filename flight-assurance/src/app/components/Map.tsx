@@ -21,15 +21,14 @@ export interface MapRef {
 
 interface MapProps {
   estimatedFlightDistance: number;
-  onDataProcessed?: (data: { averageDraw: number; phaseData: any[] }) => void; // Optional callback to send processed data
+  onDataProcessed?: (data: { averageDraw: number; phaseData: any[] }) => void;
+  onShowTickChange: (value: boolean) => void;
 }
-
 const Map = forwardRef<MapRef, MapProps>(
-  ({ estimatedFlightDistance, onDataProcessed }, ref) => {
+  ({ estimatedFlightDistance, onDataProcessed,onShowTickChange }, ref) => {
     const [totalDistance, setTotalDistance] = useState<number>(0);
-    const [showTick, setShowTick] = useState(false);
-
     const lineRef = useRef<GeoJSON.FeatureCollection | null>(null);
+    const [showTick, setShowTick] = useState(false);
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<mapboxgl.Map | null>(null);
     const markerRef = useRef<mapboxgl.Marker | null>(null);
@@ -158,12 +157,14 @@ const Map = forwardRef<MapRef, MapProps>(
 
         if (estimatedFlightDistance > totalDistance) {
           setShowTick(true);
+          onShowTickChange(true);
           if (markerRef.current) {
             markerRef.current.remove();
             markerRef.current = null;
           }
         } else {
           setShowTick(false);
+          onShowTickChange(false);
           const [lng, lat] = estimatedPoint.geometry.coordinates as [
             number,
             number
@@ -175,10 +176,11 @@ const Map = forwardRef<MapRef, MapProps>(
               .setLngLat([lng, lat])
               .setPopup(
                 new mapboxgl.Popup({ closeButton: false }).setHTML(
-                  `<strong>Estimated Finish</strong>`
+                  '<strong style="color: black;">Estimated Finish</strong>'
                 )
               )
               .addTo(mapRef.current!);
+              markerRef.current.togglePopup();
           }
         }
       }
@@ -276,16 +278,9 @@ const Map = forwardRef<MapRef, MapProps>(
             <FlightPlanUploader onPlanUploaded={handleFlightPlanUpload} />
           </div>
           <div className="bg-gray-300 p-4 rounded-md w-full md:w-1/2">
-            <h2 className="text-xl font-semibold mb-4">Step 2: Upload Your Flight Log</h2>
+            <h2 className="text-xl font-semibold mb-4">Step A: Upload Your Flight Log, or</h2>
             <FlightLogUploader onProcessComplete={handleFileProcessing} />
           </div>
-        </div>
-        <div>
-          {showTick ? (
-            <p>✅ Flight distance exceeds total distance</p>
-          ) : (
-            <p>❌ Flight distance does not exceed total distance</p>
-          )}
         </div>
         <div
           ref={mapContainerRef}

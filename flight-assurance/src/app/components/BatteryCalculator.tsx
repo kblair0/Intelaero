@@ -7,10 +7,10 @@ const BatteryCalculator: React.FC = () => {
   const [dischargeRate, setDischargeRate] = useState<string>("700");
   const [assumedSpeed, setAssumedSpeed] = useState<string>("20");
   const [showSpeedInput, setShowSpeedInput] = useState<boolean>(false);
-
   const [averageDraw, setAverageDraw] = useState<number | null>(null);
   const [phaseData, setPhaseData] = useState<any[]>([]);
   const [parsedDistance, setParsedDistance] = useState<number>(0);
+  const [showTick, setShowTick] = useState(false);
 
   const mapRef = useRef<MapRef | null>(null);
 
@@ -18,23 +18,29 @@ const BatteryCalculator: React.FC = () => {
     const parsedBatteryCapacity = parseFloat(batteryCapacity) || 0;
     const parsedDischargeRate = parseFloat(dischargeRate) || 0;
     const parsedAssumedSpeed = parseFloat(assumedSpeed) || 20;
-
+  
     const flightTime =
       parsedBatteryCapacity > 0 && parsedDischargeRate > 0
         ? (parsedBatteryCapacity / parsedDischargeRate).toFixed(2)
         : "0";
-
+  
     const distance =
       parsedBatteryCapacity > 0 && parsedDischargeRate > 0
         ? ((Number(flightTime) / 60) * parsedAssumedSpeed).toFixed(2)
         : "0";
-
-    setParsedDistance(parseFloat(distance) || 0);
-  }, [batteryCapacity, dischargeRate, assumedSpeed]);
+  
+        setParsedDistance(parseFloat(distance) || 0);
+  }, [batteryCapacity, dischargeRate, assumedSpeed]); 
 
   const handleDataProcessed = (data: { averageDraw: number; phaseData: any[] }) => {
     setAverageDraw(data.averageDraw);
     setPhaseData(data.phaseData);
+    console.log("Data Processed:", data);
+  };
+
+  const handleShowTickChange = (value: boolean) => {
+    setShowTick(value);
+    console.log("Updated showTick from Map:", value); // Debugging to verify updates
   };
 
   return (
@@ -46,12 +52,14 @@ const BatteryCalculator: React.FC = () => {
           ref={mapRef}
           estimatedFlightDistance={parsedDistance}
           onDataProcessed={handleDataProcessed}
+          onShowTickChange={handleShowTickChange}
         />
         </div>
       </div>
 
       {/* Right Panel (Inputs/Results) */}
-      <div className="w-full md:w-1/3 p-6 overflow-y-auto bg-gray-300 rounded-md">
+      <div className="w-full md:w-1/3 p-4 overflow-y-auto bg-gray-300 mt-8 rounded-md">
+        <h2 className="text-xl font-semibold mb-4 ">Step 2B: Set Your Own Parameters</h2>
         <div className="bg-white p-4 rounded-md shadow-md">
           <h2 className="text-xl font-semibold mb-4">🚁 Flight Parameters</h2>
           <div className="mb-4">
@@ -113,6 +121,13 @@ const BatteryCalculator: React.FC = () => {
             Estimated travel distance:{" "}
             <span className="font-bold">{parsedDistance.toFixed(2)} km</span>
           </p>
+          <div>
+            {showTick ? (
+              <p>✅ Flight distance exceeds total distance</p>
+            ) : (
+              <p>❌ Flight distance does not exceed total distance</p>
+            )}
+          </div>
         </div>
 
         {/* Enhanced Estimates Section */}
