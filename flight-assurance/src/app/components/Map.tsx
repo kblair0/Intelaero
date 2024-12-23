@@ -69,10 +69,13 @@ const Map = forwardRef<MapRef, MapProps>(
             number,
             number?
           ][];
+          
+          console.log("Coordinates with altitude data:", coordinates);
+          feature.properties = feature.properties || {}; // Ensure properties object exists
+          feature.properties.altitudes = coordinates.map((coord) => coord[2] || 0);
+          console.log("Feature properties after adding altitudes:", feature.properties);
 
-          const line = turf.lineString(
-            coordinates.map((coord) => [coord[0], coord[1]])
-          );
+          const line = turf.lineString(coordinates);
           const totalDistance = turf.length(line, { units: "kilometers" });
           setTotalDistance(totalDistance);
           if (onTotalDistanceChange) {
@@ -85,22 +88,32 @@ const Map = forwardRef<MapRef, MapProps>(
             data: feature,
             lineMetrics: true,
           });
+
+          console.log("Adding layer with altitudes:", feature.properties.altitudes);
+
           mapRef.current.addLayer({
             id: layerId,
             type: "line",
             source: layerId,
-            paint: {
-              "line-width": 4,
-              "line-gradient": [
-                "interpolate",
-                ["linear"],
-                ["line-progress"],
-                0,
-                "#FFFF00",
-              ],
+            layout: {
+                "line-join": "round", 
+                "line-cap": "round",
             },
-          });
-
+            paint: {
+                "line-width": 4,
+                "line-color": [
+                    "interpolate",
+                    ["linear"],
+                    ["get", "altitude"], // Access altitude from feature properties
+                    0, "#FF0000", // Altitude 2300: Red
+                    1000, "#00FF00", // Altitude 2700: Green
+                    2000, "#0000FF"  // Altitude 3000: Blue
+                ],
+                "line-opacity": 1,
+            },
+        });
+        
+      
           const bounds = coordinates.reduce(
             (acc, coord) => {
               const [lng, lat] = coord;
@@ -155,6 +168,7 @@ const Map = forwardRef<MapRef, MapProps>(
         });
       }
     };
+
 
     useEffect(() => {
       if (lineRef.current && estimatedFlightDistance > 0) {

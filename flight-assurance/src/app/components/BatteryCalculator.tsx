@@ -2,9 +2,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import Map, { MapRef } from "./Map";
 import ObstacleAssessment from "./ObstacleAssessment";
-import FlightPlanUploader from "./FlightPlanUploader";
-
-
 
 const BatteryCalculator: React.FC = () => {
   const [batteryCapacity, setBatteryCapacity] = useState<string>("28000");
@@ -175,9 +172,9 @@ const BatteryCalculator: React.FC = () => {
           </p>
           <div>
             {showTick ? (
-              <p>✅ Flight distance exceeds total distance</p>
+              <p>✅ Available flight time exceeds required distance/time</p>
             ) : (
-              <p>❌ Flight distance does not exceed total distance</p>
+              <p>❌ Distance/time required exceeds available flight time</p>
             )}
           </div>
         </div>

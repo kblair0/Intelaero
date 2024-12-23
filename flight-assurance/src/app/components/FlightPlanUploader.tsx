@@ -7,7 +7,6 @@ function parseQGCFile(content: string): GeoJSON.FeatureCollection {
   const lines = content.trim().split("\n");
   const coordinates = [];
 
-  // Skip the header (first two lines)
   for (let i = 2; i < lines.length; i++) {
     const parts = lines[i].split("\t");
     const latitude = parseFloat(parts[8]);
@@ -19,7 +18,8 @@ function parseQGCFile(content: string): GeoJSON.FeatureCollection {
       !isNaN(longitude) &&
       !isNaN(elevation) &&
       latitude !== 0 &&
-      longitude !== 0
+      longitude !== 0 &&
+      elevation >= 0
     ) {
       coordinates.push([longitude, latitude, elevation]); // [lon, lat, alt]
     }
@@ -147,7 +147,7 @@ interface FlightPlanUploaderProps {
               className="bg-yellow-500 text-black px-4 py-2 rounded shadow hover:bg-yellow-600 text-sm"
               onClick={() => {
                 if (uploadedPlan) {
-                  onObstacleAssessment(uploadedPlan); // Trigger obstacle assessment
+                  onObstacleAssessment(uploadedPlan);
                 } else {
                   console.warn("No flight plan uploaded yet!");
                 }
