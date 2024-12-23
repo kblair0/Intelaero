@@ -91,13 +91,14 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded 
       const response = await fetch("/example.geojson");
       const data = await response.json();
       onPlanUploaded(data);
+      setUploadState("processed");
     } catch (error) {
       console.log("Error loading example GeoJSON:", error);
     }
   };
 
   return (
-    <div className="bg-gray-100 border rounded-lg p-4 mt-6">
+    <div className="bg-white border rounded-lg p-4 mt-6">
       <h3 className="text-lg font-bold text-black">📁 Upload Your Flight Plan</h3>
       <p className="text-sm text-gray-600">
         Upload a <strong>.waypoints</strong> or <strong>.geojson</strong> file to analyze your drone's flight path.
@@ -123,16 +124,26 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded 
           <p className="text-red-600">Error processing file. Please try again.</p>
         )}
       </div>
-      <div className="flex justify-center mt-4">
+      {/* Always Show 'Show Me an Example' Button */}
+      <div className="flex justify-center gap-2 mt-6">
         <button
           onClick={loadExampleGeoJSON}
           className="bg-blue-500 text-white px-4 py-2 rounded shadow hover:bg-blue-600 text-sm"
         >
           Show Me an Example
         </button>
+        {/* Conditionally Show 'Obstacle Clearance Assessment' Button */}
+        {uploadState === "processed" && (
+          <button
+            className="bg-yellow-500 text-black px-4 py-2 rounded shadow hover:bg-yellow-600 text-sm"
+            onClick={() => console.log("Obstacle Clearance Assessment triggered!")}
+          >
+            🚨 Obstacle Assessment
+          </button>
+        )}
       </div>
     </div>
-  );
+  );  
 };
 
 export default FlightPlanUploader;

@@ -279,11 +279,11 @@ const Map = forwardRef<MapRef, MapProps>(
       <div>
         <div className="flex flex-col md:flex-row gap-4 p-4 px-4 mt-4">
           <div className="bg-gray-300 p-4 rounded-md w-full md:w-1/2">
-            <h2 className="text-xl font-semibold mb-4">Step 1: Upload Your Flight Plan</h2>
+            <h2 className="text-xl font-semibold mb-4">Step 1: Upload Your Flight Plan & Analyse Obstacles</h2>
             <FlightPlanUploader onPlanUploaded={handleFlightPlanUpload} />
           </div>
           <div className="bg-gray-300 p-4 rounded-md w-full md:w-1/2">
-            <h2 className="text-xl font-semibold mb-4">Step A: Upload Your Flight Log (.ulg), or</h2>
+            <h2 className="text-xl font-semibold mb-4">Step 2A: Upload Your Flight Log (.ulg) (Optional)</h2>
             <FlightLogUploader onProcessComplete={handleFileProcessing} />
           </div>
         </div>

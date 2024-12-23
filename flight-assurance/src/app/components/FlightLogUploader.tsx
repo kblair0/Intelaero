@@ -119,7 +119,7 @@ const FlightLogUploader: React.FC<{
   }
 
   return (
-    <div className="bg-gray-100 border rounded-lg p-4 mt-6">
+    <div className="bg-white border rounded-lg p-4 mt-6">
       <h3 className="text-lg font-bold text-black">🔋 Enhance Your Flight Estimates</h3>
       <p className="text-sm text-gray-600">
         Upload a previous <strong>.ulg</strong> flight log from your drone to calculate a more accurate average
