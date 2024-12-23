@@ -4,6 +4,8 @@ import Map, { MapRef } from "./Map";
 import ObstacleAssessment from "./ObstacleAssessment";
 import FlightPlanUploader from "./FlightPlanUploader";
 
+
+
 const BatteryCalculator: React.FC = () => {
   const [batteryCapacity, setBatteryCapacity] = useState<string>("28000");
   const [dischargeRate, setDischargeRate] = useState<string>("700");
@@ -16,6 +18,10 @@ const BatteryCalculator: React.FC = () => {
   const [flightPlanDistance, setFlightPlanDistance] = useState<number | null>(null);
   const [flightPlan, setFlightPlan] = useState<GeoJSON.FeatureCollection | null>(null);
   const mapRef = useRef<MapRef | null>(null);
+  
+  //UI for Collapsable Sections
+  const [showObstacleAssessment, setShowObstacleAssessment] = useState(false);
+ 
 
   useEffect(() => {
     const parsedBatteryCapacity = parseFloat(batteryCapacity) || 0;
@@ -176,7 +182,7 @@ const BatteryCalculator: React.FC = () => {
           </div>
         </div>
   
-        {/* Enhanced Estimates Section */}
+        {/* 🔋 Flight Analysis Section */}
         {(averageDraw || (phaseData && phaseData.length > 0)) && (
           <div className="bg-white p-4 rounded-md shadow-md mt-4">
             <h2 className="text-xl font-semibold mb-4">🔋 Flight Analysis</h2>

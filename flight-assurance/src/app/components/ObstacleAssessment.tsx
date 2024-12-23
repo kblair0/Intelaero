@@ -1,5 +1,19 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
+import { Line } from "react-chartjs-2";
 import * as turf from "@turf/turf";
+import {
+  Chart as ChartJS,
+  LineElement,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  Legend,
+  Tooltip,
+} from "chart.js";
+
+// Register chart components
+ChartJS.register(LineElement, CategoryScale, LinearScale, PointElement, Legend, Tooltip);
+
 
 interface ObstacleAssessmentProps {
   flightPlan: GeoJSON.FeatureCollection; // Flight plan GeoJSON
@@ -10,13 +24,13 @@ interface ObstacleAssessmentProps {
   }) => void;
 }
 
-const ObstacleAssessment: React.FC<ObstacleAssessmentProps> = ({
-  flightPlan,
-  onDataProcessed,
-}) => {
-  // Move useState hooks inside the functional component
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+const ObstacleAssessment: React.FC<ObstacleAssessmentProps> = ({ flightPlan, onDataProcessed, }) => 
+    {
+    const [distances, setDistances] = useState<number[]>([]);
+    const [flightAltitudes, setFlightAltitudes] = useState<number[]>([]);
+    const [terrainElevations, setTerrainElevations] = useState<number[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const processTerrainData = async () => {
@@ -104,11 +118,41 @@ const fetchTerrainElevation = async (lng: number, lat: number): Promise<number> 
         return 0; // Default elevation
     }
     };
-      
 
-
-  // Render the loading/error UI
-  if (loading) {
+    // Prepare data for the chart
+const chartData = {
+    labels: distances.map((d) => d.toFixed(2)), // X-axis labels (distances)
+    datasets: [
+      {
+        label: "Flight Altitude (m)",
+        data: flightAltitudes, // Y-axis values (flight altitudes)
+        borderColor: "rgba(75, 192, 192, 1)", // Line color
+        backgroundColor: "rgba(75, 192, 192, 0.2)", // Fill color
+        fill: true,
+      },
+      {
+        label: "Terrain Elevation (m)",
+        data: terrainElevations, // Y-axis values (terrain elevations)
+        borderColor: "rgba(255, 99, 132, 1)", // Line color
+        backgroundColor: "rgba(255, 99, 132, 0.2)", // Fill color
+        fill: true,
+      },
+    ],
+  };
+  
+  // Chart options
+  const chartOptions = {
+    responsive: true,
+    plugins: {
+      legend: {
+        display: true,
+        position: "top",
+      },
+    },
+  };
+  
+// Render the loading/error UI
+if (loading) {
     return <div>Processing Obstacle Assessment...</div>;
   }
 
@@ -116,7 +160,13 @@ const fetchTerrainElevation = async (lng: number, lat: number): Promise<number> 
     return <div className="text-red-500">Error: {error}</div>;
   }
 
-  return <div>Obstacle Assessment Completed</div>;
+  // Render the chart
+  return (
+    <div>
+      <h2>Obstacle Assessment Completed</h2>
+      <Line data={chartData} options={chartOptions} />
+    </div>
+  );
 };
 
 export default ObstacleAssessment;
