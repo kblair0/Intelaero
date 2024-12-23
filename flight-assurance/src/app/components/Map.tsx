@@ -23,9 +23,10 @@ interface MapProps {
   estimatedFlightDistance: number;
   onDataProcessed?: (data: { averageDraw: number; phaseData: any[] }) => void;
   onShowTickChange: (value: boolean) => void;
+  onTotalDistanceChange: (distance: number) => void;
 }
 const Map = forwardRef<MapRef, MapProps>(
-  ({ estimatedFlightDistance, onDataProcessed,onShowTickChange }, ref) => {
+  ({ estimatedFlightDistance, onDataProcessed,onShowTickChange, onTotalDistanceChange }, ref) => {
     const [totalDistance, setTotalDistance] = useState<number>(0);
     const lineRef = useRef<GeoJSON.FeatureCollection | null>(null);
     const [showTick, setShowTick] = useState(false);
@@ -67,6 +68,10 @@ const Map = forwardRef<MapRef, MapProps>(
           );
           const totalDistance = turf.length(line, { units: "kilometers" });
           setTotalDistance(totalDistance);
+          if (onTotalDistanceChange) {
+            console.log("Calculated total distance:", totalDistance);
+            onTotalDistanceChange(totalDistance);
+          }
 
           mapRef.current.addSource(layerId, {
             type: "geojson",
@@ -278,7 +283,7 @@ const Map = forwardRef<MapRef, MapProps>(
             <FlightPlanUploader onPlanUploaded={handleFlightPlanUpload} />
           </div>
           <div className="bg-gray-300 p-4 rounded-md w-full md:w-1/2">
-            <h2 className="text-xl font-semibold mb-4">Step A: Upload Your Flight Log, or</h2>
+            <h2 className="text-xl font-semibold mb-4">Step A: Upload Your Flight Log (.ulg), or</h2>
             <FlightLogUploader onProcessComplete={handleFileProcessing} />
           </div>
         </div>

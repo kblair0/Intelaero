@@ -11,7 +11,7 @@ const BatteryCalculator: React.FC = () => {
   const [phaseData, setPhaseData] = useState<any[]>([]);
   const [parsedDistance, setParsedDistance] = useState<number>(0);
   const [showTick, setShowTick] = useState(false);
-
+  const [flightPlanDistance, setFlightPlanDistance] = useState<number | null>(null);
   const mapRef = useRef<MapRef | null>(null);
 
   useEffect(() => {
@@ -43,6 +43,28 @@ const BatteryCalculator: React.FC = () => {
     console.log("Updated showTick from Map:", value); // Debugging to verify updates
   };
 
+  const handleTotalDistanceChange = (distance: number) => {
+    console.log("Received flight plan distance:", distance);
+    setFlightPlanDistance(distance); // Update the state with the flight plan distance
+  };
+
+  const formatFlightTime = (timeInMinutes: number): string => {
+    const minutes = Math.floor(timeInMinutes); // Whole minutes
+    const seconds = Math.round((timeInMinutes - minutes) * 60); // Remaining seconds
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`; // Format as min:sec
+  };
+
+  // Calculate Battery Reserve/Deficit
+  const calculateBatteryReserve = (): string => {
+    if (flightPlanDistance === null || flightPlanDistance === 0) {
+      return "N/A"; // Avoid division by zero
+    }
+    const reservePercentage =
+      ((parsedDistance - flightPlanDistance) / flightPlanDistance) * 100;
+    return reservePercentage.toFixed(2) + "%"; // Format to 2 decimal places
+  };
+
+
   return (
     <div className="flex flex-col md:flex-row min-h-screen text-white bg-gray-200">
       {/* Map Section */}
@@ -53,6 +75,7 @@ const BatteryCalculator: React.FC = () => {
           estimatedFlightDistance={parsedDistance}
           onDataProcessed={handleDataProcessed}
           onShowTickChange={handleShowTickChange}
+          onTotalDistanceChange={handleTotalDistanceChange}
         />
         </div>
       </div>
@@ -114,12 +137,28 @@ const BatteryCalculator: React.FC = () => {
           <p className="text-sm mb-2">
             Estimated flight time:{" "}
             <span className="font-bold">
-              {parseFloat(batteryCapacity) / parseFloat(dischargeRate) || 0} minutes
+              {formatFlightTime(parseFloat(batteryCapacity) / parseFloat(dischargeRate) || 0)} min
             </span>
           </p>
           <p className="text-sm mb-2">
             Estimated travel distance:{" "}
             <span className="font-bold">{parsedDistance.toFixed(2)} km</span>
+          </p>
+          {flightPlanDistance !== null && (
+            <p className="text-sm mb-2">
+              Uploaded Flight Plan Distance:{" "}
+              <span className="font-bold">{flightPlanDistance.toFixed(2)} km</span>
+            </p>
+          )}
+          <p className="text-sm mb-2">
+            Battery Reserve:{" "}
+            <span
+              className={`font-bold ${
+                parseFloat(calculateBatteryReserve()) < 0 ? "text-red-500" : "text-green-500"
+              }`}
+            >
+              {calculateBatteryReserve()}
+            </span>
           </p>
           <div>
             {showTick ? (
@@ -142,30 +181,37 @@ const BatteryCalculator: React.FC = () => {
             )}
             {phaseData && phaseData.length > 0 && (
               <div className="overflow-x-auto">
-                <table className="w-full border-collapse border border-gray-500 text-sm">
+                <table className="w-full border-collapse border border-gray-500 text-sm text-black">
                   <thead>
-                    <tr className="bg-gray-600 text-white">
-                      <th className="border border-gray-500 p-2">Phase</th>
-                      <th className="border border-gray-500 p-2">Total Time (s)</th>
-                      <th className="border border-gray-500 p-2">Total Draw (mAh)</th>
-                      <th className="border border-gray-500 p-2">Avg Draw (mAh/s)</th>
-                    </tr>
+                  <tr className="bg-gray-200">
+                    <th className="border border-gray-300 p-2">Phase</th>
+                    <th className="border border-gray-300 p-2">Total Time (s)</th>
+                    <th className="border border-gray-300 p-2">Total Draw (mAh)</th>
+                    <th className="border border-gray-300 p-2">Avg Draw (mAh/s)</th>
+                    <th className="border border-gray-300 p-2">Diff From Avg (%)</th>
+                    <th className="border border-gray-300 p-2">% Time of Flight</th>
+                  </tr>
                   </thead>
                   <tbody>
-                    {phaseData.map((phase, index) => (
-                      <tr
-                        key={index}
-                        className={index % 2 === 0 ? "bg-gray-100" : "bg-white"}
-                      >
-                        <td className="border border-gray-500 p-2">{phase.Phase}</td>
-                        <td className="border border-gray-500 p-2">
-                          {phase["TotalTime(s)"].toFixed(2)}
-                        </td>
-                        <td className="border border-gray-500 p-2">
-                          {phase["Total Draw(mAh)"].toFixed(2)}
-                        </td>
-                        <td className="border border-gray-500 p-2">
-                          {phase["AvgDr(mAh/s)"]?.toFixed(2) ?? "N/A"}
+                    {phaseData
+                      .filter((phase) => phase.Phase !== "Total Flight Summary")
+                      .map((phase, index) => (
+                        <tr key={`phase-${index}`} className={index % 2 === 0 ? "bg-gray-100" : "bg-white"}>
+                          <td className="border border-gray-300 p-2">{phase.Phase}</td>
+                          <td className="border border-gray-300 p-2">
+                            {phase["TotalTime(s)"].toFixed(2)}
+                          </td>
+                          <td className="border border-gray-300 p-2">
+                            {phase["Total Draw(mAh)"].toFixed(2)}
+                          </td>
+                          <td className="border border-gray-300 p-2">
+                            {phase["AvgDr(mAh/s)"]?.toFixed(2) ?? "N/A"}
+                          </td>
+                          <td className="border border-gray-300 p-2">
+                            {phase["DiffofAvg(%)"]?.toFixed(2) ?? "N/A"}%
+                          </td>
+                          <td className="border border-gray-300 p-2">
+                            {phase["PctTime of Flight(%)"]?.toFixed(2)}%
                         </td>
                       </tr>
                     ))}
