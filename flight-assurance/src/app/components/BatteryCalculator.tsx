@@ -1,6 +1,8 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import Map, { MapRef } from "./Map";
+import ObstacleAssessment from "./ObstacleAssessment";
+import FlightPlanUploader from "./FlightPlanUploader";
 
 const BatteryCalculator: React.FC = () => {
   const [batteryCapacity, setBatteryCapacity] = useState<string>("28000");
@@ -12,6 +14,7 @@ const BatteryCalculator: React.FC = () => {
   const [parsedDistance, setParsedDistance] = useState<number>(0);
   const [showTick, setShowTick] = useState(false);
   const [flightPlanDistance, setFlightPlanDistance] = useState<number | null>(null);
+  const [flightPlan, setFlightPlan] = useState<GeoJSON.FeatureCollection | null>(null);
   const mapRef = useRef<MapRef | null>(null);
 
   useEffect(() => {
@@ -64,25 +67,29 @@ const BatteryCalculator: React.FC = () => {
     return reservePercentage.toFixed(2) + "%"; // Format to 2 decimal places
   };
 
+  const handleObstacleAssessment = (geojson: GeoJSON.FeatureCollection) => {
+    setFlightPlan(geojson); // Pass to ObstacleAssessment for processing
+  };
 
   return (
     <div className="flex flex-col md:flex-row min-h-screen text-white bg-gray-200">
       {/* Map Section */}
       <div className="w-full md:flex-1 md:h-full order-1 md:order-none">
         <div className="relative w-full h-64 md:h-full">
-        <Map
-          ref={mapRef}
-          estimatedFlightDistance={parsedDistance}
-          onDataProcessed={handleDataProcessed}
-          onShowTickChange={handleShowTickChange}
-          onTotalDistanceChange={handleTotalDistanceChange}
-        />
+          <Map
+            ref={mapRef}
+            estimatedFlightDistance={parsedDistance}
+            onDataProcessed={handleDataProcessed}
+            onShowTickChange={handleShowTickChange}
+            onTotalDistanceChange={handleTotalDistanceChange}
+            onObstacleAssessment={handleObstacleAssessment}
+          />
         </div>
       </div>
-
+  
       {/* Right Panel (Inputs/Results) */}
       <div className="w-full md:w-1/3 p-4 overflow-y-auto bg-gray-300 mt-8 rounded-md">
-        <h2 className="text-xl font-semibold mb-4 ">Step 2B: Set Your Own Parameters</h2>
+      <h2 className="text-xl font-semibold mb-4 ">Step 2B: Set/Adjust Your Own Flight Plan Parameters</h2>
         <div className="bg-white p-4 rounded-md shadow-md">
           <h2 className="text-xl font-semibold mb-4">🚁 Flight Parameters</h2>
           <div className="mb-4">
@@ -130,7 +137,7 @@ const BatteryCalculator: React.FC = () => {
             </div>
           )}
         </div>
-
+  
         {/* Results Section */}
         <div className="bg-white p-4 rounded-md shadow-md mt-4">
           <h2 className="text-xl font-semibold mb-4">Results</h2>
@@ -168,7 +175,7 @@ const BatteryCalculator: React.FC = () => {
             )}
           </div>
         </div>
-
+  
         {/* Enhanced Estimates Section */}
         {(averageDraw || (phaseData && phaseData.length > 0)) && (
           <div className="bg-white p-4 rounded-md shadow-md mt-4">
@@ -183,20 +190,23 @@ const BatteryCalculator: React.FC = () => {
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse border border-gray-500 text-sm text-black">
                   <thead>
-                  <tr className="bg-gray-200">
-                    <th className="border border-gray-300 p-2">Phase</th>
-                    <th className="border border-gray-300 p-2">Total Time (s)</th>
-                    <th className="border border-gray-300 p-2">Total Draw (mAh)</th>
-                    <th className="border border-gray-300 p-2">Avg Draw (mAh/s)</th>
-                    <th className="border border-gray-300 p-2">Diff From Avg (%)</th>
-                    <th className="border border-gray-300 p-2">% Time of Flight</th>
-                  </tr>
+                    <tr className="bg-gray-200">
+                      <th className="border border-gray-300 p-2">Phase</th>
+                      <th className="border border-gray-300 p-2">Total Time (s)</th>
+                      <th className="border border-gray-300 p-2">Total Draw (mAh)</th>
+                      <th className="border border-gray-300 p-2">Avg Draw (mAh/s)</th>
+                      <th className="border border-gray-300 p-2">Diff From Avg (%)</th>
+                      <th className="border border-gray-300 p-2">% Time of Flight</th>
+                    </tr>
                   </thead>
                   <tbody>
                     {phaseData
                       .filter((phase) => phase.Phase !== "Total Flight Summary")
                       .map((phase, index) => (
-                        <tr key={`phase-${index}`} className={index % 2 === 0 ? "bg-gray-100" : "bg-white"}>
+                        <tr
+                          key={`phase-${index}`}
+                          className={index % 2 === 0 ? "bg-gray-100" : "bg-white"}
+                        >
                           <td className="border border-gray-300 p-2">{phase.Phase}</td>
                           <td className="border border-gray-300 p-2">
                             {phase["TotalTime(s)"].toFixed(2)}
@@ -212,13 +222,26 @@ const BatteryCalculator: React.FC = () => {
                           </td>
                           <td className="border border-gray-300 p-2">
                             {phase["PctTime of Flight(%)"]?.toFixed(2)}%
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                        </tr>
+                      ))}
                   </tbody>
                 </table>
               </div>
             )}
+          </div>
+        )}
+  
+        {/* Obstacle Assessment Results */}
+        {flightPlan && (
+          <div className="bg-white p-4 rounded-md shadow-md mt-4">
+            <h2 className="text-xl font-semibold mb-4">Obstacle Assessment</h2>
+            <ObstacleAssessment
+              flightPlan={flightPlan}
+              onDataProcessed={(data) => {
+                console.log("Obstacle assessment data processed:", data);
+              }}
+            />
           </div>
         )}
       </div>

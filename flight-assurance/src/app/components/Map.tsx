@@ -12,8 +12,7 @@ import * as turf from "@turf/turf";
 import FlightLogUploader from "./FlightLogUploader";
 import FlightPlanUploader from "./FlightPlanUploader";
 
-mapboxgl.accessToken =
-  "pk.eyJ1IjoiaW50ZWxhZXJvIiwiYSI6ImNtM2EwZzY3ODB5bDgyam9yOTZ1ajE2YWsifQ.b9w33legWjEDzezOZx1N4g";
+mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
 
 export interface MapRef {
   addGeoJSONToMap: (geojson: GeoJSON.FeatureCollection) => void;
@@ -24,9 +23,17 @@ interface MapProps {
   onDataProcessed?: (data: { averageDraw: number; phaseData: any[] }) => void;
   onShowTickChange: (value: boolean) => void;
   onTotalDistanceChange: (distance: number) => void;
+  onObstacleAssessment: (geojson: GeoJSON.FeatureCollection) => void;
 }
 const Map = forwardRef<MapRef, MapProps>(
-  ({ estimatedFlightDistance, onDataProcessed,onShowTickChange, onTotalDistanceChange }, ref) => {
+  ({ 
+    estimatedFlightDistance, 
+    onDataProcessed,
+    onShowTickChange, 
+    onTotalDistanceChange,
+    onObstacleAssessment,
+   }, ref) => {
+
     const [totalDistance, setTotalDistance] = useState<number>(0);
     const lineRef = useRef<GeoJSON.FeatureCollection | null>(null);
     const [showTick, setShowTick] = useState(false);
@@ -280,7 +287,13 @@ const Map = forwardRef<MapRef, MapProps>(
         <div className="flex flex-col md:flex-row gap-4 p-4 px-4 mt-4">
           <div className="bg-gray-300 p-4 rounded-md w-full md:w-1/2">
             <h2 className="text-xl font-semibold mb-4">Step 1: Upload Your Flight Plan & Analyse Obstacles</h2>
-            <FlightPlanUploader onPlanUploaded={handleFlightPlanUpload} />
+            <FlightPlanUploader 
+              onPlanUploaded={handleFlightPlanUpload}
+              onObstacleAssessment={(geojson) => {
+                console.log("Obstacle Assessment triggered");
+                onObstacleAssessment(geojson); // Pass to parent
+              }}
+            />
           </div>
           <div className="bg-gray-300 p-4 rounded-md w-full md:w-1/2">
             <h2 className="text-xl font-semibold mb-4">Step 2A: Upload Your Flight Log (.ulg) (Optional)</h2>
