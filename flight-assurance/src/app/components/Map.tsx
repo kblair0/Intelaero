@@ -100,18 +100,12 @@ const Map = forwardRef<MapRef, MapProps>(
                 "line-cap": "round",
             },
             paint: {
-                "line-width": 4,
-                "line-color": [
-                    "interpolate",
-                    ["linear"],
-                    ["get", "altitude"], // Access altitude from feature properties
-                    0, "#FF0000", // Altitude 2300: Red
-                    1000, "#00FF00", // Altitude 2700: Green
-                    2000, "#0000FF"  // Altitude 3000: Blue
-                ],
+                "line-width": 2,
+                "line-color": "#FFFF00", // Static yellow color
                 "line-opacity": 1,
             },
         });
+        
         
       
           const bounds = coordinates.reduce(

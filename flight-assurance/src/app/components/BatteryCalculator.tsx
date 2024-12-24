@@ -13,12 +13,13 @@ const BatteryCalculator: React.FC = () => {
   const [parsedDistance, setParsedDistance] = useState<number>(0);
   const [showTick, setShowTick] = useState(false);
   const [flightPlanDistance, setFlightPlanDistance] = useState<number | null>(null);
+  const [showObstacleModal, setShowObstacleModal] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [flightPlan, setFlightPlan] = useState<GeoJSON.FeatureCollection | null>(null);
   const mapRef = useRef<MapRef | null>(null);
   
   //UI for Collapsable Sections
   const [showObstacleAssessment, setShowObstacleAssessment] = useState(false);
- 
 
   useEffect(() => {
     const parsedBatteryCapacity = parseFloat(batteryCapacity) || 0;
@@ -60,6 +61,11 @@ const BatteryCalculator: React.FC = () => {
     return `${minutes}:${seconds.toString().padStart(2, "0")}`; // Format as min:sec
   };
 
+  const handleEnlargeGraph = () => {
+    setLoading(true);
+    setShowObstacleModal(true);
+  };
+  
   // Calculate Battery Reserve/Deficit
   const calculateBatteryReserve = (): string => {
     if (flightPlanDistance === null || flightPlanDistance === 0) {
@@ -72,6 +78,7 @@ const BatteryCalculator: React.FC = () => {
 
   const handleObstacleAssessment = (geojson: GeoJSON.FeatureCollection) => {
     setFlightPlan(geojson); // Pass to ObstacleAssessment for processing
+    setLoading(true); // show loading indication
   };
 
   return (
@@ -238,15 +245,89 @@ const BatteryCalculator: React.FC = () => {
         {/* Obstacle Assessment Results */}
         {flightPlan && (
           <div className="bg-white p-4 rounded-md shadow-md mt-4">
-            <h2 className="text-xl font-semibold mb-4">Obstacle Assessment</h2>
-            <ObstacleAssessment
-              flightPlan={flightPlan}
-              onDataProcessed={(data) => {
-                console.log("Obstacle assessment data processed:", data);
-              }}
-            />
+            {/* Heading and Enlarge Graph button remain outside the 'relative' container */}
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold">Obstacle Assessment</h2>
+              <button
+                onClick={handleEnlargeGraph}
+                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+              >
+                Enlarge Graph
+              </button>
+            </div>
+
+            {/* Only this container will get "covered" by the spinner overlay */}
+            <div className="relative">
+              <ObstacleAssessment
+                flightPlan={flightPlan}
+                onDataProcessed={(data) => {
+                  console.log("Obstacle assessment data processed:", data);
+                  setLoading(false);
+                }}
+              />
+
+              {/* Overlay the spinner here so it doesn't cover the heading */}
+              {loading && (
+                <div className="absolute inset-0 flex justify-center items-center bg-white z-50">
+                  <div className="spinner-border animate-spin text-blue-500" role="status">
+                    <span className="sr-only">Loading...</span>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
+
+        {/* Modal for Enlarged Obstacle Assessment */}
+        {showObstacleModal && flightPlan && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 p-7 flex items-center justify-center z-50">
+            <div
+              className="bg-white rounded shadow-lg relative flex flex-col"
+              style={{
+                width: "90vw",   // Modal width
+                height: "90vh",  // Modal height
+              }}
+            >
+              {/* Close button */}
+              <button
+                onClick={() => setShowObstacleModal(false)}
+                className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 text-2xl"
+              >
+                ✖
+              </button>
+
+              <h2 className="text-2xl font-semibold mb-4 mt-4 text-center">
+                Obstacle Assessment
+              </h2>
+
+              {/* This container expands to fill the modal */}
+              <div className="flex-1 relative">
+                {/* Always render the ObstacleAssessment component */}
+                <ObstacleAssessment
+                  flightPlan={flightPlan}
+                  style={{ width: "100%", height: "100%" }}
+                  onDataProcessed={(data) => {
+                    console.log("Obstacle assessment data processed:", data);
+                    setTimeout(() => {
+                      setLoading(false);
+                    }, 3000);
+                  }}
+                />
+
+                {/* Spinner overlay if loading */}
+                {loading && (
+                  <div className="absolute inset-0 flex justify-center items-center bg-white z-50">
+                    <div className="spinner-border animate-spin text-blue-500" role="status">
+                      <span className="sr-only">Loading...</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+
       </div>
     </div>
   );
