@@ -301,7 +301,7 @@ const BatteryCalculator: React.FC = () => {
               </h2>
 
               {/* This container expands to fill the modal */}
-              <div className="flex-1 relative">
+              <div className="flex-1 relative p-5">
                 {/* Always render the ObstacleAssessment component */}
                 <ObstacleAssessment
                   flightPlan={flightPlan}

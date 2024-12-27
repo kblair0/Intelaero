@@ -287,7 +287,6 @@ const ObstacleAssessment: React.FC<ObstacleAssessmentProps> = ({ flightPlan, onD
   // Render the chart
   return (
     <div>
-      <h2>Obstacle Assessment Completed</h2>
       <Line key={JSON.stringify(chartData)} data={chartData} options={chartOptions} />
     </div>
   );
