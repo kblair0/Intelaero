@@ -15,7 +15,9 @@ const BatteryCalculator: React.FC = () => {
   const [flightPlanDistance, setFlightPlanDistance] = useState<number | null>(null);
   const [showObstacleModal, setShowObstacleModal] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [flightPlan, setFlightPlan] = useState<GeoJSON.FeatureCollection | null>(null);
+  const [showAssessments, setShowAssessments] = useState(false);
+  const [rawFlightPlan, setRawFlightPlan] = useState<GeoJSON.FeatureCollection | null>(null); // Uploaded but unprocessed
+  const [processedFlightPlan, setProcessedFlightPlan] = useState<GeoJSON.FeatureCollection | null>(null); // To be used for assessments
   const mapRef = useRef<MapRef | null>(null);
   
   //UI for Collapsable Sections
@@ -38,6 +40,11 @@ const BatteryCalculator: React.FC = () => {
   
         setParsedDistance(parseFloat(distance) || 0);
   }, [batteryCapacity, dischargeRate, assumedSpeed]); 
+
+  const handleFlightPlanUpdate = (geojson: GeoJSON.FeatureCollection) => {
+    setRawFlightPlan(geojson);
+    setShowAssessments(true);
+  };
 
   const handleDataProcessed = (data: { averageDraw: number; phaseData: any[] }) => {
     setAverageDraw(data.averageDraw);
@@ -66,8 +73,7 @@ const BatteryCalculator: React.FC = () => {
     setShowObstacleModal(true);
   };
   
-  // Calculate Battery Reserve/Deficit
-  const calculateBatteryReserve = (): string => {
+    const calculateBatteryReserve = (): string => {
     if (flightPlanDistance === null || flightPlanDistance === 0) {
       return "N/A"; // Avoid division by zero
     }
@@ -76,9 +82,13 @@ const BatteryCalculator: React.FC = () => {
     return reservePercentage.toFixed(2) + "%"; // Format to 2 decimal places
   };
 
-  const handleObstacleAssessment = (geojson: GeoJSON.FeatureCollection) => {
-    setFlightPlan(geojson); // Pass to ObstacleAssessment for processing
-    setLoading(true); // show loading indication
+  const handleObstacleAssessment = () => {
+    if (rawFlightPlan) {
+      setProcessedFlightPlan(rawFlightPlan); // Move the raw flight plan to processed state
+      setLoading(true); // Show loading indication
+    } else {
+      console.warn("No flight plan available for obstacle assessment!");
+    }
   };
 
   return (
@@ -88,11 +98,11 @@ const BatteryCalculator: React.FC = () => {
         <div className="relative w-full h-64 md:h-full">
           <Map
             ref={mapRef}
+            onPlanUploaded={handleFlightPlanUpdate}
             estimatedFlightDistance={parsedDistance}
             onDataProcessed={handleDataProcessed}
             onShowTickChange={handleShowTickChange}
             onTotalDistanceChange={handleTotalDistanceChange}
-            onObstacleAssessment={handleObstacleAssessment}
           />
         </div>
       </div>
@@ -241,9 +251,41 @@ const BatteryCalculator: React.FC = () => {
             )}
           </div>
         )}
+
+        {/* Assessments Section */}
+        {showAssessments && (
+          <div className="bg-white p-4 rounded-md shadow-md mt-4">
+            <h2 className="text-xl font-semibold mb-4">Assessments</h2>
+            <div className="flex flex-col justify-center sm:flex-row sm:space-x-4 space-y-4 sm:space-y-0">
+              {/* Vertical layout on small screens, horizontal with spacing on larger screens */}
+              <button
+                onClick={() => {
+                  if (rawFlightPlan) {
+                    handleObstacleAssessment(); // Use rawFlightPlan for assessment trigger
+                  } else {
+                    console.warn("No flight plan is available for obstacle assessment!");
+                  }
+                }}
+                className="bg-yellow-500 text-black text-sm px-4 py-2 rounded shadow hover:bg-yellow-600"
+              >
+                🚨 Obstacle Assessment
+              </button>
+
+              <button
+                onClick={() => {
+                  console.log("ELOS Button Clicked");
+                  setShowElos(!showElos);
+                }}
+                className="bg-blue-500 text-white text-sm px-4 py-2 rounded shadow hover:bg-blue-600"
+              >
+                ⚡️ ELOS Assessment
+              </button>
+            </div>
+          </div>
+        )}   
   
         {/* Obstacle Assessment Results */}
-        {flightPlan && (
+        {processedFlightPlan && (
           <div className="bg-white p-4 rounded-md shadow-md mt-4">
             {/* Heading and Enlarge Graph button remain outside the 'relative' container */}
             <div className="flex items-center justify-between mb-4">
@@ -259,7 +301,7 @@ const BatteryCalculator: React.FC = () => {
             {/* Only this container will get "covered" by the spinner overlay */}
             <div className="relative">
               <ObstacleAssessment
-                flightPlan={flightPlan}
+                flightPlan={processedFlightPlan}
                 onDataProcessed={(data) => {
                   console.log("Obstacle assessment data processed:", data);
                   setLoading(false);
@@ -279,7 +321,7 @@ const BatteryCalculator: React.FC = () => {
         )}
 
         {/* Modal for Enlarged Obstacle Assessment */}
-        {showObstacleModal && flightPlan && (
+        {showObstacleModal && processedFlightPlan && (
           <div className="fixed inset-0 bg-black bg-opacity-50 p-7 flex items-center justify-center z-50">
             <div
               className="bg-white rounded shadow-lg relative flex flex-col"
@@ -304,13 +346,13 @@ const BatteryCalculator: React.FC = () => {
               <div className="flex-1 relative p-5">
                 {/* Always render the ObstacleAssessment component */}
                 <ObstacleAssessment
-                  flightPlan={flightPlan}
+                  flightPlan={processedFlightPlan}
                   style={{ width: "100%", height: "100%" }}
                   onDataProcessed={(data) => {
                     console.log("Obstacle assessment data processed:", data);
                     setTimeout(() => {
                       setLoading(false);
-                    }, 3000);
+                    }, 5000);
                   }}
                 />
 

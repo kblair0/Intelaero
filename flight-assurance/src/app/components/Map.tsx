@@ -23,7 +23,7 @@ interface MapProps {
   onDataProcessed?: (data: { averageDraw: number; phaseData: any[] }) => void;
   onShowTickChange: (value: boolean) => void;
   onTotalDistanceChange: (distance: number) => void;
-  onObstacleAssessment: (geojson: GeoJSON.FeatureCollection) => void;
+  onPlanUploaded: (geojson: GeoJSON.FeatureCollection) => void;
 }
 const Map = forwardRef<MapRef, MapProps>(
   ({ 
@@ -31,7 +31,7 @@ const Map = forwardRef<MapRef, MapProps>(
     onDataProcessed,
     onShowTickChange, 
     onTotalDistanceChange,
-    onObstacleAssessment,
+    onPlanUploaded,
    }, ref) => {
 
     const [totalDistance, setTotalDistance] = useState<number>(0);
@@ -159,6 +159,7 @@ const Map = forwardRef<MapRef, MapProps>(
           }
 
           lineRef.current = geojson;
+          onFlightPlanUpdate(geojson);
         });
       }
     };
@@ -294,13 +295,9 @@ const Map = forwardRef<MapRef, MapProps>(
       <div>
         <div className="flex flex-col md:flex-row gap-4 p-4 px-4 mt-4">
           <div className="bg-gray-300 p-4 rounded-md w-full md:w-1/2">
-            <h2 className="text-xl font-semibold mb-4">Step 1: Upload Your Flight Plan & Analyse Obstacles</h2>
+            <h2 className="text-xl font-semibold mb-4">Step 1: Upload Your Flight Plan</h2>
             <FlightPlanUploader 
-              onPlanUploaded={handleFlightPlanUpload}
-              onObstacleAssessment={(geojson) => {
-                console.log("Obstacle Assessment triggered");
-                onObstacleAssessment(geojson); // Pass to parent
-              }}
+              onPlanUploaded={onPlanUploaded}
             />
           </div>
           <div className="bg-gray-300 p-4 rounded-md w-full md:w-1/2">
