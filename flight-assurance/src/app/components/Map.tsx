@@ -159,7 +159,6 @@ const Map = forwardRef<MapRef, MapProps>(
           }
 
           lineRef.current = geojson;
-          onFlightPlanUpdate(geojson);
         });
       }
     };
@@ -270,8 +269,25 @@ const Map = forwardRef<MapRef, MapProps>(
     }, []);
     
     const handleFlightPlanUpload = (geojson: GeoJSON.FeatureCollection) => {
+      // Add the flight plan to the map
       addGeoJSONToMap(geojson);
+    
+      // Ensure the original `onPlanUploaded` behavior is preserved
+      if (typeof onPlanUploaded === "function") {
+        onPlanUploaded(geojson);
+      }
     };
+
+    const combinedOnPlanUploaded = (geojson: GeoJSON.FeatureCollection) => {
+      // Trigger the parent-provided onPlanUploaded
+      if (typeof onPlanUploaded === "function") {
+        onPlanUploaded(geojson); // This calls handleFlightPlanUpdate in battcalc
+      }
+    
+      // Trigger the Map-specific upload logic
+      handleFlightPlanUpload(geojson); // Adds the flight plan to the map
+    };
+    
 
     const handleFileProcessing = (data: any) => {
       if (Array.isArray(data)) {
@@ -297,7 +313,7 @@ const Map = forwardRef<MapRef, MapProps>(
           <div className="bg-gray-300 p-4 rounded-md w-full md:w-1/2">
             <h2 className="text-xl font-semibold mb-4">Step 1: Upload Your Flight Plan</h2>
             <FlightPlanUploader 
-              onPlanUploaded={onPlanUploaded}
+              onPlanUploaded={combinedOnPlanUploaded}
             />
           </div>
           <div className="bg-gray-300 p-4 rounded-md w-full md:w-1/2">

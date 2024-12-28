@@ -42,6 +42,7 @@ const BatteryCalculator: React.FC = () => {
   }, [batteryCapacity, dischargeRate, assumedSpeed]); 
 
   const handleFlightPlanUpdate = (geojson: GeoJSON.FeatureCollection) => {
+    console.log("handleFlightPlanUpdate triggered");
     setRawFlightPlan(geojson);
     setShowAssessments(true);
   };
