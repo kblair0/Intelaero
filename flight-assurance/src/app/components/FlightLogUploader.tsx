@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import React, { useState } from "react";
@@ -13,7 +14,9 @@ const FlightLogUploader: React.FC<{
   /**
    * Handle manual file upload (drag-and-drop or file dialog).
    */
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
     if (!event.target.files || event.target.files.length === 0) return;
 
     const file = event.target.files[0];
@@ -46,7 +49,7 @@ const FlightLogUploader: React.FC<{
     }
 
     // Option 2: Local client-side parsing (uncomment if you want to parse on the client)
-    /*
+
     try {
       const parsedData = await processULGFile(file);
       setUploadState("processed");
@@ -55,7 +58,6 @@ const FlightLogUploader: React.FC<{
       console.error("Error parsing ULG file on client:", err);
       setUploadState("error");
     }
-    */
   };
 
   /**
@@ -120,10 +122,12 @@ const FlightLogUploader: React.FC<{
 
   return (
     <div className="bg-white border rounded-lg p-4 mt-6">
-      <h3 className="text-lg font-bold text-black">🔋 Enhance Your Flight Estimates</h3>
+      <h3 className="text-lg font-bold text-black">
+        🔋 Enhance Your Flight Estimates
+      </h3>
       <p className="text-sm text-gray-600">
-        Upload a previous <strong>.ulg</strong> flight log from your drone to calculate a more accurate average
-        battery draw rate and phase analysis.
+        Upload a previous <strong>.ulg</strong> flight log from your drone to
+        calculate a more accurate average battery draw rate and phase analysis.
       </p>
       <label htmlFor="file-upload" className="cursor-pointer">
         <input
@@ -149,7 +153,9 @@ const FlightLogUploader: React.FC<{
             </p>
           )}
           {uploadState === "error" && (
-            <p className="text-red-600">Error processing file. Please try again.</p>
+            <p className="text-red-600">
+              Error processing file. Please try again.
+            </p>
           )}
         </div>
       </label>

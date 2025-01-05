@@ -105,7 +105,7 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded 
     <div className="bg-white border rounded-lg p-4 mt-6">
       <h3 className="text-lg font-bold text-black">📁 Upload Your Flight Plan</h3>
       <p className="text-sm text-gray-600">
-        Upload a <strong>.waypoints</strong> or <strong>.geojson</strong> file to analyze your drone's flight path.
+        Upload a <strong>.waypoints</strong> or <strong>.geojson</strong> file to analyze your drone&apos;s flight path.
       </p>
       <div
         {...getRootProps()}
