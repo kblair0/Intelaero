@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import Map, { MapRef } from "./Map";
@@ -26,7 +27,8 @@ const BatteryCalculator: React.FC = () => {
   const mapRef = useRef<MapRef | null>(null);
   
   //UI for Collapsable Sections
-  const [showObstacleAssessment, setShowObstacleAssessment] = useState(false);
+  // const [showObstacleAssessment, setShowObstacleAssessment] = useState(false);
+  // const [showElos, setShowElos] = useState(false);
 
   useEffect(() => {
     const parsedBatteryCapacity = parseFloat(batteryCapacity) || 0;
@@ -280,7 +282,7 @@ const BatteryCalculator: React.FC = () => {
                 🚨 Obstacle Assessment
               </button>
 
-              <button
+              {/* <button
                 onClick={() => {
                   console.log("ELOS Button Clicked");
                   setShowElos(!showElos);
@@ -288,7 +290,7 @@ const BatteryCalculator: React.FC = () => {
                 className="bg-blue-500 text-white text-sm px-4 py-2 rounded shadow hover:bg-blue-600"
               >
                 ⚡️ ELOS Assessment
-              </button>
+              </button> */}
             </div>
           </div>
         )}   
@@ -356,7 +358,7 @@ const BatteryCalculator: React.FC = () => {
                 {/* Always render the ObstacleAssessment component */}
                 <ObstacleAssessment
                   flightPlan={processedFlightPlan}
-                  style={{ width: "100%", height: "100%" }}
+                  // style={{ width: "100%", height: "100%" }}
                   onDataProcessed={(data) => {
                     console.log("Obstacle assessment data processed:", data);
                     setTimeout(() => {
