@@ -9,7 +9,7 @@ const ubuntu = Ubuntu({
 });
 
 export const metadata: Metadata = {
-  title: "Inte.Aero",
+  title: "Intel.Aero",
   description: "Intelligent Mission Assurance For RPAS",
 };
 
