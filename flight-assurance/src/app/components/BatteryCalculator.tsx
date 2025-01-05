@@ -23,7 +23,7 @@ const BatteryCalculator: React.FC = () => {
   
   //UI for Collapsable Sections
   // const [showObstacleAssessment, setShowObstacleAssessment] = useState(false);
-  // const [showElos, setShowElos] = useState(false);
+  const [showElos, setShowElos] = useState(false);
 
   useEffect(() => {
     const parsedBatteryCapacity = parseFloat(batteryCapacity) || 0;
@@ -274,7 +274,7 @@ const BatteryCalculator: React.FC = () => {
                 🚨 Obstacle Assessment
               </button>
 
-              {/* <button
+              <button
                 onClick={() => {
                   console.log("ELOS Button Clicked");
                   setShowElos(!showElos);
@@ -282,7 +282,7 @@ const BatteryCalculator: React.FC = () => {
                 className="bg-blue-500 text-white text-sm px-4 py-2 rounded shadow hover:bg-blue-600"
               >
                 ⚡️ ELOS Assessment
-              </button> */}
+              </button>
             </div>
           </div>
         )}   
