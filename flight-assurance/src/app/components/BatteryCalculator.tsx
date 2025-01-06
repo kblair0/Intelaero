@@ -381,81 +381,147 @@ const BatteryCalculator: React.FC = () => {
 {showElos && (
   <div className="mt-4 bg-white p-4 rounded-md shadow-md">
     <h2 className="text-xl font-semibold mb-4 text-gray-700">⚡️ ELOS Details</h2>
-    
-    {/* GCS Details */}
-    <div className="mb-4">
-      <label className="block text-sm font-medium mb-1">Ground Control Station (GCS) Latitude:</label>
-      <input
-        className="w-full px-3 py-2 rounded bg-gray-200 text-black placeholder-gray-300"
-        type="text"
-        readOnly
-        value={gcsLocation ? gcsLocation.lat.toFixed(4) : "Not set"}
-      />
-      <label className="block text-sm font-medium mt-4 mb-1">Longitude:</label>
-      <input
-        className="w-full px-3 py-2 rounded bg-gray-200 text-black placeholder-gray-300"
-        type="text"
-        readOnly
-        value={gcsLocation ? gcsLocation.lng.toFixed(4) : "Not set"}
-      />
-      <label className="block text-sm font-medium mt-4 mb-1">Elevation:</label>
-      <input
-        className="w-full px-3 py-2 rounded bg-gray-200 text-black placeholder-gray-300"
-        type="text"
-        readOnly
-        value={gcsLocation ? gcsLocation.elevation?.toFixed(4) ?? "N/A" : "Not set"}
-      />
-    </div>
 
-    {/* Observer Details */}
-    <div className="mb-4">
-      <label className="block text-sm font-medium mb-1">Observer Latitude:</label>
-      <input
-        className="w-full px-3 py-2 rounded bg-gray-200 text-black placeholder-gray-300"
-        type="text"
-        readOnly
-        value={observerLocation ? observerLocation.lat.toFixed(4) : "Not set"}
-      />
-      <label className="block text-sm font-medium mt-4 mb-1">Longitude:</label>
-      <input
-        className="w-full px-3 py-2 rounded bg-gray-200 text-black placeholder-gray-300"
-        type="text"
-        readOnly
-        value={observerLocation ? observerLocation.lng.toFixed(4) : "Not set"}
-      />
-      <label className="block text-sm font-medium mt-4 mb-1">Elevation:</label>
-      <input
-        className="w-full px-3 py-2 rounded bg-gray-200 text-black placeholder-gray-300"
-        type="text"
-        readOnly
-        value={observerLocation ? observerLocation.elevation?.toFixed(4) ?? "N/A" : "Not set"}
-      />
-    </div>
+    {/* GCS Details */}
+      <div className="mb-4">
+        <h3 className="text-sm font-semibold mb-2">GCS Location</h3>
+        
+        <div className="flex items-center space-x-2 text-xs">
+          <div className="flex flex-col">
+            <label className="font-medium mb-1">Lat</label>
+            <input
+              className="w-20 px-1 py-1 rounded bg-gray-200 text-black placeholder-gray-400 text-center"
+              type="text"
+              readOnly
+              value={gcsLocation ? gcsLocation.lat.toFixed(4) : "Not set"}
+            />
+          </div>
+
+          <div className="flex flex-col">
+            <label className="font-medium mb-1">Lng</label>
+            <input
+              className="w-20 px-1 py-1 rounded bg-gray-200 text-black placeholder-gray-400 text-center"
+              type="text"
+              readOnly
+              value={gcsLocation ? gcsLocation.lng.toFixed(4) : "Not set"}
+            />
+          </div>
+
+          <div className="flex flex-col">
+            <label className="font-medium mb-1">Elev</label>
+            <input
+              className="w-20 px-1 py-1 rounded bg-gray-200 text-black placeholder-gray-400 text-center"
+              type="text"
+              readOnly
+              value={
+                gcsLocation
+                  ? gcsLocation.elevation?.toFixed(4) ?? "N/A"
+                  : "Not set"
+              }
+            />
+          </div>
+        </div>
+      </div>
+
 
     {/* Repeater Details */}
-    <div className="mb-4">
-      <label className="block text-sm font-medium mb-1">Repeater Latitude:</label>
-      <input
-        className="w-full px-3 py-2 rounded bg-gray-200 text-black placeholder-gray-300"
-        type="text"
-        readOnly
-        value={repeaterLocation ? repeaterLocation.lat.toFixed(4) : "Not set"}
-      />
-      <label className="block text-sm font-medium mt-4 mb-1">Longitude:</label>
-      <input
-        className="w-full px-3 py-2 rounded bg-gray-200 text-black placeholder-gray-300"
-        type="text"
-        readOnly
-        value={repeaterLocation ? repeaterLocation.lng.toFixed(4) : "Not set"}
-      />
-      <label className="block text-sm font-medium mt-4 mb-1">Elevation:</label>
-      <input
-        className="w-full px-3 py-2 rounded bg-gray-200 text-black placeholder-gray-300"
-        type="text"
-        readOnly
-        value={repeaterLocation ? repeaterLocation.elevation?.toFixed(4) ?? "N/A" : "Not set"}
-      />
-    </div>
+      <div className="mb-4">
+        <h3 className="text-sm font-semibold mb-2">Repeater Location</h3>
+        
+        <div className="flex items-center space-x-2 text-xs">
+          <div className="flex flex-col">
+            <label className="font-medium mb-1">Lat</label>
+            <input
+              className="w-20 px-1 py-1 rounded bg-gray-200 text-black placeholder-gray-400 text-center"
+              type="text"
+              readOnly
+              value={
+                repeaterLocation
+                  ? repeaterLocation.lat.toFixed(4)
+                  : "Not set"
+              }
+            />
+          </div>
+
+          <div className="flex flex-col">
+            <label className="font-medium mb-1">Lng</label>
+            <input
+              className="w-20 px-1 py-1 rounded bg-gray-200 text-black placeholder-gray-400 text-center"
+              type="text"
+              readOnly
+              value={
+                repeaterLocation
+                  ? repeaterLocation.lng.toFixed(4)
+                  : "Not set"
+              }
+            />
+          </div>
+
+          <div className="flex flex-col">
+            <label className="font-medium mb-1">Elev</label>
+            <input
+              className="w-20 px-1 py-1 rounded bg-gray-200 text-black placeholder-gray-400 text-center"
+              type="text"
+              readOnly
+              value={
+                repeaterLocation
+                  ? repeaterLocation.elevation?.toFixed(4) ?? "N/A"
+                  : "Not set"
+              }
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Observer Details */}
+      <div className="mb-4">
+        <h3 className="text-sm font-semibold mb-2">Observer Location</h3>
+        
+        <div className="flex items-center space-x-2 text-xs">
+          <div className="flex flex-col">
+            <label className="font-medium mb-1">Lat</label>
+            <input
+              className="w-20 px-1 py-1 rounded bg-gray-200 text-black placeholder-gray-400 text-center"
+              type="text"
+              readOnly
+              value={
+                observerLocation
+                  ? observerLocation.lat.toFixed(4)
+                  : "Not set"
+              }
+            />
+          </div>
+
+          <div className="flex flex-col">
+            <label className="font-medium mb-1">Lng</label>
+            <input
+              className="w-20 px-1 py-1 rounded bg-gray-200 text-black placeholder-gray-400 text-center"
+              type="text"
+              readOnly
+              value={
+                observerLocation
+                  ? observerLocation.lng.toFixed(4)
+                  : "Not set"
+              }
+            />
+          </div>
+
+          <div className="flex flex-col">
+            <label className="font-medium mb-1">Elev</label>
+            <input
+              className="w-20 px-1 py-1 rounded bg-gray-200 text-black placeholder-gray-400 text-center"
+              type="text"
+              readOnly
+              value={
+                observerLocation
+                  ? observerLocation.elevation?.toFixed(4) ?? "N/A"
+                  : "Not set"
+              }
+            />
+          </div>
+        </div>
+      </div>
+
   </div>
 )}
 

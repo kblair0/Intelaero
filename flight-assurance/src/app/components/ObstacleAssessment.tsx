@@ -179,7 +179,7 @@ const ObstacleAssessment: React.FC<ObstacleAssessmentProps> = ({ flightPlan, onD
       }
     };
 
-    // Interpolate waypoints to match terrain density
+    // Interpolate waypoints to match terrain density as Flightaltitude will not change significantly from plan
     const interpolatedWaypoints = distances.map((d) => {
       // Find the closest waypoint before and after this distance
       const lowerIdx = waypointDistances.findIndex((wd) => wd > d) - 1;

@@ -362,7 +362,12 @@ const Map = forwardRef<MapRef, MapProps>(
         onGcsLocationChange(location); // Notify parent
       });   
     
-      popupDiv.querySelector("#delete-gcs-btn")?.addEventListener("click", () => gcsMarker.remove());
+      popupDiv.querySelector("#delete-gcs-btn")?.addEventListener("click", () => {
+        gcsMarker.remove();
+        setGcsLocation(null);
+        onGcsLocationChange(null);
+      });
+      
     };
     const addObserver = () => {
       if (!mapRef.current) return;
@@ -406,7 +411,11 @@ const Map = forwardRef<MapRef, MapProps>(
       });
         
 
-      popupDiv.querySelector("#delete-observer-btn")?.addEventListener("click", () => observerMarker.remove());
+      popupDiv.querySelector("#delete-observer-btn")?.addEventListener("click", () => { 
+        observerMarker.remove();
+        setObserverLocation(null);
+        onObserverLocationChange(null);
+      });
     };
 
     const addRepeater = () => {
@@ -450,7 +459,12 @@ const Map = forwardRef<MapRef, MapProps>(
         onRepeaterLocationChange(location); // Notify parent
       });
         
-      popupDiv.querySelector("#delete-repeater-btn")?.addEventListener("click", () => repeaterMarker.remove());
+      popupDiv.querySelector("#delete-repeater-btn")?.addEventListener("click", () => {
+        repeaterMarker.remove();
+        setRepeaterLocation(null);
+        onRepeaterLocationChange(null);
+      });
+      
     };
 
     return (
