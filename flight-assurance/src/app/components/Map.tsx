@@ -24,6 +24,9 @@ interface MapProps {
   onShowTickChange: (value: boolean) => void;
   onTotalDistanceChange: (distance: number) => void;
   onPlanUploaded: (geojson: GeoJSON.FeatureCollection) => void;
+  onGcsLocationChange: (location: { lng: number; lat: number; elevation: number | null }) => void;
+  onObserverLocationChange: (location: { lng: number; lat: number; elevation: number | null }) => void;
+  onRepeaterLocationChange: (location: { lng: number; lat: number; elevation: number | null }) => void;
 }
 const Map = forwardRef<MapRef, MapProps>(
   ({ 
@@ -32,6 +35,9 @@ const Map = forwardRef<MapRef, MapProps>(
     onShowTickChange, 
     onTotalDistanceChange,
     onPlanUploaded,
+    onGcsLocationChange,
+    onObserverLocationChange,
+    onRepeaterLocationChange,
    }, ref) => {
 
     const [totalDistance, setTotalDistance] = useState<number>(0);
@@ -42,6 +48,9 @@ const Map = forwardRef<MapRef, MapProps>(
     const markerRef = useRef<mapboxgl.Marker | null>(null);
     const startMarkerRef = useRef<mapboxgl.Marker | null>(null);
     const endMarkerRef = useRef<mapboxgl.Marker | null>(null);
+    const [gcsLocation, setGcsLocation] = useState<{ lng: number; lat: number; elevation: number | null } | null>(null);
+    const [observerLocation, setObserverLocation] = useState<{ lng: number; lat: number; elevation: number | null } | null>(null);
+    const [repeaterLocation, setRepeaterLocation] = useState<{ lng: number; lat: number; elevation: number | null } | null>(null);
 
     useEffect(() => {
       if (mapRef.current) {
@@ -163,7 +172,6 @@ const Map = forwardRef<MapRef, MapProps>(
       }
     };
 
-
     useEffect(() => {
       if (lineRef.current && estimatedFlightDistance > 0) {
         const line = turf.lineString(
@@ -257,6 +265,11 @@ const Map = forwardRef<MapRef, MapProps>(
               "sky-atmosphere-sun-intensity": 15,
             },
           });
+  
+          const addGroundStationButton = document.querySelector('.ground-station-icon');
+          if (addGroundStationButton) {
+            addGroundStationButton.style.display = 'block';
+          }
     
           console.log("Terrain and sky layer added successfully");
         });
@@ -286,8 +299,7 @@ const Map = forwardRef<MapRef, MapProps>(
     
       // Trigger the Map-specific upload logic
       handleFlightPlanUpload(geojson); // Adds the flight plan to the map
-    };
-    
+    };  
 
     const handleFileProcessing = (data: any) => {
       if (Array.isArray(data)) {
@@ -307,6 +319,140 @@ const Map = forwardRef<MapRef, MapProps>(
       }
     };
 
+    const addGroundStation = () => {
+      if (!mapRef.current) return;
+    
+      const center = mapRef.current.getCenter();
+      const popupDiv = document.createElement("div");
+    
+      popupDiv.innerHTML = `
+        <div style="display: flex; align-items: center;">
+          <strong style="color: black; margin-right: 5px;">GCS 📡</strong>
+          <button id="delete-gcs-btn" style="
+              background: #e53e3e; 
+              color: white; 
+              border: none;
+              padding: 2px 4px; 
+              border-radius: 4px; 
+              cursor: pointer;
+              font-size: 10px; 
+            ">X</button>
+        </div>
+      `;
+    
+      const gcsPopup = new mapboxgl.Popup({ closeButton: false }).setDOMContent(popupDiv);
+
+      const gcsMarker = new mapboxgl.Marker({ color: "blue", draggable: true })
+        .setLngLat(center)
+        .setPopup(gcsPopup)
+        .addTo(mapRef.current)
+        .togglePopup();
+
+      const elevation = mapRef.current?.queryTerrainElevation(center);
+      const initialLocation = { lng: center.lng, lat: center.lat, elevation };
+      setGcsLocation(initialLocation);
+      onGcsLocationChange(initialLocation);
+
+      // Add an event listener for the 'dragend' event
+      gcsMarker.on('dragend', () => {
+        const lngLat = gcsMarker.getLngLat();
+        const elevation = mapRef.current?.queryTerrainElevation(lngLat);
+        const location = { lng: lngLat.lng, lat: lngLat.lat, elevation };
+        setGcsLocation(location);
+        onGcsLocationChange(location); // Notify parent
+      });   
+    
+      popupDiv.querySelector("#delete-gcs-btn")?.addEventListener("click", () => gcsMarker.remove());
+    };
+    const addObserver = () => {
+      if (!mapRef.current) return;
+
+      const center = mapRef.current.getCenter();
+      const popupDiv = document.createElement("div");
+
+      popupDiv.innerHTML = `
+        <div style="display: flex; align-items: center;">
+          <strong style="color: black; margin-right: 5px;">Observer 🔭</strong>
+          <button id="delete-observer-btn" style="
+              background: #e53e3e; 
+              color: white; 
+              border: none;
+              padding: 2px 4px; 
+              border-radius: 4px; 
+              cursor: pointer;
+              font-size: 10px; 
+            ">X</button>
+        </div>
+      `;
+
+      const observerPopup = new mapboxgl.Popup({ closeButton: false }).setDOMContent(popupDiv);
+      const observerMarker = new mapboxgl.Marker({ color: "green", draggable: true })
+        .setLngLat(center)
+        .setPopup(observerPopup)
+        .addTo(mapRef.current)
+        .togglePopup();
+
+      const elevation = mapRef.current?.queryTerrainElevation(center);
+      const initialLocation = { lng: center.lng, lat: center.lat, elevation };
+      setObserverLocation(initialLocation);
+      onObserverLocationChange(initialLocation);
+
+      observerMarker.on('dragend', () => {
+        const lngLat = observerMarker.getLngLat();
+        const elevation = mapRef.current?.queryTerrainElevation(lngLat);
+        const location = { lng: lngLat.lng, lat: lngLat.lat, elevation };
+        setObserverLocation(location);
+        onObserverLocationChange(location); // Notify parent
+      });
+        
+
+      popupDiv.querySelector("#delete-observer-btn")?.addEventListener("click", () => observerMarker.remove());
+    };
+
+    const addRepeater = () => {
+      if (!mapRef.current) return;
+
+      const center = mapRef.current.getCenter();
+      const popupDiv = document.createElement("div");
+
+      popupDiv.innerHTML = `
+        <div style="display: flex; align-items: center;">
+          <strong style="color: black; margin-right: 5px;">Repeater ⚡️</strong>
+          <button id="delete-repeater-btn" style="
+              background: #e53e3e; 
+              color: white; 
+              border: none;
+              padding: 2px 4px; 
+              border-radius: 4px; 
+              cursor: pointer;
+              font-size: 10px; 
+            ">X</button>
+        </div>
+      `;
+
+      const repeaterPopup = new mapboxgl.Popup({ closeButton: false }).setDOMContent(popupDiv);
+      const repeaterMarker = new mapboxgl.Marker({ color: "red", draggable: true })
+        .setLngLat(center)
+        .setPopup(repeaterPopup)
+        .addTo(mapRef.current)
+        .togglePopup();
+
+      const elevation = mapRef.current?.queryTerrainElevation(center);
+      const initialLocation = { lng: center.lng, lat: center.lat, elevation };
+      setRepeaterLocation(initialLocation);
+      onRepeaterLocationChange(initialLocation);
+    
+      repeaterMarker.on('dragend', () => {
+        const lngLat = repeaterMarker.getLngLat();
+        const elevation = mapRef.current?.queryTerrainElevation(lngLat);
+        const location = { lng: lngLat.lng, lat: lngLat.lat, elevation };
+        setRepeaterLocation(location);
+        onRepeaterLocationChange(location); // Notify parent
+      });
+        
+      popupDiv.querySelector("#delete-repeater-btn")?.addEventListener("click", () => repeaterMarker.remove());
+    };
+
     return (
       <div>
         <div className="flex flex-col md:flex-row gap-4 p-4 px-4 mt-4">
@@ -321,10 +467,31 @@ const Map = forwardRef<MapRef, MapProps>(
             <FlightLogUploader onProcessComplete={handleFileProcessing} />
           </div>
         </div>
-        <div
+    
+        {/* Map container with the buttons */}
+        <div 
           ref={mapContainerRef}
           style={{ height: "70vh", width: "100%", marginBottom: "100px" }}
-        />
+          className="relative" 
+        >
+          <div className="absolute top-4 right-4 z-10 flex flex-col space-y-2"> 
+            <button 
+              onClick={addGroundStation} 
+              className="map-button ground-station-icon"> 
+              Add Ground Station 📡
+            </button>
+            <button
+            onClick={addObserver}
+            className="map-button observer-icon"> 
+            Add Observer 🔭
+            </button>
+            <button
+              onClick={addRepeater}
+              className="map-button repeater-icon">
+              Add Repeater ⚡️
+            </button>
+          </div>
+        </div>
       </div>
     );
   }

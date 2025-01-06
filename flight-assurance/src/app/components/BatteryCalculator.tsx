@@ -16,6 +16,11 @@ const BatteryCalculator: React.FC = () => {
   const [showObstacleModal, setShowObstacleModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showAssessments, setShowAssessments] = useState(false);
+  const [showElos, setShowElos] = useState(false);
+
+  const [gcsLocation, setGcsLocation] = useState<{ lng: number; lat: number; elevation: number | null } | null>(null);
+  const [observerLocation, setObserverLocation] = useState<{ lng: number; lat: number; elevation: number | null } | null>(null);
+  const [repeaterLocation, setRepeaterLocation] = useState<{ lng: number; lat: number; elevation: number | null } | null>(null);
   const [rawFlightPlan, setRawFlightPlan] = useState<GeoJSON.FeatureCollection | null>(null); // Uploaded but unprocessed
   const [processedFlightPlan, setProcessedFlightPlan] = useState<GeoJSON.FeatureCollection | null>(null); // To be used for assessments
   const mapRef = useRef<MapRef | null>(null);
@@ -104,6 +109,9 @@ const BatteryCalculator: React.FC = () => {
             onDataProcessed={handleDataProcessed}
             onShowTickChange={handleShowTickChange}
             onTotalDistanceChange={handleTotalDistanceChange}
+            onGcsLocationChange={setGcsLocation}
+            onObserverLocationChange={setObserverLocation}
+            onRepeaterLocationChange={setRepeaterLocation}
           />
         </div>
       </div>
@@ -369,6 +377,88 @@ const BatteryCalculator: React.FC = () => {
             </div>
           </div>
         )}
+
+{showElos && (
+  <div className="mt-4 bg-white p-4 rounded-md shadow-md">
+    <h2 className="text-xl font-semibold mb-4 text-gray-700">⚡️ ELOS Details</h2>
+    
+    {/* GCS Details */}
+    <div className="mb-4">
+      <label className="block text-sm font-medium mb-1">Ground Control Station (GCS) Latitude:</label>
+      <input
+        className="w-full px-3 py-2 rounded bg-gray-200 text-black placeholder-gray-300"
+        type="text"
+        readOnly
+        value={gcsLocation ? gcsLocation.lat.toFixed(4) : "Not set"}
+      />
+      <label className="block text-sm font-medium mt-4 mb-1">Longitude:</label>
+      <input
+        className="w-full px-3 py-2 rounded bg-gray-200 text-black placeholder-gray-300"
+        type="text"
+        readOnly
+        value={gcsLocation ? gcsLocation.lng.toFixed(4) : "Not set"}
+      />
+      <label className="block text-sm font-medium mt-4 mb-1">Elevation:</label>
+      <input
+        className="w-full px-3 py-2 rounded bg-gray-200 text-black placeholder-gray-300"
+        type="text"
+        readOnly
+        value={gcsLocation ? gcsLocation.elevation?.toFixed(4) ?? "N/A" : "Not set"}
+      />
+    </div>
+
+    {/* Observer Details */}
+    <div className="mb-4">
+      <label className="block text-sm font-medium mb-1">Observer Latitude:</label>
+      <input
+        className="w-full px-3 py-2 rounded bg-gray-200 text-black placeholder-gray-300"
+        type="text"
+        readOnly
+        value={observerLocation ? observerLocation.lat.toFixed(4) : "Not set"}
+      />
+      <label className="block text-sm font-medium mt-4 mb-1">Longitude:</label>
+      <input
+        className="w-full px-3 py-2 rounded bg-gray-200 text-black placeholder-gray-300"
+        type="text"
+        readOnly
+        value={observerLocation ? observerLocation.lng.toFixed(4) : "Not set"}
+      />
+      <label className="block text-sm font-medium mt-4 mb-1">Elevation:</label>
+      <input
+        className="w-full px-3 py-2 rounded bg-gray-200 text-black placeholder-gray-300"
+        type="text"
+        readOnly
+        value={observerLocation ? observerLocation.elevation?.toFixed(4) ?? "N/A" : "Not set"}
+      />
+    </div>
+
+    {/* Repeater Details */}
+    <div className="mb-4">
+      <label className="block text-sm font-medium mb-1">Repeater Latitude:</label>
+      <input
+        className="w-full px-3 py-2 rounded bg-gray-200 text-black placeholder-gray-300"
+        type="text"
+        readOnly
+        value={repeaterLocation ? repeaterLocation.lat.toFixed(4) : "Not set"}
+      />
+      <label className="block text-sm font-medium mt-4 mb-1">Longitude:</label>
+      <input
+        className="w-full px-3 py-2 rounded bg-gray-200 text-black placeholder-gray-300"
+        type="text"
+        readOnly
+        value={repeaterLocation ? repeaterLocation.lng.toFixed(4) : "Not set"}
+      />
+      <label className="block text-sm font-medium mt-4 mb-1">Elevation:</label>
+      <input
+        className="w-full px-3 py-2 rounded bg-gray-200 text-black placeholder-gray-300"
+        type="text"
+        readOnly
+        value={repeaterLocation ? repeaterLocation.elevation?.toFixed(4) ?? "N/A" : "Not set"}
+      />
+    </div>
+  </div>
+)}
+
 
 
       </div>
