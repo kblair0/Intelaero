@@ -237,7 +237,7 @@ const ObstacleAssessment: React.FC<ObstacleAssessmentProps> = ({
   //   const interpolatedAltitude = lowerAlt + ratio * (upperAlt - lowerAlt);
 
   //   return { x: d, y: interpolatedAltitude };
-  // });
+ });
 
   // chart elevation both along the route and at waypoints
   const chartData = {
@@ -330,8 +330,6 @@ const ObstacleAssessment: React.FC<ObstacleAssessmentProps> = ({
         options={chartOptions}
       />
     </div>
-  );
-  console.log("Chart Data:", chartData);
+  )
 };
-
 export default ObstacleAssessment;

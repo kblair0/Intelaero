@@ -28,7 +28,7 @@ const BatteryCalculator: React.FC = () => {
   
   //UI for Collapsable Sections
   // const [showObstacleAssessment, setShowObstacleAssessment] = useState(false);
-  const [showElos, setShowElos] = useState(false);
+  // const [showElos, setShowElos] = useState(false);
 
   useEffect(() => {
     const parsedBatteryCapacity = parseFloat(batteryCapacity) || 0;
@@ -81,7 +81,7 @@ const BatteryCalculator: React.FC = () => {
     setShowObstacleModal(true);
   };
   
-    const calculateBatteryReserve = (): string => {
+  const calculateBatteryReserve = (): string => {
     if (flightPlanDistance === null || flightPlanDistance === 0) {
       return "N/A"; // Avoid division by zero
     }

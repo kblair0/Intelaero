@@ -12,6 +12,7 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import * as turf from "@turf/turf";
 import FlightLogUploader from "./FlightLogUploader";
 import FlightPlanUploader from "./FlightPlanUploader";
+import ViewshedAnalysis from "./ViewshedAnalysis";
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || "";
 
@@ -37,20 +38,13 @@ const Map = forwardRef<MapRef, MapProps>(
       onShowTickChange,
       onTotalDistanceChange,
       onPlanUploaded,
+      onGcsLocationChange,
+      onObserverLocationChange,
+      onRepeaterLocationChange,
     },
     ref
   ) => {
-  ({ 
-    estimatedFlightDistance, 
-    onDataProcessed,
-    onShowTickChange, 
-    onTotalDistanceChange,
-    onPlanUploaded,
-    onGcsLocationChange,
-    onObserverLocationChange,
-    onRepeaterLocationChange,
-   }, ref) => {
-
+    const [flightPlan, setFlightPlan] = useState<GeoJSON.FeatureCollection | null>(null);
     const [totalDistance, setTotalDistance] = useState<number>(0);
     const lineRef = useRef<GeoJSON.FeatureCollection | null>(null);
     const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -315,7 +309,8 @@ const Map = forwardRef<MapRef, MapProps>(
     }, []);
 
     const handleFlightPlanUpload = (geojson: GeoJSON.FeatureCollection) => {
-      // Add the flight plan to the map
+      // 1) Store it in state for the ViewshedAnalysis component:
+      setFlightPlan(geojson);// Add the flight plan to the map
       addGeoJSONToMap(geojson);
 
       // Ensure the original `onPlanUploaded` behavior is preserved
@@ -541,6 +536,15 @@ const Map = forwardRef<MapRef, MapProps>(
             </button>
           </div>
         </div>
+        {flightPlan && (
+            <ViewshedAnalysis
+              map={mapRef.current!}
+              flightPlan={flightPlan} // Pass your new state variable here
+              maxRange={5000}
+              angleStep={5}
+              samplingInterval={50}
+            />
+          )}
       </div>
     );
   }
