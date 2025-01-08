@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 import React, {
   useEffect,
@@ -15,7 +14,6 @@ import FlightLogUploader from "./FlightLogUploader";
 import FlightPlanUploader from "./FlightPlanUploader";
 import ViewshedAnalysis from "./ViewshedAnalysis";
 
-mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || "";
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || "";
 
 export interface MapRef {
@@ -63,15 +61,10 @@ const Map = forwardRef<MapRef, MapProps>(
         mapRef?.current.dragRotate.enable();
         mapRef?.current.touchZoomRotate.enableRotation();
         mapRef?.current.addControl(new mapboxgl.NavigationControl());
-      if (mapRef?.current) {
-        mapRef?.current.dragRotate.enable();
-        mapRef?.current.touchZoomRotate.enableRotation();
-        mapRef?.current.addControl(new mapboxgl.NavigationControl());
       }
     }, []);
 
     const addGeoJSONToMap = (geojson: GeoJSON.FeatureCollection) => {
-      if (mapRef?.current && geojson.type === "FeatureCollection") {
       if (mapRef?.current && geojson.type === "FeatureCollection") {
         const features = geojson.features.filter(
           (f) => f.geometry.type === "LineString"
@@ -82,12 +75,8 @@ const Map = forwardRef<MapRef, MapProps>(
           if (mapRef?.current?.getSource(layerId)) {
             mapRef?.current.removeLayer(layerId);
             mapRef?.current.removeSource(layerId);
-          if (mapRef?.current?.getSource(layerId)) {
-            mapRef?.current.removeLayer(layerId);
-            mapRef?.current.removeSource(layerId);
           }
 
-          // @ts-expect-error This works
           // @ts-expect-error This works
           const coordinates = feature.geometry.coordinates as [
             number,
@@ -104,20 +93,7 @@ const Map = forwardRef<MapRef, MapProps>(
             "Feature properties after adding altitudes:",
             feature.properties
           );
-          feature.properties.altitudes = coordinates.map(
-            (coord) => coord[2] || 0
-          );
-          console.log(
-            "Feature properties after adding altitudes:",
-            feature.properties
-          );
 
-          const validCoordinates = coordinates.map(([lng, lat, alt]) => [
-            lng,
-            lat,
-            alt || 0,
-          ]);
-          const line = turf.lineString(validCoordinates);
           const validCoordinates = coordinates.map(([lng, lat, alt]) => [
             lng,
             lat,
@@ -268,6 +244,7 @@ const Map = forwardRef<MapRef, MapProps>(
 
     useEffect(() => {
       if (mapContainerRef.current) {
+        // Initialize the Mapbox map
         mapRef.current = new mapboxgl.Map({
           container: mapContainerRef.current,
           style: "mapbox://styles/mapbox-map-design/ckhqrf2tz0dt119ny6azh975y",
@@ -275,39 +252,24 @@ const Map = forwardRef<MapRef, MapProps>(
           zoom: 2.5,
           projection: "globe",
         });
-      }
-      return () => {
-        mapRef?.current?.remove();
-      };
-    }, []);
-
-    useEffect(() => {
-      if (mapContainerRef.current) {
-        mapRef.current = new mapboxgl.Map({
-          container: mapContainerRef.current,
-          style: "mapbox://styles/mapbox-map-design/ckhqrf2tz0dt119ny6azh975y",
-          center: [0, 0],
-          zoom: 2.5,
-          projection: "globe",
-        });
-
-        mapRef?.current.on("load", () => {
+    
+        mapRef.current.on("load", () => {
           // Add terrain source
-          mapRef?.current!.addSource("mapbox-dem", {
+          mapRef.current?.addSource("mapbox-dem", {
             type: "raster-dem",
             url: "mapbox://mapbox.mapbox-terrain-dem-v1",
             tileSize: 512,
             maxzoom: 14,
           });
-
+    
           // Enable terrain with exaggeration
-          mapRef?.current!.setTerrain({
+          mapRef.current?.setTerrain({
             source: "mapbox-dem",
             exaggeration: 1.5,
           });
-
+    
           // Add sky layer
-          mapRef?.current!.addLayer({
+          mapRef.current?.addLayer({
             id: "sky",
             type: "sky",
             paint: {
@@ -316,23 +278,23 @@ const Map = forwardRef<MapRef, MapProps>(
               "sky-atmosphere-sun-intensity": 15,
             },
           });
-  
-          const addGroundStationButton = document.querySelector('.ground-station-icon');
+    
+          // Make sure a specific UI element is visible
+          const addGroundStationButton = document.querySelector(".ground-station-icon");
           if (addGroundStationButton) {
-            addGroundStationButton.style.display = 'block';
+            addGroundStationButton.style.display = "block";
           }
     
-          console.log("Terrain and sky layer added successfully");
+          console.log("Map initialized with terrain and sky layer");
         });
       }
-
-
+    
       // Cleanup on unmount
       return () => {
         mapRef?.current?.remove();
-        mapRef?.current?.remove();
       };
     }, []);
+    
 
 
     const handleFlightPlanUpload = (geojson: GeoJSON.FeatureCollection) => {
@@ -529,18 +491,11 @@ const Map = forwardRef<MapRef, MapProps>(
         <div className="flex flex-col md:flex-row gap-4 p-4 px-4 mt-4">
           <div className="bg-gray-300 p-4 rounded-md w-full md:w-1/2">
             <h2 className="text-xl font-semibold mb-4">
-              Step 1: Upload Your Flight Plan
-            </h2>
-            <FlightPlanUploader onPlanUploaded={combinedOnPlanUploaded} />
-            <h2 className="text-xl font-semibold mb-4">
-              Step 1: Upload Your Flight Plan
+            Step 1: Upload Your Flight Plan
             </h2>
             <FlightPlanUploader onPlanUploaded={combinedOnPlanUploaded} />
           </div>
           <div className="bg-gray-300 p-4 rounded-md w-full md:w-1/2">
-            <h2 className="text-xl font-semibold mb-4">
-              Step 2A: Upload Your Flight Log (.ulg) (Optional)
-            </h2>
             <h2 className="text-xl font-semibold mb-4">
               Step 2A: Upload Your Flight Log (.ulg) (Optional)
             </h2>

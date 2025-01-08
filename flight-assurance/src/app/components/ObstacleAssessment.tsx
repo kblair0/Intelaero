@@ -141,172 +141,103 @@ const ObstacleAssessment: React.FC<ObstacleAssessmentProps> = ({
     processTerrainData();
   }, [flightPlan, onDataProcessed]);
 
-  const fetchTerrainElevation = async (
-    lng: number,
-    lat: number
-  ): Promise<number> => {
-    try {
-      const tileSize = 512; // Size of Mapbox tiles
-      const zoom = 15; // Adjust as needed for fidelity
-      const scale = Math.pow(2, zoom);
-        const interpolatedAltitudes = sampledPoints.map(([lng, lat]) => {
-          const nearest = turf.nearestPointOnLine(
-            flightLine,
-            turf.point([lng, lat])
-          );
-          const index = nearest.properties.index;
-          return coordinates[index][2]; // Use the altitude from the nearest waypoint
-        });
-        setFlightAltitudes(interpolatedAltitudes);
-      } catch (error) {
-        console.error(error);
-      }
-    };
+//  const fetchTerrainElevation = async (
+//    lng: number,
+//    lat: number
+//  ): Promise<number> => {
+//    try {
+//      const tileSize = 512; // Size of Mapbox tiles
+//      const zoom = 15; // Adjust as needed for fidelity
+//      const scale = Math.pow(2, zoom);
+//        const interpolatedAltitudes = sampledPoints.map(([lng, lat]) => {
+//          const nearest = turf.nearestPointOnLine(
+//            flightLine,
+//            turf.point([lng, lat])
+//          );
+//          const index = nearest.properties.index;
+//          return coordinates[index][2]; // Use the altitude from the nearest waypoint
+//        });
+//        setFlightAltitudes(interpolatedAltitudes);
+//      } catch (error) {
+//        console.error(error);
+//      }
+//    };
 
-    processTerrainData();
-  }, [flightPlan, onDataProcessed]);
 
-  const fetchTerrainElevation = async (
-    lng: number,
-    lat: number
-  ): Promise<number> => {
-    try {
-      const tileSize = 512; // Size of Mapbox tiles
-      const zoom = 15; // Adjust as needed for fidelity
-      const scale = Math.pow(2, zoom);
+const fetchTerrainElevation = async (
+  lng: number,
+  lat: number
+): Promise<number> => {
+  try {
+    const tileSize = 512; // Size of Mapbox tiles
+    const zoom = 15; // Adjust as needed for fidelity
+    const scale = Math.pow(2, zoom);
 
-      // Fix: Calculate latitude in radians
-      const latRad = (lat * Math.PI) / 180;
+    // Calculate latitude in radians
+    const latRad = (lat * Math.PI) / 180;
 
-      // Calculate tile indices
-      const tileX = Math.floor(((lng + 180) / 360) * scale);
-      const tileY = Math.floor(
-        ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) /
-          2) *
-          scale
-      );
-      // Fix: Calculate latitude in radians
-      const latRad = (lat * Math.PI) / 180;
+    // Calculate tile indices
+    const tileX = Math.floor(((lng + 180) / 360) * scale);
+    const tileY = Math.floor(
+      ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) *
+        scale
+    );
 
-      // Calculate tile indices
-      const tileX = Math.floor(((lng + 180) / 360) * scale);
-      const tileY = Math.floor(
-        ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) /
-          2) *
-          scale
-      );
+    // Calculate pixel position within the tile
+    const pixelX = Math.floor(
+      (((lng + 180) / 360) * scale - tileX) * tileSize
+    );
+    const pixelY = Math.floor(
+      (((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) *
+        scale -
+        tileY) *
+        tileSize
+    );
 
-      // Calculate pixel position within the tile
-      const pixelX = Math.floor(
-        (((lng + 180) / 360) * scale - tileX) * tileSize
-      );
-      const pixelY = Math.floor(
-        (((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) /
-          2) *
-          scale -
-          tileY) *
-          tileSize
-      );
+    // Fetch the raster DEM tile
+    const tileURL = `https://api.mapbox.com/v4/mapbox.terrain-rgb/${zoom}/${tileX}/${tileY}@2x.pngraw?access_token=${process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}`;
+    const response = await fetch(tileURL);
 
-      // Fetch the raster DEM tile
-      const tileURL = `https://api.mapbox.com/v4/mapbox.terrain-rgb/${zoom}/${tileX}/${tileY}@2x.pngraw?access_token=${process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}`;
-      const response = await fetch(tileURL);
-
-      if (!response.ok) {
-        console.error(`Failed to fetch terrain tile: ${response.statusText}`);
-        return 0;
-      }
-
-      const blob = await response.blob();
-      const imageBitmap = await createImageBitmap(blob);
-
-      // Read pixel data from the image
-      const canvas = document.createElement("canvas");
-      canvas.width = tileSize;
-      canvas.height = tileSize;
-      const context = canvas.getContext("2d");
-      if (!context) {
-        throw new Error("Failed to create canvas context for terrain tile.");
-      }
-
-      context.drawImage(imageBitmap, 0, 0);
-      const imageData = context.getImageData(0, 0, tileSize, tileSize);
-
-      // Decode the elevation from RGB
-      const idx = (pixelY * tileSize + pixelX) * 4;
-      // Calculate pixel position within the tile
-      const pixelX = Math.floor(
-        (((lng + 180) / 360) * scale - tileX) * tileSize
-      );
-      const pixelY = Math.floor(
-        (((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) /
-          2) *
-          scale -
-          tileY) *
-          tileSize
-      );
-
-      // Fetch the raster DEM tile
-      const tileURL = `https://api.mapbox.com/v4/mapbox.terrain-rgb/${zoom}/${tileX}/${tileY}@2x.pngraw?access_token=${process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}`;
-      const response = await fetch(tileURL);
-
-      if (!response.ok) {
-        console.error(`Failed to fetch terrain tile: ${response.statusText}`);
-        return 0;
-      }
-
-      const blob = await response.blob();
-      const imageBitmap = await createImageBitmap(blob);
-
-      // Read pixel data from the image
-      const canvas = document.createElement("canvas");
-      canvas.width = tileSize;
-      canvas.height = tileSize;
-      const context = canvas.getContext("2d");
-      if (!context) {
-        throw new Error("Failed to create canvas context for terrain tile.");
-      }
-
-      context.drawImage(imageBitmap, 0, 0);
-      const imageData = context.getImageData(0, 0, tileSize, tileSize);
-
-      // Decode the elevation from RGB
-      const idx = (pixelY * tileSize + pixelX) * 4;
-
-      const [r, g, b] = [
-        imageData.data[idx],
-        imageData.data[idx + 1],
-        imageData.data[idx + 2],
-      ];
-      const elevation = -10000 + (r * 256 * 256 + g * 256 + b) * 0.1;
-
-      return elevation;
-    } catch (error) {
-      console.error("Failed to fetch or decode terrain elevation:", {
-        lng,
-        lat,
-        error,
-      });
-      return NaN; // Return NaN for failed queries to indicate missing data
+    if (!response.ok) {
+      console.error(`Failed to fetch terrain tile: ${response.statusText}`);
+      return 0;
     }
-  };
-      const [r, g, b] = [
-        imageData.data[idx],
-        imageData.data[idx + 1],
-        imageData.data[idx + 2],
-      ];
-      const elevation = -10000 + (r * 256 * 256 + g * 256 + b) * 0.1;
 
-      return elevation;
-    } catch (error) {
-      console.error("Failed to fetch or decode terrain elevation:", {
-        lng,
-        lat,
-        error,
-      });
-      return NaN; // Return NaN for failed queries to indicate missing data
+    const blob = await response.blob();
+    const imageBitmap = await createImageBitmap(blob);
+
+    // Read pixel data from the image
+    const canvas = document.createElement("canvas");
+    canvas.width = tileSize;
+    canvas.height = tileSize;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      throw new Error("Failed to create canvas context for terrain tile.");
     }
-  };
+
+    context.drawImage(imageBitmap, 0, 0);
+    const imageData = context.getImageData(0, 0, tileSize, tileSize);
+
+    // Decode the elevation from RGB
+    const idx = (pixelY * tileSize + pixelX) * 4;
+    const [r, g, b] = [
+      imageData.data[idx],
+      imageData.data[idx + 1],
+      imageData.data[idx + 2],
+    ];
+    const elevation = -10000 + (r * 256 * 256 + g * 256 + b) * 0.1;
+
+    return elevation;
+  } catch (error) {
+    console.error("Failed to fetch or decode terrain elevation:", {
+      lng,
+      lat,
+      error,
+    });
+    return NaN; // Return NaN for failed queries to indicate missing data
+  }
+};
+
 
     // Interpolate waypoints to match terrain density as Flightaltitude will not change significantly from plan
     const interpolatedWaypoints = distances.map((d) => {
