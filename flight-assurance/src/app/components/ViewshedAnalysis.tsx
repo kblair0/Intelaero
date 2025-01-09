@@ -1,31 +1,70 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, forwardRef, useImperativeHandle } from "react";
 import * as turf from "@turf/turf";
 import mapboxgl from "mapbox-gl";
 
-// ---------------
-// 1) Types & Interfaces
-// ---------------
+/**
+ * 1) This interface is what we'll "expose" via ref to the Map.tsx
+ */
+export interface ViewshedAnalysisRef {
+  runAnalysis: () => void;
+}
+
+/**
+ * 2) Props for the ViewshedAnalysis component
+ */
 interface ViewshedAnalysisProps {
-  map: mapboxgl.Map;                             // The Mapbox map instance
-  flightPlan: GeoJSON.FeatureCollection;         // Drone flight path (LineString)
+  map: mapboxgl.Map;
+  flightPlan: GeoJSON.FeatureCollection; // Drone flight path from Map.tsx (LineString)
+  maxRange: number;
+  angleStep: number;
+  samplingInterval: number;
+  skipUnion: boolean;
+  viewshedLoading?: (loading: boolean) => void;
 }
 
-// ---------------
-// 2) DEM Tile Cache (Decoded Pixel Data)
-//    We'll store tile pixels in a Map keyed by tileURL.
-//    Each tile is a Uint8ClampedArray (r,g,b,a for each pixel).
-// ---------------
+/**
+ * 3) We also define the DecodedTile interface OUTSIDE the component
+ */
 interface DecodedTile {
-  data: Uint8ClampedArray; // RGBA pixel data for the entire tile
-  width: number;           // = 512
-  height: number;          // = 512
+  data: Uint8ClampedArray; // RGBA pixel data for the entire tile (512x512)
+  width: number;
+  height: number;
 }
 
+/**
+ * 4) We maintain a cache of downloaded terrain-rgb tiles
+ */
 const tileCache = new Map<string, DecodedTile>();
 
 /**
- * Convert (lat, lng) to tile coords at a given zoom level.
+ * 5) removeOldCoverageLayers helper: Removes old layers/polygons to avoid duplication
+ */
+const removeOldCoverageLayers = (mapRef: mapboxgl.Map) => {
+  const layerIds = mapRef.getStyle().layers?.map((l) => l.id) || [];
+  const coverageLayers = layerIds.filter((id) => id.includes("drone-coverage-layer"));
+
+  coverageLayers.forEach((layerId) => {
+    const sourceId = mapRef.getLayer(layerId)?.source;
+    if (sourceId && typeof sourceId === "string") {
+      mapRef.removeLayer(layerId);
+      if (mapRef.getSource(sourceId)) {
+        mapRef.removeSource(sourceId);
+      }
+    }
+  });
+
+  // Also remove union coverage if present
+  if (mapRef.getLayer("drone-coverage-layer-union")) {
+    mapRef.removeLayer("drone-coverage-layer-union");
+  }
+  if (mapRef.getSource("drone-coverage-union")) {
+    mapRef.removeSource("drone-coverage-union");
+  }
+};
+
+/**
+ * 6) Convert [lng, lat] to tile x,y coordinates for a given zoom
  */
 function lngLatToTile(lng: number, lat: number, zoom = 14) {
   const scale = 1 << zoom;
@@ -39,7 +78,7 @@ function lngLatToTile(lng: number, lat: number, zoom = 14) {
 }
 
 /**
- * Download and decode a terrain-rgb tile into a Uint8ClampedArray.
+ * 7) Download and decode a terrain-rgb tile into a Uint8ClampedArray
  */
 async function fetchAndDecodeTile(tileURL: string): Promise<DecodedTile | null> {
   try {
@@ -76,14 +115,9 @@ async function fetchAndDecodeTile(tileURL: string): Promise<DecodedTile | null> 
 }
 
 /**
- * Retrieve or fetch+decode the tile for (x,y) at the given zoom. Returns a DecodedTile or null on failure.
+ * 8) Retrieve or fetch+decode a tile for (x,y,zoom). Returns DecodedTile or null.
  */
-async function getDecodedTile(
-  x: number,
-  y: number,
-  zoom = 14
-): Promise<DecodedTile | null> {
-  // Construct tile URL
+async function getDecodedTile(x: number, y: number, zoom = 14): Promise<DecodedTile | null> {
   const tileURL = `https://api.mapbox.com/v4/mapbox.terrain-rgb/${zoom}/${x}/${y}@2x.pngraw?access_token=${process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}`;
 
   // Check cache first
@@ -101,8 +135,7 @@ async function getDecodedTile(
 }
 
 /**
- * Get the terrain elevation (in meters) at [lng, lat].
- * Uses the cached tile's pixel data for direct reading.
+ * 9) Get the terrain elevation (in meters) at [lng, lat] from the cached tile data
  */
 async function getElevation(lng: number, lat: number): Promise<number> {
   const zoom = 14;
@@ -125,24 +158,22 @@ async function getElevation(lng: number, lat: number): Promise<number> {
     // If failed to load, return 0 or NaN
     return 0;
   }
-  const { data, width } = decodedTile;
 
-  // Index in the RGBA array
+  const { data, width } = decodedTile;
   const idx = (pixelY * width + pixelX) * 4;
   const r = data[idx];
   const g = data[idx + 1];
   const b = data[idx + 2];
   // const a = data[idx + 3]; // alpha channel not used
 
-  // Per Mapbox docs, decode is:
-  // elevation = -10000 + (r * 256 * 256 + g * 256 + b) * 0.1;
+  // Per Mapbox docs:  elevation = -10000 + (r * 256 * 256 + g * 256 + b) * 0.1
   const elevation = -10000 + (r * 256 * 256 + g * 256 + b) * 0.1;
   return elevation;
 }
 
-// ---------------
-// 3) Raycast to produce coverage polygons
-// ---------------
+/**
+ * 10) For each vantage point, generate a coverage polygon via "raycasting"
+ */
 async function getCoveragePolygon(
   vantage: [number, number, number],
   angleStep: number,
@@ -166,8 +197,8 @@ async function getCoveragePolygon(
       const dx = currentDistance * Math.cos(bearingRad);
       const dy = currentDistance * Math.sin(bearingRad);
 
-      const earthCircumLat = 111320; // ~ meters per degree latitude
-      const earthCircumLng = 111320 * Math.cos((lat * Math.PI) / 180);
+      const earthCircumLat = 111_320; // ~ meters per degree latitude
+      const earthCircumLng = 111_320 * Math.cos((lat * Math.PI) / 180);
 
       const targetLat = lat + dy / earthCircumLat;
       const targetLng = lng + dx / earthCircumLng;
@@ -175,7 +206,7 @@ async function getCoveragePolygon(
       const terrainAlt = await getElevation(targetLng, targetLat);
 
       if (terrainAlt > vantageAbsoluteAlt) {
-        // Blocked
+        // Blocked line of sight
         break;
       } else {
         lastVisible = [targetLng, targetLat];
@@ -189,224 +220,143 @@ async function getCoveragePolygon(
   return turf.polygon([[...boundaryPoints]]);
 }
 
-// ---------------
-// 4) Viewshed Analysis Component
-// ---------------
-const ViewshedAnalysis: React.FC<ViewshedAnalysisProps> = ({ map, flightPlan }) => {
-  // -- Let the user set these in a form:
-  const [maxRange, setMaxRange] = useState(5000);
-  const [angleStep, setAngleStep] = useState(5);
-  const [samplingInterval, setSamplingInterval] = useState(50);
+/**
+ * 11) The actual ViewshedAnalysis component
+ */
+const ViewshedAnalysis = forwardRef<ViewshedAnalysisRef, ViewshedAnalysisProps>(
+  ({ map, flightPlan, maxRange, angleStep, samplingInterval, skipUnion, viewshedLoading }, ref) => {
+    const [loading, setLoading] = useState(false);
 
-  const [loading, setLoading] = useState(false);
-  const [skipUnion, setSkipUnion] = useState(true); // Option to skip union to improve performance
-
-  /**
-   * Compute coverage for each vantage, optionally union them or just layer them all.
-   */
-  const handleViewshedClick = async () => {
-    if (!map || !flightPlan?.features?.length) return;
-
-    setLoading(true);
-    try {
-      // 1. Get flight path (LineString)
-      const lineFeature = flightPlan.features.find(
-        (f) => f.geometry.type === "LineString"
-      );
-      if (!lineFeature) {
-        console.error("No LineString found in flightPlan");
-        return;
-      }
-      // 2. Sample the path every `samplingInterval` m
-      const line = turf.lineString(
-        (lineFeature.geometry as turf.LineString).coordinates
-      );
-      const totalLength = turf.length(line, { units: "meters" });
-
-      const samplePoints: turf.Feature<turf.Point>[] = [];
-      for (let dist = 0; dist <= totalLength; dist += samplingInterval) {
-        const sample = turf.along(line, dist, { units: "meters" });
-        samplePoints.push(sample);
-      }
-
-      // push the end if not included
-      const endCoord = line.geometry.coordinates[line.geometry.coordinates.length - 1];
-      if (
-        samplePoints.length === 0 ||
-        samplePoints[samplePoints.length - 1].geometry.coordinates.toString()
-        !== endCoord.toString()
-      ) {
-        samplePoints.push(turf.point(endCoord));
-      }
-
-      // 3. For each sample point, get coverage
-      const coveragePolygons: turf.Feature<turf.Polygon>[] = [];
-      for (let i = 0; i < samplePoints.length; i++) {
-        const coords = samplePoints[i].geometry.coordinates as [number, number, number?];
-        // If the flight plan has altitude in coords[2], use it. Otherwise default 0.
-        const alt = coords[2] || 0;
-        const vantage: [number, number, number] = [coords[0], coords[1], alt];
-        const coveragePoly = await getCoveragePolygon(
-          vantage,
-          angleStep,
-          maxRange,
-          50 // radial stepping distance
+    // This function runs when we want to do the viewshed analysis
+    const handleViewshedClick = async () => {
+      if (!map || !flightPlan?.features?.length) return;
+      setLoading(true);
+      viewshedLoading?.(true);
+      try {
+        // 1) Find the flight path (LineString)
+        const lineFeature = flightPlan.features.find(
+          (f) => f.geometry.type === "LineString"
         );
-        coveragePolygons.push(coveragePoly);
-      }
+        if (!lineFeature) {
+          console.error("No LineString found in flightPlan");
+          return;
+        }
 
-      // 4. Add coverage to the map
-      // Remove old coverage layers/sources if exist
-      // We'll remove both union and partial coverage in case user re-clicks
-      removeOldCoverageLayers(map);
+        // 2) Sample the path every `samplingInterval` meters
+        const line = turf.lineString(
+          (lineFeature.geometry as turf.LineString).coordinates
+        );
+        const totalLength = turf.length(line, { units: "meters" });
 
-      if (skipUnion) {
-        // Option A: Skip union, just add each coverage polygon as a layer
-        coveragePolygons.forEach((poly, idx) => {
-          const sourceId = `drone-coverage-${idx}`;
-          const layerId = `drone-coverage-layer-${idx}`;
+        const samplePoints: turf.Feature<turf.Point>[] = [];
+        for (let dist = 0; dist <= totalLength; dist += samplingInterval) {
+          const sample = turf.along(line, dist, { units: "meters" });
+          samplePoints.push(sample);
+        }
 
-          map.addSource(sourceId, {
-            type: "geojson",
-            data: poly as GeoJSON.Feature<GeoJSON.Geometry>,
+        // Ensure the very end is included
+        const endCoord = line.geometry.coordinates[line.geometry.coordinates.length - 1];
+        if (
+          samplePoints.length === 0 ||
+          samplePoints[samplePoints.length - 1].geometry.coordinates.toString()
+            !== endCoord.toString()
+        ) {
+          samplePoints.push(turf.point(endCoord));
+        }
+
+        // 3) For each sample point, get coverage polygon
+        const coveragePolygons: turf.Feature<turf.Polygon>[] = [];
+        for (let i = 0; i < samplePoints.length; i++) {
+          const coords = samplePoints[i].geometry.coordinates as [number, number, number?];
+          const alt = coords[2] || 0;
+          const vantage: [number, number, number] = [coords[0], coords[1], alt];
+
+          const coveragePoly = await getCoveragePolygon(
+            vantage,
+            angleStep,
+            maxRange,
+            50 // radial stepping distance
+          );
+          coveragePolygons.push(coveragePoly);
+        }
+
+        // 4) Add coverage polygons to the map
+        // Remove old coverage layers first to avoid duplicates
+        removeOldCoverageLayers(map);
+
+        if (skipUnion) {
+          // Option A: Skip union, just add each coverage polygon as a layer
+          coveragePolygons.forEach((poly, idx) => {
+            const sourceId = `drone-coverage-${idx}`;
+            const layerId = `drone-coverage-layer-${idx}`;
+
+            map.addSource(sourceId, {
+              type: "geojson",
+              data: poly as GeoJSON.Feature<GeoJSON.Geometry>,
+            });
+
+            map.addLayer({
+              id: layerId,
+              type: "fill",
+              source: sourceId,
+              paint: {
+                "fill-color": "#00FF00",
+                "fill-opacity": 0.3,
+              },
+            });
           });
+        } else {
+          // Option B: Union coverage polygons into one big polygon
+          let aggregatedCoverage = coveragePolygons[0];
+          for (let i = 1; i < coveragePolygons.length; i++) {
+            try {
+              const unionPoly = turf.union(aggregatedCoverage, coveragePolygons[i]);
+              if (unionPoly) {
+                aggregatedCoverage = unionPoly;
+              }
+            } catch (err) {
+              console.warn("Union error:", err);
+            }
+          }
 
+          const coverageSourceId = "drone-coverage-union";
+          const coverageLayerId = "drone-coverage-layer-union";
+
+          map.addSource(coverageSourceId, {
+            type: "geojson",
+            data: aggregatedCoverage as GeoJSON.Feature<GeoJSON.Geometry>,
+          });
           map.addLayer({
-            id: layerId,
+            id: coverageLayerId,
             type: "fill",
-            source: sourceId,
+            source: coverageSourceId,
             paint: {
               "fill-color": "#00FF00",
               "fill-opacity": 0.3,
             },
           });
-        });
-      } else {
-        // Option B: Union coverage polygons
-        let aggregatedCoverage = coveragePolygons[0];
-        for (let i = 1; i < coveragePolygons.length; i++) {
-          try {
-            const unionPoly = turf.union(aggregatedCoverage, coveragePolygons[i]);
-            if (unionPoly) {
-              aggregatedCoverage = unionPoly;
-            }
-          } catch (err) {
-            console.warn("Union error:", err);
-          }
         }
-
-        const coverageSourceId = "drone-coverage-union";
-        const coverageLayerId = "drone-coverage-layer-union";
-
-        map.addSource(coverageSourceId, {
-          type: "geojson",
-          data: aggregatedCoverage as GeoJSON.Feature<GeoJSON.Geometry>,
-        });
-        map.addLayer({
-          id: coverageLayerId,
-          type: "fill",
-          source: coverageSourceId,
-          paint: {
-            "fill-color": "#00FF00",
-            "fill-opacity": 0.3,
-          },
-        });
+      } catch (error) {
+        console.error("Error in Viewshed:", error);
+      } finally {
+        setLoading(false);
+        viewshedLoading?.(false);
       }
-    } catch (error) {
-      console.error("Error in Viewshed:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
 
-  /**
-   * Remove old coverage layers so we don't accumulate duplicates.
-   */
-  const removeOldCoverageLayers = (mapRef: mapboxgl.Map) => {
-    const layerIds = mapRef.getStyle().layers?.map((l) => l.id) || [];
-    const coverageLayers = layerIds.filter((id) => id.includes("drone-coverage-layer"));
+    /**
+     * Expose a public method via ref so parent can call `viewshedRef.current?.runAnalysis()`
+     */
+    useImperativeHandle(ref, () => ({
+      runAnalysis() {
+        handleViewshedClick();
+      },
+    }));
 
-    coverageLayers.forEach((layerId) => {
-      const sourceId = mapRef.getLayer(layerId)?.source;
-      if (sourceId && typeof sourceId === "string") {
-        mapRef.removeLayer(layerId);
-        if (mapRef.getSource(sourceId)) {
-          mapRef.removeSource(sourceId);
-        }
-      }
-    });
+    // Minimal return (no visible UI)
+    return null;
+  }
+);
 
-    // Also remove union coverage if present
-    if (mapRef.getLayer("drone-coverage-layer-union")) {
-      mapRef.removeLayer("drone-coverage-layer-union");
-    }
-    if (mapRef.getSource("drone-coverage-union")) {
-      mapRef.removeSource("drone-coverage-union");
-    }
-  };
-
-  return (
-    <div style={{ marginTop: "1rem" }}>
-      {/* User Settings */}
-      <div style={{ marginBottom: "1rem" }}>
-        <label style={{ display: "block", marginBottom: ".25rem" }}>
-          Max Range (m):
-        </label>
-        <input
-          type="number"
-          value={maxRange}
-          onChange={(e) => setMaxRange(parseInt(e.target.value, 10))}
-          style={{ marginBottom: "0.5rem" }}
-        />
-
-        <label style={{ display: "block", marginBottom: ".25rem" }}>
-          Angle Step (°):
-        </label>
-        <input
-          type="number"
-          value={angleStep}
-          onChange={(e) => setAngleStep(parseInt(e.target.value, 10))}
-          style={{ marginBottom: "0.5rem" }}
-        />
-
-        <label style={{ display: "block", marginBottom: ".25rem" }}>
-          Sampling Interval (m) along Flight Path:
-        </label>
-        <input
-          type="number"
-          value={samplingInterval}
-          onChange={(e) => setSamplingInterval(parseInt(e.target.value, 10))}
-          style={{ marginBottom: "0.5rem" }}
-        />
-
-        <div style={{ marginTop: "0.5rem" }}>
-          <input
-            type="checkbox"
-            checked={skipUnion}
-            onChange={(e) => setSkipUnion(e.target.checked)}
-            id="skipUnion"
-          />
-          <label htmlFor="skipUnion" style={{ marginLeft: "0.25rem" }}>
-            Skip Polygon Union (better performance)
-          </label>
-        </div>
-      </div>
-
-      <button
-        onClick={handleViewshedClick}
-        disabled={loading}
-        style={{
-          backgroundColor: "#1f2937",
-          color: "#ffffff",
-          padding: "0.5rem 1rem",
-          borderRadius: "5px",
-          cursor: loading ? "not-allowed" : "pointer",
-        }}
-      >
-        {loading ? "Computing..." : "Drone Line of Sight Analysis"}
-      </button>
-    </div>
-  );
-};
-
+ViewshedAnalysis.displayName = "ViewshedAnalysis";
 export default ViewshedAnalysis;

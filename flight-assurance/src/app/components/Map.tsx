@@ -12,7 +12,7 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import * as turf from "@turf/turf";
 import FlightLogUploader from "./FlightLogUploader";
 import FlightPlanUploader from "./FlightPlanUploader";
-import ViewshedAnalysis from "./ViewshedAnalysis";
+import ViewshedAnalysis, { ViewshedAnalysisRef } from "./ViewshedAnalysis";
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || "";
 
@@ -29,6 +29,11 @@ interface MapProps {
   onGcsLocationChange: (location: { lng: number; lat: number; elevation: number | null }) => void;
   onObserverLocationChange: (location: { lng: number; lat: number; elevation: number | null }) => void;
   onRepeaterLocationChange: (location: { lng: number; lat: number; elevation: number | null }) => void;
+  maxRange: number;
+  angleStep: number;
+  samplingInterval: number;
+  skipUnion: boolean;
+  viewshedLoading?: (loading: boolean) => void;
 }
 const Map = forwardRef<MapRef, MapProps>(
   (
@@ -41,9 +46,15 @@ const Map = forwardRef<MapRef, MapProps>(
       onGcsLocationChange,
       onObserverLocationChange,
       onRepeaterLocationChange,
+      maxRange,
+      angleStep,
+      samplingInterval,
+      skipUnion,
+      viewshedLoading,
     },
     ref
   ) => {
+
     const [flightPlan, setFlightPlan] = useState<GeoJSON.FeatureCollection | null>(null);
     const [totalDistance, setTotalDistance] = useState<number>(0);
     const lineRef = useRef<GeoJSON.FeatureCollection | null>(null);
@@ -55,6 +66,14 @@ const Map = forwardRef<MapRef, MapProps>(
     const [gcsLocation, setGcsLocation] = useState<{ lng: number; lat: number; elevation: number | null } | null>(null);
     const [observerLocation, setObserverLocation] = useState<{ lng: number; lat: number; elevation: number | null } | null>(null);
     const [repeaterLocation, setRepeaterLocation] = useState<{ lng: number; lat: number; elevation: number | null } | null>(null);
+
+    const viewshedRef = React.useRef<ViewshedAnalysisRef | null>(null);
+
+    const triggerViewshedAnalysis = () => {
+      // Call the exposed runAnalysis() method in ViewshedAnalysis
+      viewshedRef.current?.runAnalysis();
+    };
+
 
     useEffect(() => {
       if (mapRef?.current) {
@@ -240,6 +259,9 @@ const Map = forwardRef<MapRef, MapProps>(
 
     useImperativeHandle(ref, () => ({
       addGeoJSONToMap,
+      runViewshed: () => {
+        triggerViewshedAnalysis();
+      }
     }));
 
     useEffect(() => {
@@ -528,14 +550,17 @@ const Map = forwardRef<MapRef, MapProps>(
           </div>
         </div>
         {flightPlan && (
-            <ViewshedAnalysis
-              map={mapRef.current!}
-              flightPlan={flightPlan} // Pass your new state variable here
-              maxRange={5000}
-              angleStep={5}
-              samplingInterval={50}
-            />
-          )}
+          <ViewshedAnalysis
+            ref={viewshedRef}
+            map={mapRef.current!}
+            flightPlan={flightPlan}
+            maxRange={maxRange}
+            angleStep={angleStep}
+            samplingInterval={samplingInterval}
+            skipUnion={skipUnion}
+            viewshedLoading={viewshedLoading}
+          />
+        )}
       </div>
     );
   }

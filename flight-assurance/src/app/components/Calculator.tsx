@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import Map, { MapRef } from "./Map";
 import ObstacleAssessment from "./ObstacleAssessment";
 
-const BatteryCalculator: React.FC = () => {
+const Calculator: React.FC = () => {
   const [batteryCapacity, setBatteryCapacity] = useState<string>("28000");
   const [dischargeRate, setDischargeRate] = useState<string>("700");
   const [assumedSpeed, setAssumedSpeed] = useState<string>("20");
@@ -17,13 +17,21 @@ const BatteryCalculator: React.FC = () => {
   const [showObstacleModal, setShowObstacleModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showAssessments, setShowAssessments] = useState(false);
+  //Elos Variables
   const [showElos, setShowElos] = useState(false);
-
   const [gcsLocation, setGcsLocation] = useState<{ lng: number; lat: number; elevation: number | null } | null>(null);
   const [observerLocation, setObserverLocation] = useState<{ lng: number; lat: number; elevation: number | null } | null>(null);
   const [repeaterLocation, setRepeaterLocation] = useState<{ lng: number; lat: number; elevation: number | null } | null>(null);
   const [rawFlightPlan, setRawFlightPlan] = useState<GeoJSON.FeatureCollection | null>(null); // Uploaded but unprocessed
   const [processedFlightPlan, setProcessedFlightPlan] = useState<GeoJSON.FeatureCollection | null>(null); // To be used for assessments
+  //Viewshed State Variables
+  const [maxRange, setMaxRange] = useState<number>(5000); 
+  const [angleStep, setAngleStep] = useState<number>(5);
+  const [samplingInterval, setSamplingInterval] = useState<number>(50);
+  const [skipUnion, setSkipUnion] = useState<boolean>(true);
+  const [viewshedLoading, setViewshedLoading] = useState(false);
+
+  
   const mapRef = useRef<MapRef | null>(null);
   
   //UI for Collapsable Sections
@@ -104,23 +112,28 @@ const BatteryCalculator: React.FC = () => {
       {/* Map Section */}
       <div className="w-full md:flex-1 md:h-full order-1 md:order-none">
         <div className="relative w-full h-64 md:h-full">
-          <Map
-            ref={mapRef}
-            onPlanUploaded={handleFlightPlanUpdate}
-            estimatedFlightDistance={parsedDistance}
-            onDataProcessed={handleDataProcessed}
-            onShowTickChange={handleShowTickChange}
-            onTotalDistanceChange={handleTotalDistanceChange}
-            onGcsLocationChange={setGcsLocation}
-            onObserverLocationChange={setObserverLocation}
-            onRepeaterLocationChange={setRepeaterLocation}
-          />
+        <Map
+          ref={mapRef}
+          onPlanUploaded={handleFlightPlanUpdate}
+          estimatedFlightDistance={parsedDistance}
+          onDataProcessed={handleDataProcessed}
+          onShowTickChange={handleShowTickChange}
+          onTotalDistanceChange={handleTotalDistanceChange}
+          onGcsLocationChange={setGcsLocation}
+          onObserverLocationChange={setObserverLocation}
+          onRepeaterLocationChange={setRepeaterLocation}
+          maxRange={maxRange}
+          angleStep={angleStep}
+          samplingInterval={samplingInterval}
+          skipUnion={skipUnion}
+          viewshedLoading={setViewshedLoading}
+        />
         </div>
       </div>
   
       {/* Right Panel (Inputs/Results) */}
       <div className="w-full md:w-1/3 p-4 overflow-y-auto bg-gray-300 mt-8 rounded-md">
-      <h2 className="text-xl font-semibold mb-4 ">Step 2B: Set/Adjust Your Own Flight Plan Parameters</h2>
+      <h2 className="text-xl font-semibold mb-4 ">Step 2B: Set/Adjust Your Own Parameters</h2>
         <div className="bg-white p-4 rounded-md shadow-md">
           <h2 className="text-xl font-semibold mb-4">🚁 Flight Parameters</h2>
           <div className="mb-4">
@@ -384,6 +397,65 @@ const BatteryCalculator: React.FC = () => {
   <div className="mt-4 bg-white p-4 rounded-md shadow-md">
     <h2 className="text-xl font-semibold mb-4 text-gray-700">⚡️ ELOS Details</h2>
 
+    {/* Viewshed Analysis Inputs */}
+    <div className="mb-4">
+        <h3 className="text-md font-semibold mb-2">Viewshed Analysis Settings</h3>
+        
+        <div className="flex flex-col space-y-2">
+          <div>
+            <label className="text-sm font-semibold mb-2">Max Range (m):</label>
+            <input
+              type="number"
+              value={maxRange}
+              onChange={(e) => setMaxRange(parseInt(e.target.value, 10))}
+              className="w-full px-2 py-1 border rounded"
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-semibold mb-2">Angle Step (°):</label>
+            <input
+              type="number"
+              value={angleStep}
+              onChange={(e) => setAngleStep(parseInt(e.target.value, 10))}
+              className="w-full px-2 py-1 border rounded"
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-semibold mb-2">Sampling Interval (m) along Flight Path:</label>
+            <input
+              type="number"
+              value={samplingInterval}
+              onChange={(e) => setSamplingInterval(parseInt(e.target.value, 10))}
+              className="w-full px-2 py-1 border rounded"
+            />
+            <button
+              onClick={() => {
+                // Trigger the viewshed analysis via Map ref
+                mapRef.current?.runViewshed();
+              }}
+              className="bg-green-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 mt-4"
+              disabled={viewshedLoading} // Disable button while loading
+            >
+              {viewshedLoading ? "Loading Viewshed..." : "Run Viewshed"}
+            </button>
+          </div>
+
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              checked={skipUnion}
+              onChange={(e) => setSkipUnion(e.target.checked)}
+              id="skipUnion"
+            />
+            <label htmlFor="skipUnion" className="ml-2">
+              Skip Polygon Union (better performance)
+            </label>
+          </div>
+        </div>
+      </div>
+
     {/* GCS Details */}
       <div className="mb-4">
         <h3 className="text-sm font-semibold mb-2">GCS Location</h3>
@@ -524,14 +596,13 @@ const BatteryCalculator: React.FC = () => {
         </div>
       </div>
 
+      
+
   </div>
 )}
-
-
-
       </div>
     </div>
   );
 };
 
-export default BatteryCalculator;
+export default Calculator;
