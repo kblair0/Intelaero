@@ -311,20 +311,66 @@ const fetchTerrainElevation = async (
 
   const chartOptions = {
     responsive: true,
+    interaction: {
+      mode: "index",
+      intersect: false,
+    },
     plugins: {
       legend: {
         display: true,
         position: "top",
+      },
+      tooltip: {
+        callbacks: {
+          title: (tooltipItems) => {
+            if (!tooltipItems.length) return "";
+            const xVal = tooltipItems[0].parsed.x; 
+            const xValInKm = xVal / 100; 
+            const xValInMeters = xValInKm * 1000; 
+            return `Distance: ${xValInMeters.toFixed(0)} m`;
+          },
+          footer: (tooltipItems) => {
+            if (tooltipItems.length === 2) {
+              const terrainElevation = tooltipItems[0].parsed.y;
+              const flightAltitude = tooltipItems[1].parsed.y;
+              const gap = flightAltitude - terrainElevation;
+              return `Separation: ${gap.toFixed(2)} m`;
+            }
+            return "";
+          },
+        },
+        external: function(context) {
+          const { chart, tooltip } = context;
+          if (!tooltip || !tooltip.opacity || tooltip.dataPoints.length < 2) return;
+  
+          const ctx = chart.ctx;
+          const point1 = tooltip.dataPoints[0].element;
+          const point2 = tooltip.dataPoints[1].element;
+  
+          if (point1 && point2) {
+            const { x: x1, y: y1 } = point1.getProps(['x', 'y']);
+            const { x: x2, y: y2 } = point2.getProps(['x', 'y']);
+  
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)'; // Customize the line color
+            ctx.stroke();
+            ctx.restore();
+          }
+        },
       },
     },
     scales: {
       x: {
         title: {
           display: true,
-          text: "Distance (kms)", // Adjusted dynamically
+          text: "Distance (kms)",
         },
         ticks: {
-          callback: function (_: number, index: number) {
+          callback: function (_, index) {
             if (index >= distances.length) return "";
             const distance = distances[index];
             const scaling = distances[distances.length - 1] > 10 ? 1 : 0.1;
@@ -342,12 +388,12 @@ const fetchTerrainElevation = async (
       },
     },
   };
-
+  
   // Render the error UI
   if (error) {
     return <div className="text-red-500">Error: {error}</div>;
   }
-
+  
   // Render the chart
   return (
     <div>
@@ -358,6 +404,7 @@ const fetchTerrainElevation = async (
         options={chartOptions}
       />
     </div>
-  )
-};
-export default ObstacleAssessment;
+  );
+  };
+  export default ObstacleAssessment;
+  

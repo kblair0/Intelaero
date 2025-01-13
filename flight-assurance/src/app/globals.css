@@ -72,4 +72,10 @@ input[type="number"]::placeholder {
   100% { transform: rotate(360deg); }
 }
 
+/* For scrollable container */
+.scrollable-container {
+  height: calc(100vh - 50px); 
+  overflow-y: auto;
+}
+
 
