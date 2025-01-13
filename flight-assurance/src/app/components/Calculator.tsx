@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import Map, { MapRef } from "./Map";
 import ObstacleAssessment from "./ObstacleAssessment";
+import { ViewshedError } from "./ViewshedAnalysis";
 
 const Calculator: React.FC = () => {
   const [batteryCapacity, setBatteryCapacity] = useState<string>("28000");
@@ -24,12 +25,13 @@ const Calculator: React.FC = () => {
   const [repeaterLocation, setRepeaterLocation] = useState<{ lng: number; lat: number; elevation: number | null } | null>(null);
   const [rawFlightPlan, setRawFlightPlan] = useState<GeoJSON.FeatureCollection | null>(null); // Uploaded but unprocessed
   const [processedFlightPlan, setProcessedFlightPlan] = useState<GeoJSON.FeatureCollection | null>(null); // To be used for assessments
-  //Viewshed State Variables
+  //Viewshed
   const [maxRange, setMaxRange] = useState<number>(5000); 
   const [angleStep, setAngleStep] = useState<number>(5);
   const [samplingInterval, setSamplingInterval] = useState<number>(50);
   const [skipUnion, setSkipUnion] = useState<boolean>(true);
   const [viewshedLoading, setViewshedLoading] = useState(false);
+  const [viewshedError, setViewshedError] = useState<ViewshedError | null>(null);
 
   
   const mapRef = useRef<MapRef | null>(null);
@@ -68,10 +70,10 @@ const Calculator: React.FC = () => {
     console.log("Data Processed:", data);
   };
 
-  const handleShowTickChange = (value: boolean) => {
+  const handleShowTickChange = useCallback((value: boolean) => {
     setShowTick(value);
-    console.log("Updated showTick from Map:", value); // Debugging to verify updates
-  };
+    console.log("Updated showTick from Map:", value);
+  }, []);
 
   const handleTotalDistanceChange = (distance: number) => {
     console.log("Received flight plan distance:", distance);
@@ -127,6 +129,13 @@ const Calculator: React.FC = () => {
           samplingInterval={samplingInterval}
           skipUnion={skipUnion}
           viewshedLoading={setViewshedLoading}
+          onError={(error: ViewshedError) => {
+            setViewshedError(error);
+            console.error('Viewshed error:', error);
+          }}
+          onSuccess={() => {
+            setViewshedError(null);
+          }}
         />
         </div>
       </div>
@@ -432,14 +441,31 @@ const Calculator: React.FC = () => {
             />
             <button
               onClick={() => {
-                // Trigger the viewshed analysis via Map ref
-                mapRef.current?.runViewshed();
+                setViewshedError(null); // Clear any previous errors
+                try {
+                  mapRef.current?.runViewshed();
+                } catch (error) {
+                  if (error instanceof ViewshedError) {
+                    setViewshedError(error);
+                  } else {
+                    setViewshedError(new ViewshedError('Failed to run viewshed analysis', 'UNKNOWN_ERROR'));
+                  }
+                }
               }}
               className="bg-green-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 mt-4"
-              disabled={viewshedLoading} // Disable button while loading
+              disabled={viewshedLoading}
             >
               {viewshedLoading ? "Loading Viewshed..." : "Run Viewshed"}
             </button>
+            {viewshedError && (
+              <div className="mt-2 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative">
+                <strong className="font-bold">Error: </strong>
+                <span className="block sm:inline">{viewshedError.message}</span>
+                {viewshedError.code && (
+                  <span className="block text-sm mt-1">Code: {viewshedError.code}</span>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center">

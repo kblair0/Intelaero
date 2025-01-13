@@ -16,8 +16,15 @@ import ViewshedAnalysis, { ViewshedAnalysisRef } from "./ViewshedAnalysis";
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || "";
 
+export interface LocationData {
+  lng: number;
+  lat: number;
+  elevation: number | null;
+}
+
 export interface MapRef {
   addGeoJSONToMap: (geojson: GeoJSON.FeatureCollection) => void;
+  runViewshed: () => void;
 }
 
 interface MapProps {
@@ -26,14 +33,16 @@ interface MapProps {
   onShowTickChange: (value: boolean) => void;
   onTotalDistanceChange: (distance: number) => void;
   onPlanUploaded: (geojson: GeoJSON.FeatureCollection) => void;
-  onGcsLocationChange: (location: { lng: number; lat: number; elevation: number | null }) => void;
-  onObserverLocationChange: (location: { lng: number; lat: number; elevation: number | null }) => void;
-  onRepeaterLocationChange: (location: { lng: number; lat: number; elevation: number | null }) => void;
+  onGcsLocationChange: (location: LocationData | null) => void;
+  onObserverLocationChange: (location: LocationData | null) => void;
+  onRepeaterLocationChange: (location: LocationData | null) => void;
   maxRange: number;
   angleStep: number;
   samplingInterval: number;
   skipUnion: boolean;
   viewshedLoading?: (loading: boolean) => void;
+  onError?: (error: ViewshedError) => void;
+  onSuccess?: () => void;
 }
 const Map = forwardRef<MapRef, MapProps>(
   (
@@ -63,9 +72,12 @@ const Map = forwardRef<MapRef, MapProps>(
     const markerRef = useRef<mapboxgl.Marker | null>(null);
     const startMarkerRef = useRef<mapboxgl.Marker | null>(null);
     const endMarkerRef = useRef<mapboxgl.Marker | null>(null);
-    const [gcsLocation, setGcsLocation] = useState<{ lng: number; lat: number; elevation: number | null } | null>(null);
-    const [observerLocation, setObserverLocation] = useState<{ lng: number; lat: number; elevation: number | null } | null>(null);
-    const [repeaterLocation, setRepeaterLocation] = useState<{ lng: number; lat: number; elevation: number | null } | null>(null);
+    const [gcsLocation, setGcsLocation] = useState<LocationData | null>(null);
+    const [observerLocation, setObserverLocation] = useState<LocationData | null>(null);
+    const [repeaterLocation, setRepeaterLocation] = useState<LocationData | null>(null);
+    const [viewshedError, setViewshedError] = useState<ViewshedError | null>(null);
+
+    
 
     const viewshedRef = React.useRef<ViewshedAnalysisRef | null>(null);
 
@@ -364,6 +376,15 @@ const Map = forwardRef<MapRef, MapProps>(
       if (!mapRef.current) return;
     
       const center = mapRef.current.getCenter();
+      const elevation = mapRef.current?.queryTerrainElevation(center);
+      const initialLocation: LocationData = {
+        lng: center.lng,
+        lat: center.lat,
+        elevation: elevation
+      };
+      setGcsLocation(initialLocation);
+      onGcsLocationChange(initialLocation);
+      
       const popupDiv = document.createElement("div");
     
       popupDiv.innerHTML = `
@@ -389,16 +410,17 @@ const Map = forwardRef<MapRef, MapProps>(
         .addTo(mapRef.current)
         .togglePopup();
 
-      const elevation = mapRef.current?.queryTerrainElevation(center);
-      const initialLocation = { lng: center.lng, lat: center.lat, elevation };
-      setGcsLocation(initialLocation);
-      onGcsLocationChange(initialLocation);
+
 
       // Add an event listener for the 'dragend' event
       gcsMarker.on('dragend', () => {
         const lngLat = gcsMarker.getLngLat();
         const elevation = mapRef.current?.queryTerrainElevation(lngLat);
-        const location = { lng: lngLat.lng, lat: lngLat.lat, elevation };
+        const location: LocationData = {
+          lng: lngLat.lng,
+          lat: lngLat.lat,
+          elevation: elevation
+        };
         setGcsLocation(location);
         onGcsLocationChange(location); // Notify parent
       });   
@@ -439,14 +461,22 @@ const Map = forwardRef<MapRef, MapProps>(
         .togglePopup();
 
       const elevation = mapRef.current?.queryTerrainElevation(center);
-      const initialLocation = { lng: center.lng, lat: center.lat, elevation };
+      const initialLocation: LocationData = {
+        lng: center.lng,
+        lat: center.lat,
+        elevation: elevation
+      };
       setObserverLocation(initialLocation);
       onObserverLocationChange(initialLocation);
 
       observerMarker.on('dragend', () => {
         const lngLat = observerMarker.getLngLat();
         const elevation = mapRef.current?.queryTerrainElevation(lngLat);
-        const location = { lng: lngLat.lng, lat: lngLat.lat, elevation };
+        const location: LocationData = {
+          lng: lngLat.lng,
+          lat: lngLat.lat,
+          elevation: elevation
+        };
         setObserverLocation(location);
         onObserverLocationChange(location); // Notify parent
       });
@@ -488,14 +518,22 @@ const Map = forwardRef<MapRef, MapProps>(
         .togglePopup();
 
       const elevation = mapRef.current?.queryTerrainElevation(center);
-      const initialLocation = { lng: center.lng, lat: center.lat, elevation };
+      const initialLocation: LocationData = {
+        lng: center.lng,
+        lat: center.lat,
+        elevation: elevation
+      };
       setRepeaterLocation(initialLocation);
       onRepeaterLocationChange(initialLocation);
     
       repeaterMarker.on('dragend', () => {
         const lngLat = repeaterMarker.getLngLat();
         const elevation = mapRef.current?.queryTerrainElevation(lngLat);
-        const location = { lng: lngLat.lng, lat: lngLat.lat, elevation };
+        const location: LocationData = {
+          lng: lngLat.lng,
+          lat: lngLat.lat,
+          elevation: elevation
+        };
         setRepeaterLocation(location);
         onRepeaterLocationChange(location); // Notify parent
       });
@@ -550,16 +588,34 @@ const Map = forwardRef<MapRef, MapProps>(
           </div>
         </div>
         {flightPlan && (
-          <ViewshedAnalysis
-            ref={viewshedRef}
-            map={mapRef.current!}
-            flightPlan={flightPlan}
-            maxRange={maxRange}
-            angleStep={angleStep}
-            samplingInterval={samplingInterval}
-            skipUnion={skipUnion}
-            viewshedLoading={viewshedLoading}
-          />
+          <>
+            <ViewshedAnalysis
+              ref={viewshedRef}
+              map={mapRef.current!}
+              flightPlan={flightPlan}
+              maxRange={maxRange}
+              angleStep={angleStep}
+              samplingInterval={samplingInterval}
+              skipUnion={skipUnion}
+              viewshedLoading={viewshedLoading}
+              gcsLocation={gcsLocation}
+              observerLocation={observerLocation}
+              repeaterLocation={repeaterLocation}
+              onError={(error) => {
+                setViewshedError(error);
+                console.error('Viewshed error:', error);
+              }}
+              onSuccess={() => {
+                setViewshedError(null);
+              }}
+            />
+            {viewshedError && (
+              <div className="absolute bottom-4 left-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+                <strong className="font-bold">Error: </strong>
+                <span className="block sm:inline">{viewshedError.message}</span>
+              </div>
+            )}
+          </>
         )}
       </div>
     );
