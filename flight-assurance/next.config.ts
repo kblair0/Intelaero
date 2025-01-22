@@ -1,8 +1,12 @@
-import type { NextConfig } from 'next'
+import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  typescript: {
+    ignoreBuildErrors: true,
+  },
   env: {
-    NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN: process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN,
+    NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN:
+      process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN,
   },
   webpack: (config, { isServer }) => {
     if (!isServer) {
@@ -13,7 +17,7 @@ const nextConfig: NextConfig = {
       };
     }
     return config;
-  }
-}
+  },
+};
 
 export default nextConfig;

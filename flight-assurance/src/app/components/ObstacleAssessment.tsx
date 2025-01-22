@@ -1,6 +1,6 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useState } from "react";
 import { Line } from "react-chartjs-2";
-import mapboxgl from 'mapbox-gl';
 import * as turf from "@turf/turf";
 import { MapRef } from "./Map";
 import {
@@ -185,7 +185,7 @@ const ObstacleAssessment: React.FC<ObstacleAssessmentProps> = ({
     };
   
     processTerrainData();
-  }, [flightPlan, onDataProcessed, map]);
+  }, [flightPlan, onDataProcessed, map,getTerrainElevation]);
 
   useEffect(() => {
     console.log('Map object:', map);
@@ -248,14 +248,14 @@ const ObstacleAssessment: React.FC<ObstacleAssessmentProps> = ({
       },
       tooltip: {
         callbacks: {
-          title: (tooltipItems) => {
+          title: (tooltipItems: string | any[]) => {
             if (!tooltipItems.length) return "";
             const xVal = tooltipItems[0].parsed.x; 
             const xValInKm = xVal / 100; 
             const xValInMeters = xValInKm * 1000; 
             return `Distance: ${xValInMeters.toFixed(0)} m`;
           },
-          footer: (tooltipItems) => {
+          footer: (tooltipItems: string | any[]) => {
             if (tooltipItems.length === 2) {
               const terrainElevation = tooltipItems[0].parsed.y;
               const flightAltitude = tooltipItems[1].parsed.y;
@@ -265,7 +265,7 @@ const ObstacleAssessment: React.FC<ObstacleAssessmentProps> = ({
             return "";
           },
         },
-        external: function(context) {
+        external: function(context: { chart: any; tooltip: any; }) {
           const { chart, tooltip } = context;
           if (!tooltip || !tooltip.opacity || tooltip.dataPoints.length < 2) return;
   
@@ -296,7 +296,7 @@ const ObstacleAssessment: React.FC<ObstacleAssessmentProps> = ({
           text: "Distance (kms)",
         },
         ticks: {
-          callback: function (_, index) {
+          callback: function (_: any, index: number) {
             if (index >= distances.length) return "";
             const distance = distances[index];
             const scaling = distances[distances.length - 1] > 10 ? 1 : 0.1;

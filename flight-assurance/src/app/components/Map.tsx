@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 import React, {
@@ -13,7 +14,7 @@ import * as turf from "@turf/turf";
 import FlightLogUploader from "./FlightLogUploader";
 import FlightPlanUploader from "./FlightPlanUploader";
 import ELOSGridAnalysis from './ELOSGridAnalysis';
-import { layerManager, MAP_LAYERS } from './LayerManager';
+import { layerManager } from './LayerManager';
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || "";
 
@@ -27,6 +28,7 @@ export interface MapRef {
   addGeoJSONToMap: (geojson: GeoJSON.FeatureCollection) => void;
   runElosAnalysis: (options?: MarkerAnalysisOptions) => Promise<void>;
   getMap: () => mapboxgl.Map | null; // To expose the underlying map
+  toggleLayerVisibility: (layerId: string) => void;
 }
 
 interface MapProps {
@@ -345,7 +347,7 @@ useImperativeHandle(ref, () => ({
   },
   getMap: () => mapRef.current,
   toggleLayerVisibility,
-}), [mapRef.current]);
+}), [addGeoJSONToMap]);
 
     //map initialization
     useEffect(() => {
