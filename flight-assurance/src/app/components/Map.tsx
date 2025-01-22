@@ -12,7 +12,8 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import * as turf from "@turf/turf";
 import FlightLogUploader from "./FlightLogUploader";
 import FlightPlanUploader from "./FlightPlanUploader";
-import ViewshedAnalysis, { ViewshedAnalysisRef } from "./ViewshedAnalysis";
+import ELOSGridAnalysis from './ELOSGridAnalysis';
+import { layerManager, MAP_LAYERS } from './LayerManager';
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || "";
 
@@ -24,7 +25,8 @@ export interface LocationData {
 
 export interface MapRef {
   addGeoJSONToMap: (geojson: GeoJSON.FeatureCollection) => void;
-  runViewshed: () => void;
+  runElosAnalysis: (options?: MarkerAnalysisOptions) => Promise<void>;
+  getMap: () => mapboxgl.Map | null; // To expose the underlying map
 }
 
 interface MapProps {
@@ -36,14 +38,22 @@ interface MapProps {
   onGcsLocationChange: (location: LocationData | null) => void;
   onObserverLocationChange: (location: LocationData | null) => void;
   onRepeaterLocationChange: (location: LocationData | null) => void;
-  maxRange: number;
-  angleStep: number;
-  samplingInterval: number;
-  skipUnion: boolean;
-  viewshedLoading?: (loading: boolean) => void;
-  onError?: (error: ViewshedError) => void;
+  onError?: () => void;
   onSuccess?: () => void;
+  elosGridRange?: number;
 }
+
+interface ELOSGridAnalysisRef {
+  runAnalysis: (options?: { markerOptions?: MarkerAnalysisOptions }) => Promise<void>;
+}
+
+// Interface for Marker LOS Analysis
+interface MarkerAnalysisOptions {
+  markerType: 'gcs' | 'observer' | 'repeater';
+  location: LocationData;
+  range: number;
+}
+
 const Map = forwardRef<MapRef, MapProps>(
   (
     {
@@ -55,11 +65,7 @@ const Map = forwardRef<MapRef, MapProps>(
       onGcsLocationChange,
       onObserverLocationChange,
       onRepeaterLocationChange,
-      maxRange,
-      angleStep,
-      samplingInterval,
-      skipUnion,
-      viewshedLoading,
+      elosGridRange,
     },
     ref
   ) => {
@@ -72,20 +78,10 @@ const Map = forwardRef<MapRef, MapProps>(
     const markerRef = useRef<mapboxgl.Marker | null>(null);
     const startMarkerRef = useRef<mapboxgl.Marker | null>(null);
     const endMarkerRef = useRef<mapboxgl.Marker | null>(null);
+    const elosGridRef = useRef<ELOSGridAnalysisRef | null>(null);
     const [gcsLocation, setGcsLocation] = useState<LocationData | null>(null);
     const [observerLocation, setObserverLocation] = useState<LocationData | null>(null);
     const [repeaterLocation, setRepeaterLocation] = useState<LocationData | null>(null);
-    const [viewshedError, setViewshedError] = useState<ViewshedError | null>(null);
-
-    
-
-    const viewshedRef = React.useRef<ViewshedAnalysisRef | null>(null);
-
-    const triggerViewshedAnalysis = () => {
-      // Call the exposed runAnalysis() method in ViewshedAnalysis
-      viewshedRef.current?.runAnalysis();
-    };
-
 
     useEffect(() => {
       if (mapRef?.current) {
@@ -269,70 +265,197 @@ const Map = forwardRef<MapRef, MapProps>(
       }
     }, [estimatedFlightDistance, onShowTickChange, totalDistance]);
 
-    useImperativeHandle(ref, () => ({
-      addGeoJSONToMap,
-      runViewshed: () => {
-        triggerViewshedAnalysis();
-      }
-    }));
+    const terrainElevationMethods: TerrainElevationMethods = {
+      async getRGBElevation(lng: number, lat: number): Promise<number> {
+        try {
+          const tileSize = 512;
+          const zoom = 15;
+          const scale = Math.pow(2, zoom);
+          
+          const latRad = (lat * Math.PI) / 180;
+          const tileX = Math.floor(((lng + 180) / 360) * scale);
+          const tileY = Math.floor(
+            ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * scale
+          );
+    
+          const pixelX = Math.floor((((lng + 180) / 360) * scale - tileX) * tileSize);
+          const pixelY = Math.floor(
+            (((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * scale - tileY) *
+              tileSize
+          );
+    
+          const tileURL = `https://api.mapbox.com/v4/mapbox.terrain-rgb/${zoom}/${tileX}/${tileY}@2x.pngraw?access_token=${process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}`;
+          const response = await fetch(tileURL);
+          const blob = await response.blob();
+          const imageBitmap = await createImageBitmap(blob);
+    
+          const canvas = document.createElement("canvas");
+          canvas.width = tileSize;
+          canvas.height = tileSize;
+          const context = canvas.getContext("2d");
+          if (!context) throw new Error("Failed to create canvas context");
+    
+          context.drawImage(imageBitmap, 0, 0);
+          const imageData = context.getImageData(0, 0, tileSize, tileSize);
+    
+          const idx = (pixelY * tileSize + pixelX) * 4;
+          const [r, g, b] = [
+            imageData.data[idx],
+            imageData.data[idx + 1],
+            imageData.data[idx + 2],
+          ];
+          
+          return -10000 + (r * 256 * 256 + g * 256 + b) * 0.1;
+        } catch (error) {
+          console.error("RGB elevation error:", error);
+      return 0;
+    }
+  },
 
+  getQueryElevation(lng: number, lat: number): number | null {
+    return mapRef.current?.queryTerrainElevation([lng, lat]) ?? null;
+  }
+};
+
+const toggleLayerVisibility = (layerId: string) => {
+  return layerManager.toggleLayerVisibility(layerId);
+};
+
+useImperativeHandle(ref, () => ({
+  addGeoJSONToMap,
+  runElosAnalysis: async (options?: MarkerAnalysisOptions) => {
+    if (!mapRef.current) {
+      throw new Error('Map is not initialized');
+    }
+    if (elosGridRef.current) {
+      if (options) {
+        // Marker-based analysis
+        await elosGridRef.current.runAnalysis({
+          markerOptions: {
+            markerType: options.markerType,
+            location: options.location,
+            range: options.range
+          }
+        });
+      } else {
+        // Flight path analysis
+        await elosGridRef.current.runAnalysis();
+      }
+    }
+  },
+  getMap: () => mapRef.current,
+  toggleLayerVisibility,
+}), [mapRef.current]);
+
+    //map initialization
     useEffect(() => {
       if (mapContainerRef.current) {
-        // Initialize the Mapbox map
-        mapRef.current = new mapboxgl.Map({
-          container: mapContainerRef.current,
-          style: "mapbox://styles/mapbox-map-design/ckhqrf2tz0dt119ny6azh975y",
-          center: [0, 0],
-          zoom: 2.5,
-          projection: "globe",
-        });
-    
-        mapRef.current.on("load", () => {
-          // Add terrain source
-          mapRef.current?.addSource("mapbox-dem", {
-            type: "raster-dem",
-            url: "mapbox://mapbox.mapbox-terrain-dem-v1",
-            tileSize: 512,
-            maxzoom: 14,
+        try {
+          // Initialize the Mapbox map
+          const map = new mapboxgl.Map({
+            container: mapContainerRef.current,
+            style: "mapbox://styles/mapbox-map-design/ckhqrf2tz0dt119ny6azh975y",
+            center: [0, 0],
+            zoom: 2.5,
+            projection: "globe",
           });
     
-          // Enable terrain with exaggeration
-          mapRef.current?.setTerrain({
-            source: "mapbox-dem",
-            exaggeration: 1.5,
+          map.on("load", () => {
+            try {
+              // Add terrain source
+              map.addSource("mapbox-dem", {
+                type: "raster-dem",
+                url: "mapbox://mapbox.mapbox-terrain-dem-v1",
+                tileSize: 512,
+                maxzoom: 15,
+              });
+    
+              map.setTerrain({
+                source: "mapbox-dem",
+                exaggeration: 1.5,
+              });
+    
+              map.addLayer({
+                id: "sky",
+                type: "sky",
+                paint: {
+                  "sky-type": "atmosphere",
+                  "sky-atmosphere-sun": [0.0, 90.0],
+                  "sky-atmosphere-sun-intensity": 15,
+                },
+              });
+
+              layerManager.setMap(map);
+    
+              // Only set mapRef.current after everything is loaded
+              mapRef.current = map;
+              console.log("Map fully initialized with all layers");
+            } catch (error) {
+              console.error("Error initializing map layers:", error);
+            }
           });
-    
-          // Add sky layer
-          mapRef.current?.addLayer({
-            id: "sky",
-            type: "sky",
-            paint: {
-              "sky-type": "atmosphere",
-              "sky-atmosphere-sun": [0.0, 90.0],
-              "sky-atmosphere-sun-intensity": 15,
-            },
-          });
-    
-          // Make sure a specific UI element is visible
-          const addGroundStationButton = document.querySelector(".ground-station-icon");
-          if (addGroundStationButton) {
-            addGroundStationButton.style.display = "block";
-          }
-    
-          console.log("Map initialized with terrain and sky layer");
-        });
+        } catch (error) {
+          console.error("Error creating map:", error);
+        }
       }
     
-      // Cleanup on unmount
       return () => {
-        mapRef?.current?.remove();
+        if (mapRef.current) {
+          mapRef.current.remove();
+          mapRef.current = null;
+        }
       };
     }, []);
+
+    const fetchTerrainElevation = async (lng: number, lat: number): Promise<number> => {
+      try {
+        const tileSize = 512;
+        const zoom = 15;
+        const scale = Math.pow(2, zoom);
+        
+        const latRad = (lat * Math.PI) / 180;
+        const tileX = Math.floor(((lng + 180) / 360) * scale);
+        const tileY = Math.floor(
+          ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * scale
+        );
+    
+        const pixelX = Math.floor((((lng + 180) / 360) * scale - tileX) * tileSize);
+        const pixelY = Math.floor(
+          (((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * scale - tileY) *
+            tileSize
+        );
+    
+        const tileURL = `https://api.mapbox.com/v4/mapbox.terrain-rgb/${zoom}/${tileX}/${tileY}@2x.pngraw?access_token=${process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}`;
+        const response = await fetch(tileURL);
+        const blob = await response.blob();
+        const imageBitmap = await createImageBitmap(blob);
+    
+        const canvas = document.createElement("canvas");
+        canvas.width = tileSize;
+        canvas.height = tileSize;
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("Failed to create canvas context");
+    
+        context.drawImage(imageBitmap, 0, 0);
+        const imageData = context.getImageData(0, 0, tileSize, tileSize);
+    
+        const idx = (pixelY * tileSize + pixelX) * 4;
+        const [r, g, b] = [
+          imageData.data[idx],
+          imageData.data[idx + 1],
+          imageData.data[idx + 2],
+        ];
+        
+        return -10000 + (r * 256 * 256 + g * 256 + b) * 0.1;
+      } catch (error) {
+        console.error("RGB elevation error:", error);
+        return 0;
+      }
+    };
     
 
 
     const handleFlightPlanUpload = (geojson: GeoJSON.FeatureCollection) => {
-      // 1) Store it in state for the ViewshedAnalysis component:
       setFlightPlan(geojson);// Add the flight plan to the map
       addGeoJSONToMap(geojson);
 
@@ -372,6 +495,54 @@ const Map = forwardRef<MapRef, MapProps>(
       }
     };
 
+    // Map Marker Popup Implementation
+    const createMarkerPopup = (
+      markerType: 'gcs' | 'observer' | 'repeater',
+      initialElevation: number | null,
+      onDelete: () => void
+    ) => {
+      const popupDiv = document.createElement("div");
+      const currentElevation = initialElevation || 0;
+    
+      const styles = {
+        container: 'padding: 8px; min-width: 200px;',
+        header: 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;',
+        deleteBtn: 'background: #e53e3e; color: white; border: none; padding: 2px 4px; border-radius: 4px; cursor: pointer; font-size: 10px;',
+        section: 'margin-bottom: 8px;',
+        label: 'color: #4a5568; font-size: 12px; display: block; margin-bottom: 4px;',
+        value: 'color: #1a202c; font-size: 12px; font-weight: 500;',
+      };
+    
+      const markerInfo = {
+        gcs: { icon: '📡', title: 'GCS', color: '#3182ce' },
+        observer: { icon: '🔭', title: 'Observer', color: '#38a169' },
+        repeater: { icon: '⚡️', title: 'Repeater', color: '#e53e3e' }
+      };
+    
+      const { icon, title, color } = markerInfo[markerType];
+    
+      popupDiv.innerHTML = `
+        <div style="${styles.container}">
+          <div style="${styles.header}">
+            <strong style="color: black; font-size: 14px;">${title} ${icon}</strong>
+            <button id="delete-${markerType}-btn" style="${styles.deleteBtn}">X</button>
+          </div>
+          
+          <div style="${styles.section}">
+            <label style="${styles.label}">Ground Elevation:</label>
+            <span style="${styles.value}">${currentElevation.toFixed(1)}m ASL</span>
+          </div>
+        </div>
+      `;
+    
+      // Delete button handler
+      popupDiv.querySelector(`#delete-${markerType}-btn`)?.addEventListener('click', onDelete);
+    
+      return new mapboxgl.Popup({ closeButton: false }).setDOMContent(popupDiv);
+    };
+    
+    //Add Markers
+    //GCS Marker
     const addGroundStation = () => {
       if (!mapRef.current) return;
     
@@ -382,168 +553,163 @@ const Map = forwardRef<MapRef, MapProps>(
         lat: center.lat,
         elevation: elevation
       };
-      setGcsLocation(initialLocation);
-      onGcsLocationChange(initialLocation);
       
-      const popupDiv = document.createElement("div");
-    
-      popupDiv.innerHTML = `
-        <div style="display: flex; align-items: center;">
-          <strong style="color: black; margin-right: 5px;">GCS 📡</strong>
-          <button id="delete-gcs-btn" style="
-              background: #e53e3e; 
-              color: white; 
-              border: none;
-              padding: 2px 4px; 
-              border-radius: 4px; 
-              cursor: pointer;
-              font-size: 10px; 
-            ">X</button>
-        </div>
-      `;
-    
-      const gcsPopup = new mapboxgl.Popup({ closeButton: false }).setDOMContent(popupDiv);
-
       const gcsMarker = new mapboxgl.Marker({ color: "blue", draggable: true })
         .setLngLat(center)
-        .setPopup(gcsPopup)
-        .addTo(mapRef.current)
-        .togglePopup();
-
-
-
-      // Add an event listener for the 'dragend' event
+        .addTo(mapRef.current);
+    
+      // Create popup with enhanced content
+      const popup = createMarkerPopup(
+        'gcs',
+        elevation,
+        () => {
+          gcsMarker.remove();
+          setGcsLocation(null);
+          onGcsLocationChange(null);
+        }
+      );
+    
+      gcsMarker.setPopup(popup).togglePopup();
+      setGcsLocation(initialLocation);
+      onGcsLocationChange(initialLocation);
+    
+      // Add dragend event listener
       gcsMarker.on('dragend', () => {
         const lngLat = gcsMarker.getLngLat();
-        const elevation = mapRef.current?.queryTerrainElevation(lngLat);
+        const newElevation = mapRef.current?.queryTerrainElevation(lngLat);
         const location: LocationData = {
           lng: lngLat.lng,
           lat: lngLat.lat,
-          elevation: elevation
+          elevation: newElevation
         };
         setGcsLocation(location);
-        onGcsLocationChange(location); // Notify parent
-      });   
-    
-      popupDiv.querySelector("#delete-gcs-btn")?.addEventListener("click", () => {
-        gcsMarker.remove();
-        setGcsLocation(null);
-        onGcsLocationChange(null);
+        onGcsLocationChange(location);
+        
+        // Update popup with new elevation
+        const popup = createMarkerPopup(
+          'gcs',
+          newElevation,
+          () => {
+            gcsMarker.remove();
+            setGcsLocation(null);
+            onGcsLocationChange(null);
+          }
+        );
+        gcsMarker.setPopup(popup).togglePopup();
       });
-      
     };
+
+    //Observer Marker
     const addObserver = () => {
       if (!mapRef.current) return;
-
+    
       const center = mapRef.current.getCenter();
-      const popupDiv = document.createElement("div");
-
-      popupDiv.innerHTML = `
-        <div style="display: flex; align-items: center;">
-          <strong style="color: black; margin-right: 5px;">Observer 🔭</strong>
-          <button id="delete-observer-btn" style="
-              background: #e53e3e; 
-              color: white; 
-              border: none;
-              padding: 2px 4px; 
-              border-radius: 4px; 
-              cursor: pointer;
-              font-size: 10px; 
-            ">X</button>
-        </div>
-      `;
-
-      const observerPopup = new mapboxgl.Popup({ closeButton: false }).setDOMContent(popupDiv);
-      const observerMarker = new mapboxgl.Marker({ color: "green", draggable: true })
-        .setLngLat(center)
-        .setPopup(observerPopup)
-        .addTo(mapRef.current)
-        .togglePopup();
-
       const elevation = mapRef.current?.queryTerrainElevation(center);
       const initialLocation: LocationData = {
         lng: center.lng,
         lat: center.lat,
         elevation: elevation
       };
+      
+      const observerMarker = new mapboxgl.Marker({ color: "green", draggable: true })
+        .setLngLat(center)
+        .addTo(mapRef.current);
+    
+      // Create popup with enhanced content
+      const popup = createMarkerPopup(
+        'observer',
+        elevation,
+        () => {
+          observerMarker.remove();
+          setObserverLocation(null);
+          onObserverLocationChange(null);
+        }
+      );
+    
+      observerMarker.setPopup(popup).togglePopup();
       setObserverLocation(initialLocation);
       onObserverLocationChange(initialLocation);
-
+    
+      // Add dragend event listener
       observerMarker.on('dragend', () => {
         const lngLat = observerMarker.getLngLat();
-        const elevation = mapRef.current?.queryTerrainElevation(lngLat);
+        const newElevation = mapRef.current?.queryTerrainElevation(lngLat);
         const location: LocationData = {
           lng: lngLat.lng,
           lat: lngLat.lat,
-          elevation: elevation
+          elevation: newElevation
         };
         setObserverLocation(location);
-        onObserverLocationChange(location); // Notify parent
-      });
+        onObserverLocationChange(location);
         
-
-      popupDiv.querySelector("#delete-observer-btn")?.addEventListener("click", () => { 
-        observerMarker.remove();
-        setObserverLocation(null);
-        onObserverLocationChange(null);
+        // Update popup with new elevation
+        const popup = createMarkerPopup(
+          'observer',
+          newElevation,
+          () => {
+            observerMarker.remove();
+            setObserverLocation(null);
+            onObserverLocationChange(null);
+          }
+        );
+        observerMarker.setPopup(popup).togglePopup();
       });
     };
-
+    
     const addRepeater = () => {
       if (!mapRef.current) return;
-
+    
       const center = mapRef.current.getCenter();
-      const popupDiv = document.createElement("div");
-
-      popupDiv.innerHTML = `
-        <div style="display: flex; align-items: center;">
-          <strong style="color: black; margin-right: 5px;">Repeater ⚡️</strong>
-          <button id="delete-repeater-btn" style="
-              background: #e53e3e; 
-              color: white; 
-              border: none;
-              padding: 2px 4px; 
-              border-radius: 4px; 
-              cursor: pointer;
-              font-size: 10px; 
-            ">X</button>
-        </div>
-      `;
-
-      const repeaterPopup = new mapboxgl.Popup({ closeButton: false }).setDOMContent(popupDiv);
-      const repeaterMarker = new mapboxgl.Marker({ color: "red", draggable: true })
-        .setLngLat(center)
-        .setPopup(repeaterPopup)
-        .addTo(mapRef.current)
-        .togglePopup();
-
       const elevation = mapRef.current?.queryTerrainElevation(center);
       const initialLocation: LocationData = {
         lng: center.lng,
         lat: center.lat,
         elevation: elevation
       };
+      
+      const repeaterMarker = new mapboxgl.Marker({ color: "red", draggable: true })
+        .setLngLat(center)
+        .addTo(mapRef.current);
+    
+      // Create popup with enhanced content
+      const popup = createMarkerPopup(
+        'repeater',
+        elevation,
+        () => {
+          repeaterMarker.remove();
+          setRepeaterLocation(null);
+          onRepeaterLocationChange(null);
+        }
+      );
+    
+      repeaterMarker.setPopup(popup).togglePopup();
       setRepeaterLocation(initialLocation);
       onRepeaterLocationChange(initialLocation);
     
+      // Add dragend event listener
       repeaterMarker.on('dragend', () => {
         const lngLat = repeaterMarker.getLngLat();
-        const elevation = mapRef.current?.queryTerrainElevation(lngLat);
+        const newElevation = mapRef.current?.queryTerrainElevation(lngLat);
         const location: LocationData = {
           lng: lngLat.lng,
           lat: lngLat.lat,
-          elevation: elevation
+          elevation: newElevation
         };
         setRepeaterLocation(location);
-        onRepeaterLocationChange(location); // Notify parent
-      });
+        onRepeaterLocationChange(location);
         
-      popupDiv.querySelector("#delete-repeater-btn")?.addEventListener("click", () => {
-        repeaterMarker.remove();
-        setRepeaterLocation(null);
-        onRepeaterLocationChange(null);
+        // Update popup with new elevation
+        const popup = createMarkerPopup(
+          'repeater',
+          newElevation,
+          () => {
+            repeaterMarker.remove();
+            setRepeaterLocation(null);
+            onRepeaterLocationChange(null);
+          }
+        );
+        repeaterMarker.setPopup(popup).togglePopup();
       });
-      
     };
 
     return (
@@ -585,38 +751,27 @@ const Map = forwardRef<MapRef, MapProps>(
               className="map-button repeater-icon">
               Add Repeater ⚡️
             </button>
+
           </div>
         </div>
+
         {flightPlan && (
-          <>
-            <ViewshedAnalysis
-              ref={viewshedRef}
-              map={mapRef.current!}
-              flightPlan={flightPlan}
-              maxRange={maxRange}
-              angleStep={angleStep}
-              samplingInterval={samplingInterval}
-              skipUnion={skipUnion}
-              viewshedLoading={viewshedLoading}
-              gcsLocation={gcsLocation}
-              observerLocation={observerLocation}
-              repeaterLocation={repeaterLocation}
-              onError={(error) => {
-                setViewshedError(error);
-                console.error('Viewshed error:', error);
-              }}
-              onSuccess={() => {
-                setViewshedError(null);
-              }}
-            />
-            {viewshedError && (
-              <div className="absolute bottom-4 left-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
-                <strong className="font-bold">Error: </strong>
-                <span className="block sm:inline">{viewshedError.message}</span>
-              </div>
-            )}
-          </>
+          <ELOSGridAnalysis
+            ref={elosGridRef}
+            map={mapRef.current!}
+            flightPath={flightPlan}
+            elosGridRange={elosGridRange}
+            onError={(error) => {
+              console.error('ELOS Analysis error:', error);
+              // Propagate error to parent if needed
+            }}
+            onSuccess={(result) => {
+              console.log('ELOS Analysis completed:', result);
+              // Handle successful analysis
+            }}
+          />
         )}
+
       </div>
     );
   }

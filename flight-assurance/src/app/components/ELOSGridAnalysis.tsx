@@ -1,0 +1,785 @@
+import React, { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
+import mapboxgl from 'mapbox-gl';
+import * as turf from '@turf/turf';
+import { layerManager, MAP_LAYERS } from './LayerManager';
+
+// Enhanced type definitions for 2D and 3D coordinates
+type Coordinates2D = [number, number];
+type Coordinates3D = [number, number, number]; // [longitude, latitude, altitude]
+
+const isValidBounds = (bounds: number[]): boolean =>
+    bounds.length === 4 &&
+    bounds[0] >= -180 &&
+    bounds[1] >= -90 &&
+    bounds[2] <= 180 &&
+    bounds[3] <= 90;
+
+interface ELOSError extends Error {
+  code: 'GRID_GENERATION' | 'VISIBILITY_ANALYSIS' | 'MAP_INTERACTION' | 'INVALID_INPUT';
+  details?: unknown;
+}
+
+interface GridCell {
+  id: string;
+  geometry: GeoJSON.Polygon;
+  properties: {
+    visibility: number;
+    fullyVisible: boolean;
+    elevation?: number;
+    lastAnalyzed: number;
+  };
+}
+
+interface AnalysisResult {
+  cells: GridCell[];
+  stats: {
+    totalCells: number;
+    visibleCells: number;
+    averageVisibility: number;
+    analysisTime: number;
+  };
+}
+
+interface LocationData {
+  lng: number;
+  lat: number;
+  elevation?: number;
+}
+
+interface Props {
+  map: mapboxgl.Map;
+  flightPath?: GeoJSON.FeatureCollection;
+  gridSize?: number;
+  elosGridRange: number;
+  onError: (error: ELOSError) => void;
+  onSuccess: (result: AnalysisResult) => void;
+}
+
+interface AnalysisOptions {
+  markerOptions?: {
+    markerType: 'gcs' | 'observer' | 'repeater';
+    location: LocationData;
+    range: number;
+  };
+}
+
+export interface ELOSGridAnalysisRef {
+  runAnalysis: () => Promise<void>;
+  isAnalyzing: boolean;
+}
+
+// Utility function for generating points along a LineString
+const generatePointsAlongLine = (
+    line: GeoJSON.Feature<GeoJSON.LineString>,
+    stepSize: number
+  ): GeoJSON.FeatureCollection => {
+    const lineLength = turf.length(line, { units: 'meters' });
+    const numSteps = Math.ceil(lineLength / stepSize);
+    const points: GeoJSON.Feature[] = [];
+  
+    for (let i = 0; i <= numSteps; i++) {
+      const distance = i * stepSize;
+      const point = turf.along(line, distance, { units: 'meters' });
+      points.push(point);
+    }
+  
+    return turf.featureCollection(points);
+  };
+
+/**
+ * ELOS Grid Analysis Component
+ * Performs visibility analysis for drone flight paths using a grid-based approach
+ */
+const ELOSGridAnalysis = forwardRef<ELOSGridAnalysisRef, Props>((props, ref) => {
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const { map, flightPath, elosGridRange, onError, onSuccess, gridSize = 100 } = props;
+    const abortControllerRef = useRef<AbortController | null>(null);
+    const workerRef = useRef<Worker | null>(null);
+
+  // LRU Cache for results
+  const resultsCache = useRef(new Map<string, { 
+    timestamp: number;
+    result: AnalysisResult;
+  }>());
+  const MAX_CACHE_SIZE = 10;
+  const CACHE_EXPIRY = 1000 * 60 * 30; // 30 minutes
+
+  // Error handling utility
+  const createError = (message: string, code: ELOSError['code'], details?: unknown): ELOSError => {
+    const error = new Error(message) as ELOSError;
+    error.code = code;
+    error.details = details;
+    return error;
+  };
+
+  // Cache management
+  const manageCache = useCallback(() => {
+    const now = Date.now();
+    for (const [key, value] of resultsCache.current) {
+      if (now - value.timestamp > CACHE_EXPIRY) {
+        resultsCache.current.delete(key);
+      }
+    }
+    if (resultsCache.current.size > MAX_CACHE_SIZE) {
+      const oldest = [...resultsCache.current.entries()]
+        .sort(([, a], [, b]) => a.timestamp - b.timestamp)[0][0];
+      resultsCache.current.delete(oldest);
+    }
+  }, []);
+
+  // Get terrain elevation using Mapbox API
+  const getTerrainElevation = async (coordinates: Coordinates2D): Promise<number> => {
+    return map.queryTerrainElevation(coordinates) ?? 0;
+  };
+
+  const generateGrid = useCallback(async (
+    center?: [number, number],
+    range?: number
+  ): Promise<GridCell[]> => {
+    try {
+      if (center && range) {
+        // Marker-based grid generation
+        const point = turf.point(center);
+        const buffer = turf.buffer(point, range, { units: 'meters' });
+        const bounds = turf.bbox(buffer);
+  
+        if (!isValidBounds(bounds)) {
+          throw createError('Invalid bounds for marker grid', 'GRID_GENERATION');
+        }
+  
+        const grid = turf.pointGrid(bounds, gridSize, {
+          units: 'meters',
+          mask: buffer
+        });
+        
+        console.log('Generated marker grid features:', grid.features.length);
+  
+        // Process grid cells for marker
+        const cells = await Promise.all(
+          grid.features.map(async (point, index) => {
+            try {
+              const cell = turf.circle(point.geometry.coordinates, gridSize / 2, {
+                units: 'meters',
+                steps: 4,
+              });
+  
+              const elevation = await getTerrainElevation(point.geometry.coordinates as Coordinates2D)
+                .catch((e) => {
+                  console.error('Elevation fetch error for point:', point.geometry.coordinates, e);
+                  return 0; // Fallback elevation
+                });
+  
+              return {
+                id: `cell-${index}`,
+                geometry: cell.geometry as GeoJSON.Polygon,
+                properties: {
+                  visibility: 0,
+                  fullyVisible: false,
+                  elevation,
+                  lastAnalyzed: Date.now(),
+                },
+              };
+            } catch (e) {
+              console.error('Error processing marker grid cell:', index, e);
+              throw e;
+            }
+          })
+        );
+  
+        return cells;
+  
+      } else {
+        // Flight path grid generation
+        if (!flightPath?.features.length) {
+          throw createError('Flight path contains no valid features', 'INVALID_INPUT');
+        }
+  
+        // Extract waypoints from LineString
+        const waypoints = flightPath.features[0]?.geometry.type === 'LineString'
+          ? flightPath.features[0]?.geometry.coordinates
+          : [];
+  
+        // Validate waypoints
+        if (waypoints.length < 2) {
+          console.error('Flight path features:', flightPath.features);
+          throw createError('Insufficient waypoints for LineString', 'INVALID_INPUT');
+        }
+  
+        // Create LineString with 3D coordinates
+        const lineString = turf.lineString(waypoints, {
+          name: flightPath.features[0]?.properties?.name || 'Flight Path',
+          description: flightPath.features[0]?.properties?.description || '',
+        });
+        console.log('Generated LineString with altitude:', lineString);
+  
+        // Generate bounds and grid
+        const bounds = turf.bbox(lineString);
+        const margin = turf.lengthToDegrees(elosGridRange, 'meters');
+        const extendedBounds = [
+          bounds[0] - margin,
+          bounds[1] - margin,
+          bounds[2] + margin,
+          bounds[3] + margin,
+        ];
+        console.log('Flight path bounds:', bounds);
+        console.log('Margin (degrees):', margin);
+        console.log('Extended bounds:', extendedBounds);
+  
+        if (!isValidBounds(extendedBounds)) {
+          throw createError('Invalid extended bounds', 'GRID_GENERATION', extendedBounds);
+        }
+  
+        const options = {
+          units: 'meters',
+          mask: turf.buffer(lineString, elosGridRange, { units: 'meters' }),
+        };
+        console.log('Grid options:', options);
+  
+        const grid = turf.pointGrid(extendedBounds, gridSize, options);
+        console.log('Generated grid features:', grid.features.length);
+  
+        // Process grid cells...
+        const cells = await Promise.all(
+          grid.features.map(async (point, index) => {
+            try {
+              const cell = turf.circle(point.geometry.coordinates, gridSize / 2, {
+                units: 'meters',
+                steps: 4,
+              });
+  
+              const elevation = await getTerrainElevation(point.geometry.coordinates as Coordinates2D)
+                .catch((e) => {
+                  console.error('Elevation fetch error for point:', point.geometry.coordinates, e);
+                  return 0; // Fallback elevation
+                });
+  
+              return {
+                id: `cell-${index}`,
+                geometry: cell.geometry as GeoJSON.Polygon,
+                properties: {
+                  visibility: 0,
+                  fullyVisible: false,
+                  elevation,
+                  lastAnalyzed: Date.now(),
+                },
+              };
+            } catch (e) {
+              console.error('Error processing grid cell:', index, e);
+              throw e;
+            }
+          })
+        );
+
+        console.log('Generated cells:', cells.length);
+  
+        return cells;
+      }
+    } catch (error) {
+      console.error('Error in generateGrid:', error);
+      throw createError('Failed to generate analysis grid', 'GRID_GENERATION', error);
+    }
+  }, [flightPath, elosGridRange, gridSize, getTerrainElevation]);
+
+  // Enhanced visibility analysis with terrain consideration
+  const analyzeVisibility = useCallback(async (cells: GridCell[]): Promise<AnalysisResult> => {
+    const startTime = performance.now();
+
+    // Extract 3D coordinates from flight path
+    const flightCoordinates = flightPath.features[0].geometry.type === 'LineString'
+      ? (flightPath.features[0].geometry.coordinates as Coordinates3D[])
+      : [];
+
+    // Add logging before using flightCoordinates
+    console.log('Analysis parameters:', {
+      elosGridRange,
+      totalCells: cells.length,
+      flightPathPoints: flightCoordinates.length
+    });
+
+    // Validate that we have altitude data
+    if (!flightCoordinates.every(coord => coord.length === 3)) {
+      throw createError(
+        'Flight path must include altitude data',
+        'INVALID_INPUT',
+        'Missing altitude values in flight path coordinates'
+      );
+    }
+
+    const chunkSize = 50;
+    const results: GridCell[] = [];
+    let visibleCellCount = 0;
+    let totalVisibility = 0;
+
+    for (let i = 0; i < cells.length; i += chunkSize) {
+      if (abortControllerRef.current?.signal.aborted) {
+        throw createError('Analysis aborted', 'VISIBILITY_ANALYSIS');
+      }
+
+      const chunk = cells.slice(i, i + chunkSize);
+      const processedChunk = await Promise.all(chunk.map(async (cell) => {
+        try {
+          const visibility = await checkCellVisibility(cell, flightCoordinates);
+          const isFullyVisible = visibility === 100;
+          
+          if (isFullyVisible) visibleCellCount++;
+          totalVisibility += visibility;
+
+          return {
+            ...cell,
+            properties: {
+              ...cell.properties,
+              visibility,
+              fullyVisible: isFullyVisible
+            }
+          };
+        } catch (error) {
+          console.error('Error processing cell:', cell.id, error);
+          throw error;
+        }
+      }));
+
+      results.push(...processedChunk);
+    }
+
+    const analysisTime = performance.now() - startTime;
+    console.log('Analysis input cells:', cells.length);
+    console.log('Analysis result:', results.length);
+    return {
+      cells: results,
+      stats: {
+        totalCells: cells.length,
+        visibleCells: visibleCellCount,
+        averageVisibility: totalVisibility / cells.length,
+        analysisTime
+      }
+    };
+
+  }, [flightPath, elosGridRange]);
+
+  // Enhanced cell visibility checking with 3D coordinates and only points within gridrange
+  const checkCellVisibility = async (
+    cell: GridCell,
+    flightCoordinates: Coordinates3D[]
+  ): Promise<number> => {
+    const center = turf.center(cell.geometry);
+    const targetElevation = cell.properties.elevation ?? 0;
+    
+    let visiblePoints = 0;
+    let pointsInRange = 0;
+  
+    // For each point in flight path
+    for (const coord of flightCoordinates) {
+      // Calculate distance from this flight path point to the cell
+      const pointDistance = turf.distance(
+        [coord[0], coord[1]],
+        center.geometry.coordinates,
+        { units: 'meters' }
+      );
+  
+      // Only consider points within ELOS range
+      if (pointDistance <= elosGridRange) {
+        pointsInRange++;
+        
+        const isVisible = await checkLineOfSight(
+          coord,
+          [...center.geometry.coordinates, targetElevation] as Coordinates3D
+        );
+  
+        if (isVisible) {
+          visiblePoints++;
+        }
+      }
+    }
+  
+    // If no points were in range, return 0
+    if (pointsInRange === 0) {
+      return 0;
+    }
+  
+    // Calculate visibility percentage only from points within range
+    const visibility = (visiblePoints / pointsInRange) * 100;
+
+//    console.log('Cell Analysis:', {
+//      totalFlightPoints: flightCoordinates.length,
+//      pointsInRange,
+//      visiblePoints,
+//      visibility,
+//      cellCenter: center.geometry.coordinates
+//    });
+  
+    return visibility;
+  };
+
+  // Enhanced line of sight checking using flight plan altitudes and sampling terrain altitudes (3D LOS approach)
+  //  Offset to avoid 0 values interpolated over short distance e.g 100m grid distance.
+  const checkLineOfSight = async (
+    dronePoint: Coordinates3D,
+    targetPoint: Coordinates3D
+  ): Promise<boolean> => {
+    const [droneLng, droneLat, droneAltitude] = dronePoint;
+    const [targetLng, targetLat, targetElevation] = targetPoint;
+    
+    const MINIMUM_OFFSET = 1; // Just above terrain
+  
+    const distance = turf.distance(
+      [droneLng, droneLat],
+      [targetLng, targetLat],
+      { units: 'meters' }
+    );
+  
+    const sampleCount = Math.max(10, Math.ceil(distance / 50));
+    const points: Coordinates3D[] = [];
+    const pointDetails: any[] = [];
+  
+    for (let i = 0; i <= sampleCount; i++) {
+      const fraction = i / sampleCount;
+      
+      const lng = droneLng + fraction * (targetLng - droneLng);
+      const lat = droneLat + fraction * (targetLat - droneLat);
+      
+      // Modified interpolation with minimal offset
+      const interpolatedHeight = 
+        droneAltitude - 
+        ((droneAltitude - (targetElevation + MINIMUM_OFFSET)) * fraction);
+  
+      const terrainHeight = await getTerrainElevation([lng, lat]) ?? 0;
+  
+      points.push([lng, lat, interpolatedHeight]);
+      pointDetails.push({
+        fraction,
+        lng,
+        lat,
+        interpolatedHeight,
+        terrainHeight,
+        heightDifference: interpolatedHeight - terrainHeight
+      });
+  
+      if (terrainHeight > interpolatedHeight) {
+        return false;
+      }
+    }
+  
+    return true;
+  };
+  
+  const visualizeGrid = useCallback((analysisResult: AnalysisResult | { cells: GridCell[] }, layerId?: string) => {
+    try {
+      // Validate input
+      if (!analysisResult || !Array.isArray(analysisResult.cells)) {
+        console.error('Invalid analysis result:', analysisResult);
+        throw createError('Invalid analysis result', 'MAP_INTERACTION');
+      }
+  
+      console.log('VisualizeGrid called for layer:', layerId || MAP_LAYERS.ELOS_GRID);
+      
+      if (!map) {
+        throw createError('Map is not initialized', 'MAP_INTERACTION');
+      }
+  
+      if (!map.isStyleLoaded()) {
+        console.log('Map style not loaded, deferring visualization');
+        map.once('styledata', () => visualizeGrid(analysisResult, layerId));
+        return;
+      }
+  
+      const targetLayerId = layerId || MAP_LAYERS.ELOS_GRID;
+  
+      // Remove existing layer and source
+      if (map.getLayer(targetLayerId)) {
+        map.removeLayer(targetLayerId);
+      }
+      if (map.getSource(targetLayerId)) {
+        map.removeSource(targetLayerId);
+      }
+  
+      // Create GeoJSON
+      const geojson: GeoJSON.FeatureCollection = {
+        type: 'FeatureCollection',
+        features: analysisResult.cells.map(cell => ({
+          type: 'Feature',
+          geometry: cell.geometry,
+          properties: cell.properties
+        }))
+      };
+  
+      // Add source and layer
+      map.addSource(targetLayerId, {
+        type: 'geojson',
+        data: geojson
+      });
+  
+      map.addLayer({
+        id: targetLayerId,
+        type: 'fill',
+        source: targetLayerId,
+        layout: {
+          visibility: 'visible'
+        },
+        paint: {
+          'fill-color': [
+            'interpolate',
+            ['linear'],
+            ['get', 'visibility'],
+            0, '#d32f2f',
+            25, '#f57c00',
+            50, '#fbc02d',
+            75, '#7cb342',
+            100, '#1976d2'
+          ],
+          'fill-opacity': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            10, 0.7,
+            15, 0.5
+          ]
+        }
+      });
+  
+      layerManager.registerLayer(targetLayerId, true);
+  
+      let popup: mapboxgl.Popup | null = null;
+  
+      map.on('mousemove', targetLayerId, (e) => {
+        if (e.features?.length) {
+          const feature = e.features[0];
+          const visibility = feature.properties?.visibility?.toFixed(1);
+          const elevation = feature.properties?.elevation?.toFixed(1);
+  
+          if (popup) {
+            popup.remove();
+          }
+  
+          popup = new mapboxgl.Popup({ closeButton: false, closeOnMove: true })
+            .setLngLat(e.lngLat)
+            .setHTML(`
+              <div class="bg-white text-black p-2 rounded shadow">
+                <strong>Visibility Analysis</strong>
+                <hr class="my-1 border-gray-300"/>
+                <div class="grid grid-cols-2 gap-1">
+                  <span>Visibility:</span>
+                  <strong>${visibility || 'N/A'}%</strong>
+                  
+                  <span>Terrain Elevation:</span>
+                  <strong>${elevation || 'N/A'}m</strong>
+                  
+                  <span>Distance Range:</span>
+                  <strong>${elosGridRange}m</strong>
+                  
+                  <span>Analysis Method:</span>
+                  <strong>3D Terrain Sampling</strong>
+                </div>
+                <p class="text-xs text-gray-600 mt-2">
+                  Checks line of sight across multiple terrain points
+                </p>
+              </div>
+            `)
+            .addTo(map);
+        }
+      });
+  
+      map.on('mouseleave', targetLayerId, () => {
+        if (popup) {
+          popup.remove();
+          popup = null;
+        }
+      });
+  
+    } catch (error) {
+      console.error('Error in visualizeGrid:', error);
+      throw createError(
+        'Failed to visualize analysis results',
+        'MAP_INTERACTION',
+        error
+      );
+    }
+  }, [map, elosGridRange]);
+
+  const analyzeFromPoint = useCallback(async (
+    cells: GridCell[],
+    markerOptions: AnalysisOptions['markerOptions']
+  ): Promise<AnalysisResult> => {
+    const startTime = performance.now();
+    const results: GridCell[] = [];
+    let visibleCellCount = 0;
+    let totalVisibility = 0;
+  
+    // Process cells in chunks
+    const chunkSize = 50;
+    for (let i = 0; i < cells.length; i += chunkSize) {
+      const chunk = cells.slice(i, i + chunkSize);
+      const processedChunk = await Promise.all(chunk.map(async (cell) => {
+        const center = turf.center(cell.geometry);
+        const isVisible = await checkLineOfSight(
+          [markerOptions.location.lng, markerOptions.location.lat, markerOptions.location.elevation ?? 0],
+          [...center.geometry.coordinates, cell.properties.elevation ?? 0]
+        );
+  
+        if (isVisible) visibleCellCount++;
+        const visibility = isVisible ? 100 : 0;
+        totalVisibility += visibility;
+  
+        return {
+          ...cell,
+          properties: {
+            ...cell.properties,
+            visibility,
+            fullyVisible: isVisible
+          }
+        };
+      }));
+      results.push(...processedChunk);
+    }
+  
+    return {
+      cells: results,
+      stats: {
+        totalCells: cells.length,
+        visibleCells: visibleCellCount,
+        averageVisibility: totalVisibility / cells.length,
+        analysisTime: performance.now() - startTime
+      }
+    };
+  }, [checkLineOfSight]);
+
+  // Main analysis function
+  const runAnalysis = useCallback(async (options?: AnalysisOptions) => {
+    console.log("Starting ELOS Grid Analysis", options ? "for marker" : "for flight path");
+    try {
+      setIsAnalyzing(true);
+      await new Promise(resolve => setTimeout(resolve, 100));
+      abortControllerRef.current = new AbortController();
+  
+      if (options?.markerOptions) {
+        // Marker-based analysis
+        if (!map) {
+          throw createError("Map is not initialized", "INVALID_INPUT");
+        }
+  
+        const { markerType, location, range } = options.markerOptions;
+        console.log(`Starting marker analysis for ${markerType}`, location);
+  
+        // Generate grid for marker
+        const cells = await generateGrid(
+          [location.lng, location.lat],
+          range
+        );
+        console.log("Grid generated with", cells.length, "cells for marker");
+  
+        // Perform visibility analysis from marker point
+        const analysisResult = await analyzeFromPoint(cells, options.markerOptions);
+        console.log(`Visibility analysis completed for ${markerType} with`, analysisResult.stats.visibleCells, "visible cells");
+  
+        // Visualize results with marker-specific layer
+        console.log("Visualizing results on the map...");
+        await visualizeGrid(analysisResult, `${markerType}-grid-layer`);
+        console.log("Grid visualization completed for marker");
+  
+        await new Promise(resolve => setTimeout(resolve, 100));
+        onSuccess(analysisResult);
+  
+      } else {
+        // Original flight path analysis
+        if (!flightPath || !map) {
+          throw createError("Please upload a flight plan first", "INVALID_INPUT");
+        }
+  
+        const cacheKey = JSON.stringify({
+          flightPath,
+          gridSize,
+          elosGridRange
+        });
+  
+        // Check cache
+        const cached = resultsCache.current.get(cacheKey);
+        if (cached && Date.now() - cached.timestamp < CACHE_EXPIRY) {
+          console.log("Using cached results");
+          visualizeGrid(cached.result);
+          onSuccess(cached.result);
+          return;
+        }
+  
+        // Generate grid
+        const cells = await generateGrid();
+        console.log("Grid generated with", cells.length, "cells");
+  
+        // Perform visibility analysis
+        const analysisResult = await analyzeVisibility(cells);
+        console.log("Visibility analysis completed with", analysisResult.stats.visibleCells, "visible cells");
+  
+        // Cache results
+        resultsCache.current.set(cacheKey, {
+          timestamp: Date.now(),
+          result: analysisResult
+        });
+        manageCache();
+
+        if (!analysisResult || !analysisResult.cells) {
+          throw createError("Analysis produced invalid results", "VISIBILITY_ANALYSIS");
+        }
+    
+        console.log("Analysis result:", {
+          totalCells: analysisResult.cells.length,
+          stats: analysisResult.stats
+        });
+    
+        await visualizeGrid(analysisResult);
+  
+        // Visualize results
+        console.log("Visualizing results on the map...");
+        await visualizeGrid(analysisResult);
+        console.log("Grid visualization completed");
+  
+        await new Promise(resolve => setTimeout(resolve, 100));
+        onSuccess(analysisResult);
+      }
+  
+      setIsAnalyzing(false);
+      console.log("Analysis completed successfully");
+  
+    } catch (error) {
+      console.error("Error in runAnalysis:", error);
+      const elosError = error as ELOSError;
+      await new Promise(resolve => setTimeout(resolve, 100));
+      onError(elosError);
+      setIsAnalyzing(false);
+    }
+  }, [
+    map,
+    flightPath,
+    gridSize,
+    elosGridRange,
+    generateGrid,
+    analyzeVisibility,
+    analyzeFromPoint,
+    visualizeGrid,
+    onSuccess,
+    onError,
+    manageCache,
+    createError
+  ]);
+  
+
+  // Expose run analysis method
+  useImperativeHandle(ref, () => ({
+    runAnalysis,
+    isAnalyzing
+  }), [runAnalysis, isAnalyzing]);
+
+  // Cleanup
+  useEffect(() => {
+    return () => {
+      if (workerRef.current) {
+        workerRef.current.terminate();
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
+  return null;
+
+});
+
+export default ELOSGridAnalysis;

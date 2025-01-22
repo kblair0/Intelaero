@@ -3,7 +3,27 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import Map, { MapRef } from "./Map";
 import ObstacleAssessment from "./ObstacleAssessment";
-import { ViewshedError } from "./ViewshedAnalysis";
+import ELOSGridAnalysis from "./ELOSGridAnalysis";
+import { layerManager, MAP_LAYERS } from './LayerManager';
+
+// ELOS related types
+interface ELOSAnalysisState {
+  isAnalyzing: boolean;
+  error: string | null;
+  stats: {
+    visibleCells: number;
+    totalCells: number;
+    averageVisibility: number;
+    analysisTime: number;
+  } | null;
+}
+
+interface Location {
+  lng: number;
+  lat: number;
+  elevation: number | null;
+}
+
 
 const Calculator: React.FC = () => {
   const [batteryCapacity, setBatteryCapacity] = useState<string>("28000");
@@ -20,21 +40,84 @@ const Calculator: React.FC = () => {
   const [showAssessments, setShowAssessments] = useState(false);
   //Elos Variables
   const [showElos, setShowElos] = useState(false);
+  const elosGridRef = useRef<ELOSGridAnalysisRef>(null);
   const [gcsLocation, setGcsLocation] = useState<{ lng: number; lat: number; elevation: number | null } | null>(null);
   const [observerLocation, setObserverLocation] = useState<{ lng: number; lat: number; elevation: number | null } | null>(null);
   const [repeaterLocation, setRepeaterLocation] = useState<{ lng: number; lat: number; elevation: number | null } | null>(null);
   const [rawFlightPlan, setRawFlightPlan] = useState<GeoJSON.FeatureCollection | null>(null); // Uploaded but unprocessed
   const [processedFlightPlan, setProcessedFlightPlan] = useState<GeoJSON.FeatureCollection | null>(null); // To be used for assessments
-  //Viewshed
-  const [maxRange, setMaxRange] = useState<number>(5000); 
-  const [angleStep, setAngleStep] = useState<number>(5);
-  const [samplingInterval, setSamplingInterval] = useState<number>(50);
-  const [skipUnion, setSkipUnion] = useState<boolean>(true);
-  const [viewshedLoading, setViewshedLoading] = useState(false);
-  const [viewshedError, setViewshedError] = useState<ViewshedError | null>(null);
+  const [elosState, setElosState] = useState<ELOSAnalysisState>({
+    isAnalyzing: false,
+    error: null,
+    stats: null
+  });
+  const [elosGridRange, setElosGridRange] = useState<number>(3000);
+  // Markers for LOS
+  const [markerGridRanges, setMarkerGridRanges] = useState({
+    gcs: 3000,
+    observer: 3000,
+    repeater: 3000
+  });
+    const [markerElevationOffsets, setMarkerElevationOffsets] = useState({
+    gcs: 0,
+    observer: 0,
+    repeater: 0
+  });
 
-  
   const mapRef = useRef<MapRef | null>(null);
+
+  const handleElosAnalysis = async () => {
+    console.log("handleElosAnalysis triggered");
+    if (!rawFlightPlan || !mapRef.current) {
+      setElosState(prev => ({
+        ...prev,
+        error: "Please upload a flight plan first"
+      }));
+      return;
+    }
+  
+    try {
+      // Set analyzing state
+      setElosState(prev => ({
+        ...prev,
+        isAnalyzing: true,
+        error: null
+      }));
+  
+      await new Promise(resolve => setTimeout(resolve, 0));
+  
+      if (!mapRef.current?.runElosAnalysis) {
+        throw new Error("ELOS analysis method not available");
+      }
+      
+      await mapRef.current.runElosAnalysis();
+      console.log("ELOS analysis completed successfully");
+      
+      // Explicitly set analyzing to false after success
+      setElosState(prev => ({
+        ...prev,
+        isAnalyzing: false,
+        error: null
+      }));
+  
+    } catch (error) {
+      console.error("ELOS Analysis failed:", error);
+      setElosState(prev => ({
+        ...prev,
+        isAnalyzing: false,  // Make sure to set this to false on error too
+        error: error instanceof Error ? error.message : "Analysis failed"
+      }));
+    }
+  };
+  // ELOS Layer - Visibility Toggler
+  const handleToggleElosLayer = () => {
+    if (mapRef.current) {
+      mapRef.current.toggleLayerVisibility(MAP_LAYERS.ELOS_GRID);
+    }
+  };
+
+
+
   
   //UI for Collapsable Sections
   // const [showObstacleAssessment, setShowObstacleAssessment] = useState(false);
@@ -110,7 +193,7 @@ const Calculator: React.FC = () => {
   };
 
   // Just below your other helper functions
-const calculateReserveFlightTime = (): string => {
+  const calculateReserveFlightTime = (): string => {
   // If there's no flight plan distance, we can’t compute a "reserve" time
   if (!flightPlanDistance || flightPlanDistance === 0) {
     return "N/A";
@@ -152,18 +235,7 @@ const calculateReserveFlightTime = (): string => {
           onGcsLocationChange={setGcsLocation}
           onObserverLocationChange={setObserverLocation}
           onRepeaterLocationChange={setRepeaterLocation}
-          maxRange={maxRange}
-          angleStep={angleStep}
-          samplingInterval={samplingInterval}
-          skipUnion={skipUnion}
-          viewshedLoading={setViewshedLoading}
-          onError={(error: ViewshedError) => {
-            setViewshedError(error);
-            console.error('Viewshed error:', error);
-          }}
-          onSuccess={() => {
-            setViewshedError(null);
-          }}
+          elosGridRange={elosGridRange}          
         />
         </div>
       </div>
@@ -365,40 +437,38 @@ const calculateReserveFlightTime = (): string => {
             )}   
       
             {/* Obstacle Assessment Results */}
-            {processedFlightPlan && (
-              <div className="bg-white p-4 rounded-md shadow-md mt-4">
-                {/* Heading and Enlarge Graph button remain outside the 'relative' container */}
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-semibold">Obstacle Assessment</h2>
-                  <button
-                    onClick={handleEnlargeGraph}
-                    className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
-                  >
-                    Enlarge Graph
-                  </button>
-                </div>
-
-                {/* Only this container will get "covered" by the spinner overlay */}
-                <div className="relative">
-                  <ObstacleAssessment
-                    flightPlan={processedFlightPlan}
-                    onDataProcessed={(data) => {
-                      console.log("Obstacle assessment data processed:", data);
-                      setLoading(false);
-                    }}
-                  />
-
-                  {/* Overlay the spinner here so it doesn't cover the heading */}
-                  {loading && (
-                    <div className="absolute inset-0 flex justify-center items-center bg-white z-50">
-                      <div className="spinner-border animate-spin text-blue-500" role="status">
-                        <span className="sr-only">Loading...</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
+            {processedFlightPlan && mapRef.current && (
+            <div className="bg-white p-4 rounded-md shadow-md mt-4">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold">Obstacle Assessment</h2>
+                <button
+                  onClick={handleEnlargeGraph}
+                  className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+                >
+                  Enlarge Graph
+                </button>
               </div>
-            )}
+
+              <div className="relative">
+                <ObstacleAssessment
+                  flightPlan={processedFlightPlan}
+                  map={mapRef.current}
+                  onDataProcessed={(data) => {
+                    console.log("Obstacle assessment data processed:", data);
+                    setLoading(false);
+                  }}
+                />
+
+                {loading && (
+                  <div className="absolute inset-0 flex justify-center items-center bg-white z-50">
+                    <div className="spinner-border animate-spin text-blue-500" role="status">
+                      <span className="sr-only">Loading...</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
             {/* Modal for Enlarged Obstacle Assessment */}
             {showObstacleModal && processedFlightPlan && (
@@ -449,231 +519,368 @@ const calculateReserveFlightTime = (): string => {
               </div>
             )}
 
-    {showElos && (
-      <div className="mt-4 bg-white p-4 rounded-md shadow-md">
-        <h2 className="text-xl font-semibold mb-4 text-gray-700">⚡️ ELOS Details</h2>
 
-        {/* Viewshed Analysis Inputs */}
-        <div className="mb-4">
-            <h3 className="text-md font-semibold mb-2">Viewshed Analysis Settings</h3>
-            
-            <div className="flex flex-col space-y-2">
-              <div>
-                <label className="text-sm font-semibold mb-2">Max Range (m):</label>
-                <input
-                  type="number"
-                  value={maxRange}
-                  onChange={(e) => setMaxRange(parseInt(e.target.value, 10))}
-                  className="w-full px-2 py-1 border rounded"
-                />
-              </div>
+              {showElos && (
+                <div className="mt-4 bg-white p-4 rounded-md shadow-md">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-semibold text-gray-700">⚡️ ELOS Analysis</h2>
+                    <label className="toggle-switch">
+                      <input
+                        type="checkbox"
+                        onChange={handleToggleElosLayer}
+                      />
+                      <span className="toggle-slider"></span>
+                      <span className="ml-3 text-gray-700 text-xs font-medium">
+                        ELOS Grid Visibility
+                      </span>
+                    </label>
+                  </div>
+                
+                {/* ELOS Grid Controls */}
+                <div className="mb-6">
+                  <h3 className="text-md font-semibold mb-2">Grid Analysis Settings</h3>
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-sm font-medium text-gray-600">Grid Range: {elosGridRange}m</span>
+                    <input
+                      type="range"
+                      min="500"
+                      max="5000"
+                      step="100"
+                      value={elosGridRange}
+                      onChange={(e) => setElosGridRange(Number(e.target.value))}
+                      className="w-2/3 h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
 
-              <div>
-                <label className="text-sm font-semibold mb-2">Angle Step (°):</label>
-                <input
-                  type="number"
-                  value={angleStep}
-                  onChange={(e) => setAngleStep(parseInt(e.target.value, 10))}
-                  className="w-full px-2 py-1 border rounded"
-                />
-              </div>
+                  <button
+                    onClick={handleElosAnalysis}
+                    disabled={elosState.isAnalyzing || !rawFlightPlan}
+                    className={`w-full px-4 py-2 rounded-md text-white font-medium transition-colors
+                      ${elosState.isAnalyzing 
+                        ? 'bg-gray-400 cursor-not-allowed opacity-50'
+                        : 'bg-blue-500 hover:bg-blue-600 active:bg-blue-700'}
+                      ${!rawFlightPlan ? 'bg-gray-300 cursor-not-allowed opacity-50' : ''}
+                      `}
+                  >
+                    {elosState.isAnalyzing ? 'Analyzing...' : 'Run ELOS Analysis'}
+                    {!rawFlightPlan && <span className="ml-2 text-xs">(Upload flight plan first)</span>}
+                  </button>
+                </div>
 
-              <div>
-                <label className="text-sm font-semibold mb-2">Sampling Interval (m) along Flight Path:</label>
-                <input
-                  type="number"
-                  value={samplingInterval}
-                  onChange={(e) => setSamplingInterval(parseInt(e.target.value, 10))}
-                  className="w-full px-2 py-1 border rounded"
-                />
-                <button
-                  onClick={() => {
-                    setViewshedError(null); // Clear any previous errors
-                    try {
-                      mapRef.current?.runViewshed();
-                    } catch (error) {
-                      if (error instanceof ViewshedError) {
-                        setViewshedError(error);
-                      } else {
-                        setViewshedError(new ViewshedError('Failed to run viewshed analysis', 'UNKNOWN_ERROR'));
-                      }
-                    }
-                  }}
-                  className="bg-green-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 mt-4"
-                  disabled={viewshedLoading}
-                >
-                  {viewshedLoading ? "Loading Viewshed..." : "Run Viewshed"}
-                </button>
-                {viewshedError && (
-                  <div className="mt-2 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative">
-                    <strong className="font-bold">Error: </strong>
-                    <span className="block sm:inline">{viewshedError.message}</span>
-                    {viewshedError.code && (
-                      <span className="block text-sm mt-1">Code: {viewshedError.code}</span>
-                    )}
+                {/* Error Display */}
+                {elosState.error && (
+                  <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+                    {elosState.error}
+                  </div>
+                )}
+
+                {/* Analysis Results */}
+                {elosState.stats && (
+                  <div className="mb-6 p-4 bg-gray-50 rounded-md">
+                    <h3 className="text-lg font-semibold mb-2">Analysis Results</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-sm text-gray-600">Visible Areas</p>
+                        <p className="text-lg font-medium">
+                          {elosState.stats.visibleCells} / {elosState.stats.totalCells} cells
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-600">Average Visibility</p>
+                        <p className="text-lg font-medium">
+                          {elosState.stats.averageVisibility.toFixed(1)}%
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-600">Analysis Time</p>
+                        <p className="text-lg font-medium">
+                          {(elosState.stats.analysisTime / 1000).toFixed(1)}s
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Location Information */}
+                <div className="grid gap-4">
+                  <LocationDisplay title="GCS Location" location={gcsLocation} />
+                  <LocationDisplay title="Observer Location" location={observerLocation} />
+                  <LocationDisplay title="Repeater Location" location={repeaterLocation} />
+                </div>
+
+                <div className="mt-4 p-4 bg-gray-50 rounded-md">
+                {/* GCS Controls */}
+                {gcsLocation && (
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-sm font-semibold text-blue-600">GCS Grid Controls 📡</h4>
+                      <label className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          onChange={() => layerManager.toggleLayerVisibility('gcs-grid-layer')}
+                          className="form-checkbox h-4 w-4 text-blue-600"
+                        />
+                        <span className="text-xs text-gray-600">Show Grid</span>
+                      </label>
+                    </div>
+                    {/* Add elevation offset control */}
+                    <div className="flex items-center space-x-2 mb-2">
+                      <span className="text-xs text-gray-600">Elevation Offset (m):</span>
+                      <input
+                        type="number"
+                        value={markerElevationOffsets.gcs}
+                        onChange={(e) => setMarkerElevationOffsets(prev => ({
+                          ...prev,
+                          gcs: Number(e.target.value)
+                        }))}
+                        className="w-20 px-2 py-1 text-xs border rounded"
+                      />
+                    </div>
+                    {/* Rest of your existing controls */}
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="range"
+                        min="500"
+                        max="5000"
+                        step="100"
+                        value={markerGridRanges.gcs}
+                        onChange={(e) => setMarkerGridRanges(prev => ({
+                          ...prev,
+                          gcs: Number(e.target.value)
+                        }))}
+                        className="flex-grow h-2 bg-blue-100 rounded-lg appearance-none cursor-pointer"
+                      />
+                      <span className="text-xs text-gray-600 w-16">{markerGridRanges.gcs}m</span>
+                      <button
+                        onClick={() => {
+                          if (mapRef.current && gcsLocation) {
+                            mapRef.current.runElosAnalysis({
+                              markerType: 'gcs',
+                              location: {
+                                ...gcsLocation,
+                                elevation: (gcsLocation.elevation || 0) + markerElevationOffsets.gcs
+                              },
+                              range: markerGridRanges.gcs
+                            });
+                          }
+                        }}
+                        className="px-3 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
+                      >
+                        Analyze
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Observer Controls */}
+                {observerLocation && (
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-sm font-semibold text-green-600">Observer Grid Controls 🔭</h4>
+                      <label className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          onChange={() => layerManager.toggleLayerVisibility('observer-grid-layer')}
+                          className="form-checkbox h-4 w-4 text-green-600"
+                        />
+                        <span className="text-xs text-gray-600">Show Grid</span>
+                      </label>
+                    </div>
+                    {/* Add elevation offset control */}
+                    <div className="flex items-center space-x-2 mb-2">
+                      <span className="text-xs text-gray-600">Elevation Offset (m):</span>
+                      <input
+                        type="number"
+                        value={markerElevationOffsets.observer}
+                        onChange={(e) => setMarkerElevationOffsets(prev => ({
+                          ...prev,
+                          observer: Number(e.target.value)
+                        }))}
+                        className="w-20 px-2 py-1 text-xs border rounded"
+                      />
+                    </div>
+                    {/* Rest of controls */}
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="range"
+                        min="500"
+                        max="5000"
+                        step="100"
+                        value={markerGridRanges.observer}
+                        onChange={(e) => setMarkerGridRanges(prev => ({
+                          ...prev,
+                          observer: Number(e.target.value)
+                        }))}
+                        className="flex-grow h-2 bg-green-100 rounded-lg appearance-none cursor-pointer"
+                      />
+                      <span className="text-xs text-gray-600 w-16">{markerGridRanges.observer}m</span>
+                      <button
+                        onClick={() => {
+                          if (mapRef.current && observerLocation) {
+                            mapRef.current.runElosAnalysis({
+                              markerType: 'observer',
+                              location: {
+                                ...observerLocation,
+                                elevation: (observerLocation.elevation || 0) + markerElevationOffsets.observer
+                              },
+                              range: markerGridRanges.observer
+                            });
+                          }
+                        }}
+                        className="px-3 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600"
+                      >
+                        Analyze
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Repeater Controls */}
+                {repeaterLocation && (
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-sm font-semibold text-red-600">Repeater Grid Controls ⚡️</h4>
+                      <label className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          onChange={() => layerManager.toggleLayerVisibility('repeater-grid-layer')}
+                          className="form-checkbox h-4 w-4 text-red-600"
+                        />
+                        <span className="text-xs text-gray-600">Show Grid</span>
+                      </label>
+                    </div>
+                    {/* Add elevation offset control */}
+                    <div className="flex items-center space-x-2 mb-2">
+                      <span className="text-xs text-gray-600">Elevation Offset (m):</span>
+                      <input
+                        type="number"
+                        value={markerElevationOffsets.repeater}
+                        onChange={(e) => setMarkerElevationOffsets(prev => ({
+                          ...prev,
+                          repeater: Number(e.target.value)
+                        }))}
+                        className="w-20 px-2 py-1 text-xs border rounded"
+                      />
+                    </div>
+                    {/* Rest of controls */}
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="range"
+                        min="500"
+                        max="5000"
+                        step="100"
+                        value={markerGridRanges.repeater}
+                        onChange={(e) => setMarkerGridRanges(prev => ({
+                          ...prev,
+                          repeater: Number(e.target.value)
+                        }))}
+                        className="flex-grow h-2 bg-red-100 rounded-lg appearance-none cursor-pointer"
+                      />
+                      <span className="text-xs text-gray-600 w-16">{markerGridRanges.repeater}m</span>
+                      <button
+                        onClick={() => {
+                          if (mapRef.current && repeaterLocation) {
+                            mapRef.current.runElosAnalysis({
+                              markerType: 'repeater',
+                              location: {
+                                ...repeaterLocation,
+                                elevation: (repeaterLocation.elevation || 0) + markerElevationOffsets.repeater
+                              },
+                              range: markerGridRanges.repeater
+                            });
+                          }
+                        }}
+                        className="px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600"
+                      >
+                        Analyze
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {/* No markers message */}
+                {!gcsLocation && !observerLocation && !repeaterLocation && (
+                  <div className="text-sm text-gray-500 text-center py-2">
+                    Add markers to the map to see grid controls
                   </div>
                 )}
               </div>
 
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={skipUnion}
-                  onChange={(e) => setSkipUnion(e.target.checked)}
-                  id="skipUnion"
-                />
-                <label htmlFor="skipUnion" className="ml-2">
-                  Skip Polygon Union (better performance)
-                </label>
-              </div>
-            </div>
-          </div>
 
-        {/* GCS Details */}
-          <div className="mb-4">
-            <h3 className="text-sm font-semibold mb-2">GCS Location</h3>
-            
-            <div className="flex items-center space-x-2 text-xs">
-              <div className="flex flex-col">
-                <label className="font-medium mb-1">Lat</label>
-                <input
-                  className="w-20 px-1 py-1 rounded bg-gray-200 text-black placeholder-gray-400 text-center"
-                  type="text"
-                  readOnly
-                  value={gcsLocation ? gcsLocation.lat.toFixed(4) : "Not set"}
-                />
+                {/* ELOS Grid Analysis Component */}
+                {rawFlightPlan && mapRef.current && (
+                  <ELOSGridAnalysis
+                    ref={elosGridRef}
+                    map={mapRef.current}
+                    flightPath={rawFlightPlan}
+                    elosGridRange={elosGridRange}
+                    onError={async (error) => {
+                      setElosState(prev => ({
+                        ...prev,
+                        isAnalyzing: false,
+                        error: error.message
+                      }));
+                    }}
+                    onSuccess={async (result) => {
+                      console.log("Calculator: onSuccess called with result:", result);
+                      setElosState(prev => ({
+                        ...prev,
+                        isAnalyzing: false,
+                        error: null,
+                        stats: {
+                          visibleCells: result.stats.visibleCells,
+                          totalCells: result.stats.totalCells,
+                          averageVisibility: result.stats.averageVisibility,
+                          analysisTime: result.stats.analysisTime
+                        }
+                      }));
+                    }}
+                  />
+                )}
               </div>
-
-              <div className="flex flex-col">
-                <label className="font-medium mb-1">Lng</label>
-                <input
-                  className="w-20 px-1 py-1 rounded bg-gray-200 text-black placeholder-gray-400 text-center"
-                  type="text"
-                  readOnly
-                  value={gcsLocation ? gcsLocation.lng.toFixed(4) : "Not set"}
-                />
-              </div>
-
-              <div className="flex flex-col">
-                <label className="font-medium mb-1">Elev</label>
-                <input
-                  className="w-20 px-1 py-1 rounded bg-gray-200 text-black placeholder-gray-400 text-center"
-                  type="text"
-                  readOnly
-                  value={
-                    gcsLocation
-                      ? gcsLocation.elevation?.toFixed(4) ?? "N/A"
-                      : "Not set"
-                  }
-                />
-              </div>
-            </div>
-          </div>
-
-
-        {/* Repeater Details */}
-          <div className="mb-4">
-            <h3 className="text-sm font-semibold mb-2">Repeater Location</h3>
-            
-            <div className="flex items-center space-x-2 text-xs">
-              <div className="flex flex-col">
-                <label className="font-medium mb-1">Lat</label>
-                <input
-                  className="w-20 px-1 py-1 rounded bg-gray-200 text-black placeholder-gray-400 text-center"
-                  type="text"
-                  readOnly
-                  value={
-                    repeaterLocation
-                      ? repeaterLocation.lat.toFixed(4)
-                      : "Not set"
-                  }
-                />
-              </div>
-
-              <div className="flex flex-col">
-                <label className="font-medium mb-1">Lng</label>
-                <input
-                  className="w-20 px-1 py-1 rounded bg-gray-200 text-black placeholder-gray-400 text-center"
-                  type="text"
-                  readOnly
-                  value={
-                    repeaterLocation
-                      ? repeaterLocation.lng.toFixed(4)
-                      : "Not set"
-                  }
-                />
-              </div>
-
-              <div className="flex flex-col">
-                <label className="font-medium mb-1">Elev</label>
-                <input
-                  className="w-20 px-1 py-1 rounded bg-gray-200 text-black placeholder-gray-400 text-center"
-                  type="text"
-                  readOnly
-                  value={
-                    repeaterLocation
-                      ? repeaterLocation.elevation?.toFixed(4) ?? "N/A"
-                      : "Not set"
-                  }
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Observer Details */}
-          <div className="mb-4">
-            <h3 className="text-sm font-semibold mb-2">Observer Location</h3>
-            
-            <div className="flex items-center space-x-2 text-xs">
-              <div className="flex flex-col">
-                <label className="font-medium mb-1">Lat</label>
-                <input
-                  className="w-20 px-1 py-1 rounded bg-gray-200 text-black placeholder-gray-400 text-center"
-                  type="text"
-                  readOnly
-                  value={
-                    observerLocation
-                      ? observerLocation.lat.toFixed(4)
-                      : "Not set"
-                  }
-                />
-              </div>
-
-              <div className="flex flex-col">
-                <label className="font-medium mb-1">Lng</label>
-                <input
-                  className="w-20 px-1 py-1 rounded bg-gray-200 text-black placeholder-gray-400 text-center"
-                  type="text"
-                  readOnly
-                  value={
-                    observerLocation
-                      ? observerLocation.lng.toFixed(4)
-                      : "Not set"
-                  }
-                />
-              </div>
-
-              <div className="flex flex-col">
-                <label className="font-medium mb-1">Elev</label>
-                <input
-                  className="w-20 px-1 py-1 rounded bg-gray-200 text-black placeholder-gray-400 text-center"
-                  type="text"
-                  readOnly
-                  value={
-                    observerLocation
-                      ? observerLocation.elevation?.toFixed(4) ?? "N/A"
-                      : "Not set"
-                  }
-                />
-              </div>
-            </div>
+            )}
           </div>
         </div>
-      )}
       </div>
+    );
+  };
+
+  // Location Display Component
+  const LocationDisplay: React.FC<{
+    title: string;
+    location: Location | null;
+    }> = ({ title, location }) => (
+    <div className="p-3 bg-gray-50 rounded-md">
+    <h4 className="text-sm font-semibold mb-2">{title}</h4>
+      <div className="grid grid-cols-3 gap-2 text-xs">
+    <div>
+      <label className="block text-gray-600">Lat</label>
+      <input
+        className="w-full px-2 py-1 bg-gray-200 rounded text-center text-black"
+        type="text"
+        readOnly
+        value={location ? location.lat.toFixed(4) : "Not set"}
+      />
     </div>
+  <div>
+    <label className="block text-gray-600">Lng</label>
+    <input
+      className="w-full px-2 py-1 bg-gray-200 rounded text-center text-black"
+      type="text"
+      readOnly
+      value={location ? location.lng.toFixed(4) : "Not set"}
+    />
+  </div>
+  <div>
+    <label className="block text-gray-600">Elev</label>
+    <input
+      className="w-full px-2 py-1 bg-gray-200 rounded text-center text-black"
+      type="text"
+      readOnly
+      value={location ? location.elevation?.toFixed(4) ?? "N/A" : "Not set"}
+    />
     </div>
+  </div>
+</div>
   );
-};
 
 export default Calculator;
