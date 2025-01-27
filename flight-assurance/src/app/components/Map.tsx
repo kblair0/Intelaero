@@ -511,6 +511,7 @@ useImperativeHandle(ref, () => ({
         section: 'margin-bottom: 8px;',
         label: 'color: #4a5568; font-size: 12px; display: block; margin-bottom: 4px;',
         value: 'color: #1a202c; font-size: 12px; font-weight: 500;',
+        losButton: 'background: #4a5568; color: white; border: none; padding: 4px 8px; border-radius: 4px; margin: 2px; font-size: 12px; cursor: pointer; width: 100%;',
       };
     
       const markerInfo = {
@@ -522,25 +523,70 @@ useImperativeHandle(ref, () => ({
       const { icon, title, color } = markerInfo[markerType];
     
       popupDiv.innerHTML = `
-        <div style="${styles.container}">
-          <div style="${styles.header}">
-            <strong style="color: black; font-size: 14px;">${title} ${icon}</strong>
-            <button id="delete-${markerType}-btn" style="${styles.deleteBtn}">X</button>
-          </div>
-          
-          <div style="${styles.section}">
-            <label style="${styles.label}">Ground Elevation:</label>
-            <span style="${styles.value}">${currentElevation.toFixed(1)}m ASL</span>
-          </div>
+      <div style="${styles.container}">
+        <div style="${styles.header}">
+          <strong style="color: black; font-size: 14px;">${title} ${icon}</strong>
+          <button id="delete-${markerType}-btn" style="${styles.deleteBtn}">X</button>
         </div>
-      `;
-    
-      // Delete button handler
-      popupDiv.querySelector(`#delete-${markerType}-btn`)?.addEventListener('click', onDelete);
-    
-      return new mapboxgl.Popup({ closeButton: false }).setDOMContent(popupDiv);
-    };
-    
+        
+        <div style="${styles.section}">
+          <label style="${styles.label}">Ground Elevation:</label>
+          <span style="${styles.value}">${currentElevation.toFixed(1)}m ASL</span>
+        </div>
+  
+        <div style="${styles.section}" id="los-buttons">
+        </div>
+      </div>
+    `;
+  
+    // Add LOS check buttons for other markers
+    const losButtons = popupDiv.querySelector('#los-buttons');
+    if (losButtons) {
+      // Get current locations and their types
+      const markerLocations = {
+        gcs: gcsLocation,
+        observer: observerLocation,
+        repeater: repeaterLocation
+      };
+  
+      // Add buttons for other markers
+      Object.entries(markerLocations).forEach(([type, location]) => {
+        if (type !== markerType && location) {
+          const button = document.createElement('button');
+          button.style.cssText = styles.losButton;
+          button.textContent = `Check LOS to ${type.toUpperCase()}`;
+          
+          button.onclick = async () => {
+            const currentLoc = markerLocations[markerType as keyof typeof markerLocations];
+            if (currentLoc && location) {
+              console.log('Checking LOS between:', currentLoc, location);
+              const hasLOS = await checkLineOfSight(currentLoc, location);
+              console.log('LOS result:', hasLOS);
+              
+              // Make the style changes more explicit
+              button.style.cssText = `
+                ${styles.losButton};
+                background-color: ${hasLOS ? '#38a169' : '#e53e3e'};
+                transition: background-color 0.3s ease;
+              `;
+              
+              button.textContent = `${type.toUpperCase()}: ${hasLOS ? 'Visible ✓' : 'No LOS ✗'}`;
+            } else {
+              console.log('Missing location data:', { currentLoc, location });
+            }
+          };
+          
+          losButtons.appendChild(button);
+        }
+      });
+    }
+  
+    // Add delete button handler
+    popupDiv.querySelector(`#delete-${markerType}-btn`)?.addEventListener('click', onDelete);
+  
+    return new mapboxgl.Popup({ closeButton: false }).setDOMContent(popupDiv);
+  };
+  
     //Add Markers
     //GCS Marker
     const addGroundStation = () => {
@@ -553,6 +599,10 @@ useImperativeHandle(ref, () => ({
         lat: center.lat,
         elevation: elevation
       };
+      console.log('GCS Initial Location:', initialLocation);
+
+      setGcsLocation(initialLocation); // Set state before creating marker
+      onGcsLocationChange(initialLocation);
       
       const gcsMarker = new mapboxgl.Marker({ color: "blue", draggable: true })
         .setLngLat(center)
@@ -610,6 +660,10 @@ useImperativeHandle(ref, () => ({
         lat: center.lat,
         elevation: elevation
       };
+      console.log('Observer Initial Location:', initialLocation);
+
+      setObserverLocation(initialLocation);
+      onObserverLocationChange(initialLocation);
       
       const observerMarker = new mapboxgl.Marker({ color: "green", draggable: true })
         .setLngLat(center)
@@ -666,7 +720,12 @@ useImperativeHandle(ref, () => ({
         lat: center.lat,
         elevation: elevation
       };
-      
+
+      console.log('Repeater Initial Location:', initialLocation);
+
+      setRepeaterLocation(initialLocation);
+      onRepeaterLocationChange(initialLocation);
+
       const repeaterMarker = new mapboxgl.Marker({ color: "red", draggable: true })
         .setLngLat(center)
         .addTo(mapRef.current);
@@ -710,6 +769,41 @@ useImperativeHandle(ref, () => ({
         );
         repeaterMarker.setPopup(popup).togglePopup();
       });
+    };
+
+    // Marker LOS Between Check
+    const checkLineOfSight = async (point1: LocationData, point2: LocationData): Promise<boolean> => {
+      if (!mapRef.current) return false;
+    
+      const distance = turf.distance(
+        turf.point([point1.lng, point1.lat]),
+        turf.point([point2.lng, point2.lat]),
+        { units: 'kilometers' }
+      );
+    
+      // Sample points along the line
+      const samples = 50;
+      const line = turf.lineString([[point1.lng, point1.lat], [point2.lng, point2.lat]]);
+      
+      for (let i = 0; i <= samples; i++) {
+        const along = turf.along(line, (distance * i) / samples, { units: 'kilometers' });
+        const [lng, lat] = along.geometry.coordinates;
+        
+        // Get elevation at this point
+        const pointElevation = mapRef.current.queryTerrainElevation([lng, lat]) || 0;
+        
+        // Calculate expected elevation at this point (linear interpolation)
+        const ratio = i / samples;
+        const expectedElevation = 
+          (point1.elevation || 0) + ratio * ((point2.elevation || 0) - (point1.elevation || 0));
+        
+        // If terrain is higher than our line of sight, return false
+        if (pointElevation > expectedElevation) {
+          return false;
+        }
+      }
+      
+      return true;
     };
 
     return (

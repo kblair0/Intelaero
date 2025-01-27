@@ -523,7 +523,7 @@ const Calculator: React.FC = () => {
               {showElos && (
                 <div className="mt-4 bg-white p-4 rounded-md shadow-md">
                   <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-semibold text-gray-700">⚡️ ELOS Analysis</h2>
+                    <h2 className="text-xl font-semibold text-gray-700">⚡️ Drone LOS Analysis</h2>
                     <label className="toggle-switch">
                       <input
                         type="checkbox"
@@ -600,6 +600,102 @@ const Calculator: React.FC = () => {
                     </div>
                   </div>
                 )}
+
+                {/*// Test UX Implememtation*/}
+                <div className="mb-4 bg-gray-50 rounded-md p-4">
+                {/* Section Header */}
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-sm font-semibold text-blue-600">GCS LOS Analysis 📡</h4>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      onChange={() => layerManager.toggleLayerVisibility('gcs-grid-layer')}
+                      className="form-checkbox h-4 w-4 text-blue-600"
+                    />
+                    <span className="text-xs text-gray-600">Show Grid</span>
+                  </label>
+                </div>
+
+                {/* Location Display - Using existing component */}
+                <div className="mb-4">
+                  <LocationDisplay title="GCS Location" location={gcsLocation} />
+                </div>
+
+                {/* Grid Analysis Controls - Using existing state/handlers */}
+                <div className="mb-4 p-3 bg-white rounded-md shadow-sm">
+                  <h5 className="text-xs font-medium text-gray-700 mb-3">Individual LOS Analysis</h5>
+                  <div className="flex items-center space-x-2 mb-3">
+                    <span className="text-xs text-gray-600">Elevation Offset (m):</span>
+                    <input
+                      type="number"
+                      value={markerElevationOffsets.gcs}
+                      onChange={(e) => setMarkerElevationOffsets(prev => ({
+                        ...prev,
+                        gcs: Number(e.target.value)
+                      }))}
+                      className="w-20 px-2 py-1 text-xs border rounded"
+                    />
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="range"
+                      min="500"
+                      max="5000"
+                      step="100"
+                      value={markerGridRanges.gcs}
+                      onChange={(e) => setMarkerGridRanges(prev => ({
+                        ...prev,
+                        gcs: Number(e.target.value)
+                      }))}
+                      className="flex-grow h-2 bg-blue-100 rounded-lg appearance-none cursor-pointer"
+                    />
+                    <span className="text-xs text-gray-600 w-16">{markerGridRanges.gcs}m</span>
+                    <button
+                      onClick={() => {
+                        if (mapRef.current && gcsLocation) {
+                          mapRef.current.runElosAnalysis({
+                            markerType: 'gcs',
+                            location: {
+                              ...gcsLocation,
+                              elevation: (gcsLocation.elevation || 0) + markerElevationOffsets.gcs
+                            },
+                            range: markerGridRanges.gcs
+                          });
+                        }
+                      }}
+                      className="px-3 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
+                    >
+                      Analyze
+                    </button>
+                  </div>
+                </div>
+
+                {/* Line of Sight - New section to be implemented */}
+                <div className="p-3 bg-white rounded-md shadow-sm">
+                  <h5 className="text-xs font-medium text-gray-700 mb-3">Point-to-Point LOS Check</h5>
+                  
+                  {/* Selection and Check Button */}
+                  <div className="flex gap-2 mb-3">
+                    <select className="flex-grow px-2 py-1 text-xs text-black border rounded">
+                      <option value="">Select target marker...</option>
+                      {observerLocation && <option value="observer">Observer 🔭</option>}
+                      {repeaterLocation && <option value="repeater">Repeater ⚡️</option>}
+                    </select>
+                    <button 
+                      className="px-3 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
+                    >
+                      Check LOS
+                    </button>
+                  </div>
+
+                  {/* Status Message */}
+                  <div className="text-xs text-gray-600">
+                    {!observerLocation && !repeaterLocation 
+                      ? "Add other markers to check line of sight"
+                      : "Select a target marker to check line of sight"}
+                  </div>
+                </div>
+              </div>
 
                 {/* Location Information */}
                 <div className="grid gap-4">
