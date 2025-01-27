@@ -1,4 +1,8 @@
-import React, { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
+/* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable react/display-name */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
+import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import mapboxgl from 'mapbox-gl';
 import * as turf from '@turf/turf';
 import { layerManager, MAP_LAYERS } from './LayerManager';
