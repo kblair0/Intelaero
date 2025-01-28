@@ -7,7 +7,7 @@ interface TwoColumnProps {
 
 const TwoColumn: React.FC<TwoColumnProps> = ({ children }) => {
   return (
-    <div className="flex flex-col md:flex-row gap-6 p-6 mt-6 ">
+    <div className="flex flex-col md:flex-row gap-2 p-2 mt-1">
       {children}
     </div>
   );

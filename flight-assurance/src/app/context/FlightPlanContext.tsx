@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// context/GeoJsonContext.tsx
+// context/FlightPlanContext.tsx
 import React, { createContext, useState, useContext } from "react";
 
 type FlightPlanData = Record<string, any>; // Replace `any` with a more specific type if needed

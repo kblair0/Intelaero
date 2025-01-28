@@ -114,7 +114,7 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({
   };
 
   return (
-    <div className="bg-white border rounded-lg p-4 mt-6">
+    <div className="bg-white border rounded-lg p-4">
       <h3 className="text-lg font-bold text-black">
         📁 Upload Your Flight Plan
       </h3>

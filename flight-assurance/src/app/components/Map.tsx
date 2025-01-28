@@ -16,6 +16,10 @@ import FlightPlanUploader from "./FlightPlanUploader";
 import ELOSGridAnalysis from './ELOSGridAnalysis';
 import { layerManager } from './LayerManager';
 
+// Contexts
+import { useLocation } from '../context/LocationContext';
+import { useFlightPlanContext } from '../context/FlightPlanContext';
+
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || "";
 
 export interface LocationData {
@@ -33,15 +37,8 @@ export interface MapRef {
 
 interface MapProps {
   estimatedFlightDistance: number;
-  onDataProcessed?: (data: { averageDraw: number; phaseData: any[] }) => void;
-  onShowTickChange: (value: boolean) => void;
-  onTotalDistanceChange: (distance: number) => void;
-  onPlanUploaded: (geojson: GeoJSON.FeatureCollection) => void;
-  onGcsLocationChange: (location: LocationData | null) => void;
-  onObserverLocationChange: (location: LocationData | null) => void;
-  onRepeaterLocationChange: (location: LocationData | null) => void;
-  onError?: () => void;
-  onSuccess?: () => void;
+  onShowTickChange?: (value: boolean) => void;
+  onTotalDistanceChange?: (distance: number) => void;
   elosGridRange?: number;
 }
 
@@ -64,15 +61,19 @@ const Map = forwardRef<MapRef, MapProps>(
       onShowTickChange,
       onTotalDistanceChange,
       onPlanUploaded,
-      onGcsLocationChange,
-      onObserverLocationChange,
-      onRepeaterLocationChange,
       elosGridRange,
     },
     ref
   ) => {
+    // Add context hooks
+    const { 
+      gcsLocation, setGcsLocation,
+      observerLocation, setObserverLocation,
+      repeaterLocation, setRepeaterLocation 
+    } = useLocation();
+    
+    const { flightPlan: contextFlightPlan, setFlightPlan: setContextFlightPlan } = useFlightPlanContext();
 
-    const [flightPlan, setFlightPlan] = useState<GeoJSON.FeatureCollection | null>(null);
     const [totalDistance, setTotalDistance] = useState<number>(0);
     const lineRef = useRef<GeoJSON.FeatureCollection | null>(null);
     const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -81,9 +82,6 @@ const Map = forwardRef<MapRef, MapProps>(
     const startMarkerRef = useRef<mapboxgl.Marker | null>(null);
     const endMarkerRef = useRef<mapboxgl.Marker | null>(null);
     const elosGridRef = useRef<ELOSGridAnalysisRef | null>(null);
-    const [gcsLocation, setGcsLocation] = useState<LocationData | null>(null);
-    const [observerLocation, setObserverLocation] = useState<LocationData | null>(null);
-    const [repeaterLocation, setRepeaterLocation] = useState<LocationData | null>(null);
 
     useEffect(() => {
       if (mapRef?.current) {
@@ -92,6 +90,13 @@ const Map = forwardRef<MapRef, MapProps>(
         mapRef?.current.addControl(new mapboxgl.NavigationControl());
       }
     }, []);
+
+    useEffect(() => {
+      if (contextFlightPlan && mapRef.current) {
+        console.log("Displaying flight plan from context:", contextFlightPlan);
+        addGeoJSONToMap(contextFlightPlan);
+      }
+    }, [contextFlightPlan]); // Only re-run when contextFlightPlan changes
 
     const addGeoJSONToMap = (geojson: GeoJSON.FeatureCollection) => {
       if (mapRef?.current && geojson.type === "FeatureCollection") {
@@ -456,29 +461,6 @@ useImperativeHandle(ref, () => ({
     };
     
 
-
-    const handleFlightPlanUpload = (geojson: GeoJSON.FeatureCollection) => {
-      setFlightPlan(geojson);// Add the flight plan to the map
-      addGeoJSONToMap(geojson);
-
-
-      // Ensure the original `onPlanUploaded` behavior is preserved
-      if (typeof onPlanUploaded === "function") {
-        onPlanUploaded(geojson);
-      }
-    };
-
-    const combinedOnPlanUploaded = (geojson: GeoJSON.FeatureCollection) => {
-      // Trigger the parent-provided onPlanUploaded
-      if (typeof onPlanUploaded === "function") {
-        onPlanUploaded(geojson); // This calls handleFlightPlanUpdate in battcalc
-      }
-
-
-      // Trigger the Map-specific upload logic
-      handleFlightPlanUpload(geojson); // Adds the flight plan to the map
-    };  
-
     const handleFileProcessing = (data: any) => {
       if (Array.isArray(data)) {
         const totalDraw = data.reduce(
@@ -602,9 +584,8 @@ useImperativeHandle(ref, () => ({
         elevation: elevation
       };
       console.log('GCS Initial Location:', initialLocation);
-
-      setGcsLocation(initialLocation); // Set state before creating marker
-      onGcsLocationChange(initialLocation);
+    
+      setGcsLocation(initialLocation); // Only context update
       
       const gcsMarker = new mapboxgl.Marker({ color: "blue", draggable: true })
         .setLngLat(center)
@@ -616,14 +597,11 @@ useImperativeHandle(ref, () => ({
         elevation,
         () => {
           gcsMarker.remove();
-          setGcsLocation(null);
-          onGcsLocationChange(null);
+          setGcsLocation(null); // Only context update
         }
       );
     
       gcsMarker.setPopup(popup).togglePopup();
-      setGcsLocation(initialLocation);
-      onGcsLocationChange(initialLocation);
     
       // Add dragend event listener
       gcsMarker.on('dragend', () => {
@@ -634,8 +612,7 @@ useImperativeHandle(ref, () => ({
           lat: lngLat.lat,
           elevation: newElevation
         };
-        setGcsLocation(location);
-        onGcsLocationChange(location);
+        setGcsLocation(location); // Only context update
         
         // Update popup with new elevation
         const popup = createMarkerPopup(
@@ -643,14 +620,12 @@ useImperativeHandle(ref, () => ({
           newElevation,
           () => {
             gcsMarker.remove();
-            setGcsLocation(null);
-            onGcsLocationChange(null);
+            setGcsLocation(null); // Only context update
           }
         );
         gcsMarker.setPopup(popup).togglePopup();
       });
     };
-
     //Observer Marker
     const addObserver = () => {
       if (!mapRef.current) return;
@@ -663,30 +638,24 @@ useImperativeHandle(ref, () => ({
         elevation: elevation
       };
       console.log('Observer Initial Location:', initialLocation);
-
-      setObserverLocation(initialLocation);
-      onObserverLocationChange(initialLocation);
+    
+      setObserverLocation(initialLocation); // Only keep this context update
       
       const observerMarker = new mapboxgl.Marker({ color: "green", draggable: true })
         .setLngLat(center)
         .addTo(mapRef.current);
     
-      // Create popup with enhanced content
       const popup = createMarkerPopup(
         'observer',
         elevation,
         () => {
           observerMarker.remove();
-          setObserverLocation(null);
-          onObserverLocationChange(null);
+          setObserverLocation(null); // Only keep this context update
         }
       );
     
       observerMarker.setPopup(popup).togglePopup();
-      setObserverLocation(initialLocation);
-      onObserverLocationChange(initialLocation);
-    
-      // Add dragend event listener
+      
       observerMarker.on('dragend', () => {
         const lngLat = observerMarker.getLngLat();
         const newElevation = mapRef.current?.queryTerrainElevation(lngLat);
@@ -695,17 +664,14 @@ useImperativeHandle(ref, () => ({
           lat: lngLat.lat,
           elevation: newElevation
         };
-        setObserverLocation(location);
-        onObserverLocationChange(location);
+        setObserverLocation(location); // Only keep this context update
         
-        // Update popup with new elevation
         const popup = createMarkerPopup(
           'observer',
           newElevation,
           () => {
             observerMarker.remove();
-            setObserverLocation(null);
-            onObserverLocationChange(null);
+            setObserverLocation(null); // Only keep this context update
           }
         );
         observerMarker.setPopup(popup).togglePopup();
@@ -722,32 +688,25 @@ useImperativeHandle(ref, () => ({
         lat: center.lat,
         elevation: elevation
       };
-
       console.log('Repeater Initial Location:', initialLocation);
-
-      setRepeaterLocation(initialLocation);
-      onRepeaterLocationChange(initialLocation);
-
+    
+      setRepeaterLocation(initialLocation); // Only keep this context update
+    
       const repeaterMarker = new mapboxgl.Marker({ color: "red", draggable: true })
         .setLngLat(center)
         .addTo(mapRef.current);
     
-      // Create popup with enhanced content
       const popup = createMarkerPopup(
         'repeater',
         elevation,
         () => {
           repeaterMarker.remove();
-          setRepeaterLocation(null);
-          onRepeaterLocationChange(null);
+          setRepeaterLocation(null); // Only keep this context update
         }
       );
     
       repeaterMarker.setPopup(popup).togglePopup();
-      setRepeaterLocation(initialLocation);
-      onRepeaterLocationChange(initialLocation);
     
-      // Add dragend event listener
       repeaterMarker.on('dragend', () => {
         const lngLat = repeaterMarker.getLngLat();
         const newElevation = mapRef.current?.queryTerrainElevation(lngLat);
@@ -756,23 +715,19 @@ useImperativeHandle(ref, () => ({
           lat: lngLat.lat,
           elevation: newElevation
         };
-        setRepeaterLocation(location);
-        onRepeaterLocationChange(location);
+        setRepeaterLocation(location); // Only keep this context update
         
-        // Update popup with new elevation
         const popup = createMarkerPopup(
           'repeater',
           newElevation,
           () => {
             repeaterMarker.remove();
-            setRepeaterLocation(null);
-            onRepeaterLocationChange(null);
+            setRepeaterLocation(null); // Only keep this context update
           }
         );
         repeaterMarker.setPopup(popup).togglePopup();
       });
     };
-
     // Marker LOS Between Check
     const checkLineOfSight = async (point1: LocationData, point2: LocationData): Promise<boolean> => {
       if (!mapRef.current) return false;
@@ -810,64 +765,48 @@ useImperativeHandle(ref, () => ({
 
     return (
       <div>
-        <div className="flex flex-col md:flex-row gap-4 p-4 px-4 mt-4">
-          <div className="bg-gray-300 p-4 rounded-md w-full md:w-1/2">
-            <h2 className="text-xl font-semibold mb-4">
-            Step 1: Upload Your Flight Plan
-            </h2>
-            <FlightPlanUploader onPlanUploaded={combinedOnPlanUploaded} />
-          </div>
-          <div className="bg-gray-300 p-4 rounded-md w-full md:w-1/2">
-            <h2 className="text-xl font-semibold mb-4">
-              Step 2A: Upload Your Flight Log (.ulg) (Optional)
-            </h2>
-            <FlightLogUploader onProcessComplete={handleFileProcessing} />
-          </div>
-        </div>
-    
         {/* Map container with the buttons */}
-        <div 
+        <div
           ref={mapContainerRef}
           style={{ height: "70vh", width: "100%", marginBottom: "100px" }}
-          className="relative" 
+          className="relative"
         >
-          <div className="absolute top-4 right-4 z-10 flex flex-col space-y-2"> 
-            <button 
-              onClick={addGroundStation} 
-              className="map-button ground-station-icon"> 
+          <div className="absolute top-4 right-4 z-10 flex flex-col space-y-2">
+            <button
+              onClick={addGroundStation}
+              className="map-button ground-station-icon"
+            >
               Add Ground Station 📡
             </button>
             <button
-            onClick={addObserver}
-            className="map-button observer-icon"> 
-            Add Observer 🔭
+              onClick={addObserver}
+              className="map-button observer-icon"
+            >
+              Add Observer 🔭
             </button>
             <button
               onClick={addRepeater}
-              className="map-button repeater-icon">
+              className="map-button repeater-icon"
+            >
               Add Repeater ⚡️
             </button>
-
           </div>
         </div>
-
-        {flightPlan && (
+    
+        {contextFlightPlan && (
           <ELOSGridAnalysis
             ref={elosGridRef}
             map={mapRef.current!}
-            flightPath={flightPlan}
+            flightPath={contextFlightPlan}
             elosGridRange={elosGridRange}
             onError={(error) => {
               console.error('ELOS Analysis error:', error);
-              // Propagate error to parent if needed
             }}
             onSuccess={(result) => {
               console.log('ELOS Analysis completed:', result);
-              // Handle successful analysis
             }}
           />
         )}
-
       </div>
     );
   }
