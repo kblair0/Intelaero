@@ -2,10 +2,15 @@
 /* eslint-disable react/display-name */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import mapboxgl from 'mapbox-gl';
 import * as turf from '@turf/turf';
 import { layerManager, MAP_LAYERS } from './LayerManager';
+import { useLOSAnalysis } from '../context/LOSAnalysisContext';
+import type { 
+  GridCell, 
+  AnalysisResults 
+} from '../context/LOSAnalysisContext';
 
 // Enhanced type definitions for 2D and 3D coordinates
 type Coordinates2D = [number, number];
@@ -23,27 +28,6 @@ interface ELOSError extends Error {
   details?: unknown;
 }
 
-interface GridCell {
-  id: string;
-  geometry: GeoJSON.Polygon;
-  properties: {
-    visibility: number;
-    fullyVisible: boolean;
-    elevation?: number;
-    lastAnalyzed: number;
-  };
-}
-
-interface AnalysisResult {
-  cells: GridCell[];
-  stats: {
-    totalCells: number;
-    visibleCells: number;
-    averageVisibility: number;
-    analysisTime: number;
-  };
-}
-
 interface LocationData {
   lng: number;
   lat: number;
@@ -53,10 +37,8 @@ interface LocationData {
 interface Props {
   map: mapboxgl.Map;
   flightPath?: GeoJSON.FeatureCollection;
-  gridSize?: number;
-  elosGridRange: number;
-  onError: (error: ELOSError) => void;
-  onSuccess: (result: AnalysisResult) => void;
+  onError?: (error: ELOSError) => void;
+  onSuccess?: (result: AnalysisResults) => void;
 }
 
 interface AnalysisOptions {
@@ -95,15 +77,25 @@ const generatePointsAlongLine = (
  * Performs visibility analysis for drone flight paths using a grid-based approach
  */
 const ELOSGridAnalysis = forwardRef<ELOSGridAnalysisRef, Props>((props, ref) => {
-    const [isAnalyzing, setIsAnalyzing] = useState(false);
-    const { map, flightPath, elosGridRange, onError, onSuccess, gridSize = 100 } = props;
+    const { map, flightPath, onError, onSuccess } = props;
+    
+    const {
+      gridSize,
+      elosGridRange,
+      isAnalyzing,
+      markerConfigs,
+      setIsAnalyzing,
+      setResults,
+      setError
+    } = useLOSAnalysis();
+
     const abortControllerRef = useRef<AbortController | null>(null);
     const workerRef = useRef<Worker | null>(null);
 
   // LRU Cache for results
   const resultsCache = useRef(new Map<string, { 
     timestamp: number;
-    result: AnalysisResult;
+    result: AnalysisResults;
   }>());
   const MAX_CACHE_SIZE = 10;
   const CACHE_EXPIRY = 1000 * 60 * 30; // 30 minutes
@@ -285,7 +277,7 @@ const ELOSGridAnalysis = forwardRef<ELOSGridAnalysisRef, Props>((props, ref) => 
   }, [flightPath, elosGridRange, gridSize, getTerrainElevation]);
 
   // Enhanced visibility analysis with terrain consideration
-  const analyzeVisibility = useCallback(async (cells: GridCell[]): Promise<AnalysisResult> => {
+  const analyzeVisibility = useCallback(async (cells: GridCell[]): Promise<AnalysisResults> => {
     const startTime = performance.now();
 
     // Extract 3D coordinates from flight path
@@ -466,11 +458,11 @@ const ELOSGridAnalysis = forwardRef<ELOSGridAnalysisRef, Props>((props, ref) => 
     return true;
   };
   
-  const visualizeGrid = useCallback((analysisResult: AnalysisResult | { cells: GridCell[] }, layerId?: string) => {
+  const visualizeGrid = useCallback((analysisResults: AnalysisResults | { cells: GridCell[] }, layerId?: string) => {
     try {
       // Validate input
-      if (!analysisResult || !Array.isArray(analysisResult.cells)) {
-        console.error('Invalid analysis result:', analysisResult);
+      if (!analysisResults || !Array.isArray(analysisResults.cells)) {
+        console.error('Invalid analysis result:', analysisResults);
         throw createError('Invalid analysis result', 'MAP_INTERACTION');
       }
   
@@ -482,7 +474,7 @@ const ELOSGridAnalysis = forwardRef<ELOSGridAnalysisRef, Props>((props, ref) => 
   
       if (!map.isStyleLoaded()) {
         console.log('Map style not loaded, deferring visualization');
-        map.once('styledata', () => visualizeGrid(analysisResult, layerId));
+        map.once('styledata', () => visualizeGrid(analysisResults, layerId));
         return;
       }
   
@@ -499,7 +491,7 @@ const ELOSGridAnalysis = forwardRef<ELOSGridAnalysisRef, Props>((props, ref) => 
       // Create GeoJSON
       const geojson: GeoJSON.FeatureCollection = {
         type: 'FeatureCollection',
-        features: analysisResult.cells.map(cell => ({
+        features: analysisResults.cells.map(cell => ({
           type: 'Feature',
           geometry: cell.geometry,
           properties: cell.properties
@@ -602,55 +594,69 @@ const ELOSGridAnalysis = forwardRef<ELOSGridAnalysisRef, Props>((props, ref) => 
   const analyzeFromPoint = useCallback(async (
     cells: GridCell[],
     markerOptions: AnalysisOptions['markerOptions']
-  ): Promise<AnalysisResult> => {
+  ): Promise<AnalysisResults> => {
     const startTime = performance.now();
     const results: GridCell[] = [];
     let visibleCellCount = 0;
     let totalVisibility = 0;
-  
+
+    // Get the elevation offset from markerConfigs
+    const stationOffset = markerConfigs[markerOptions.markerType].elevationOffset;
+    
+    // Add offset to station's base elevation
+    const stationElevation = (markerOptions.location.elevation ?? 0) + stationOffset;
+    
     // Process cells in chunks
     const chunkSize = 50;
     for (let i = 0; i < cells.length; i += chunkSize) {
       const chunk = cells.slice(i, i + chunkSize);
-      const processedChunk = await Promise.all(chunk.map(async (cell) => {
-        const center = turf.center(cell.geometry);
-        const isVisible = await checkLineOfSight(
-          [markerOptions.location.lng, markerOptions.location.lat, markerOptions.location.elevation ?? 0],
-          [...center.geometry.coordinates, cell.properties.elevation ?? 0]
-        );
-  
-        if (isVisible) visibleCellCount++;
-        const visibility = isVisible ? 100 : 0;
-        totalVisibility += visibility;
-  
-        return {
-          ...cell,
-          properties: {
-            ...cell.properties,
-            visibility,
-            fullyVisible: isVisible
-          }
-        };
-      }));
+      const processedChunk = await Promise.all(
+        chunk.map(async (cell) => {
+          const center = turf.center(cell.geometry);
+          
+          const isVisible = await checkLineOfSight(
+            [markerOptions.location.lng, markerOptions.location.lat, stationElevation],
+            [...center.geometry.coordinates, cell.properties.elevation ?? 0]
+          );
+
+          if (isVisible) visibleCellCount++;
+          const visibility = isVisible ? 100 : 0;
+          totalVisibility += visibility;
+
+          return {
+            ...cell,
+            properties: {
+              ...cell.properties,
+              visibility,
+              fullyVisible: isVisible,
+            },
+          };
+        })
+      );
+
       results.push(...processedChunk);
     }
-  
+
     return {
       cells: results,
       stats: {
         totalCells: cells.length,
         visibleCells: visibleCellCount,
         averageVisibility: totalVisibility / cells.length,
-        analysisTime: performance.now() - startTime
-      }
+        analysisTime: performance.now() - startTime,
+      },
     };
-  }, [checkLineOfSight]);
+  }, [checkLineOfSight, markerConfigs]);
+
+  
+  
 
   // Main analysis function
   const runAnalysis = useCallback(async (options?: AnalysisOptions) => {
     console.log("Starting ELOS Grid Analysis", options ? "for marker" : "for flight path");
     try {
       setIsAnalyzing(true);
+      setError(null);
       await new Promise(resolve => setTimeout(resolve, 100));
       abortControllerRef.current = new AbortController();
   
@@ -671,16 +677,17 @@ const ELOSGridAnalysis = forwardRef<ELOSGridAnalysisRef, Props>((props, ref) => 
         console.log("Grid generated with", cells.length, "cells for marker");
   
         // Perform visibility analysis from marker point
-        const analysisResult = await analyzeFromPoint(cells, options.markerOptions);
-        console.log(`Visibility analysis completed for ${markerType} with`, analysisResult.stats.visibleCells, "visible cells");
+        const AnalysisResults = await analyzeFromPoint(cells, options.markerOptions);
+        console.log(`Visibility analysis completed for ${markerType} with`, AnalysisResults.stats.visibleCells, "visible cells");
   
         // Visualize results with marker-specific layer
         console.log("Visualizing results on the map...");
-        await visualizeGrid(analysisResult, `${markerType}-grid-layer`);
+        await visualizeGrid(AnalysisResults, `${markerType}-grid-layer`);
         console.log("Grid visualization completed for marker");
   
         await new Promise(resolve => setTimeout(resolve, 100));
-        onSuccess(analysisResult);
+        onSuccess(AnalysisResults);
+        setResults(AnalysisResults);
   
       } else {
         // Original flight path analysis
@@ -708,60 +715,62 @@ const ELOSGridAnalysis = forwardRef<ELOSGridAnalysisRef, Props>((props, ref) => 
         console.log("Grid generated with", cells.length, "cells");
   
         // Perform visibility analysis
-        const analysisResult = await analyzeVisibility(cells);
-        console.log("Visibility analysis completed with", analysisResult.stats.visibleCells, "visible cells");
+        const AnalysisResults = await analyzeVisibility(cells);
+        console.log("Visibility analysis completed with", AnalysisResults.stats.visibleCells, "visible cells");
   
         // Cache results
         resultsCache.current.set(cacheKey, {
           timestamp: Date.now(),
-          result: analysisResult
+          result: AnalysisResults
         });
         manageCache();
 
-        if (!analysisResult || !analysisResult.cells) {
+        if (!AnalysisResults || !AnalysisResults.cells) {
           throw createError("Analysis produced invalid results", "VISIBILITY_ANALYSIS");
         }
     
         console.log("Analysis result:", {
-          totalCells: analysisResult.cells.length,
-          stats: analysisResult.stats
+          totalCells: AnalysisResults.cells.length,
+          stats: AnalysisResults.stats
         });
     
-        await visualizeGrid(analysisResult);
+        await visualizeGrid(AnalysisResults);
   
         // Visualize results
         console.log("Visualizing results on the map...");
-        await visualizeGrid(analysisResult);
+        await visualizeGrid(AnalysisResults);
         console.log("Grid visualization completed");
   
         await new Promise(resolve => setTimeout(resolve, 100));
-        onSuccess(analysisResult);
+        if (onSuccess) {
+          onSuccess(AnalysisResults);
+        }
       }
-  
-      setIsAnalyzing(false);
-      console.log("Analysis completed successfully");
-  
+
     } catch (error) {
       console.error("Error in runAnalysis:", error);
       const elosError = error as ELOSError;
-      await new Promise(resolve => setTimeout(resolve, 100));
-      onError(elosError);
+      setError(elosError.message); // Add this line
+      if (onError) {
+        onError(elosError);
+      }
+    } finally {
       setIsAnalyzing(false);
     }
-  }, [
+}, [
     map,
     flightPath,
     gridSize,
     elosGridRange,
     generateGrid,
     analyzeVisibility,
-    analyzeFromPoint,
     visualizeGrid,
+    setResults,
+    setError,
+    setIsAnalyzing,
     onSuccess,
-    onError,
-    manageCache,
-    createError
-  ]);
+    onError
+]);
   
 
   // Expose run analysis method

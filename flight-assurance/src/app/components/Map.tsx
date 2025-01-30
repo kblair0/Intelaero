@@ -1,4 +1,5 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
+// components/map.tsx
+// /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 import React, {
@@ -11,14 +12,15 @@ import React, {
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import * as turf from "@turf/turf";
-import FlightLogUploader from "./FlightLogUploader";
-import FlightPlanUploader from "./FlightPlanUploader";
+import FlightLogUploader from "./ULGLogUploader";
 import ELOSGridAnalysis from './ELOSGridAnalysis';
 import { layerManager } from './LayerManager';
 
 // Contexts
 import { useLocation } from '../context/LocationContext';
 import { useFlightPlanContext } from '../context/FlightPlanContext';
+import { useFlightConfiguration } from '../context/FlightConfigurationContext';
+import { useLOSAnalysis } from '../context/LOSAnalysisContext';
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || "";
 
@@ -39,7 +41,8 @@ interface MapProps {
   estimatedFlightDistance: number;
   onShowTickChange?: (value: boolean) => void;
   onTotalDistanceChange?: (distance: number) => void;
-  elosGridRange?: number;
+  onDataProcessed?: (data: { averageDraw: number; phaseData: any[] }) => void;
+  onPlanUploaded?: (data: GeoJSON.FeatureCollection) => void;
 }
 
 interface ELOSGridAnalysisRef {
@@ -54,25 +57,39 @@ interface MarkerAnalysisOptions {
 }
 
 const Map = forwardRef<MapRef, MapProps>(
-  (
-    {
+  ({
       estimatedFlightDistance,
       onDataProcessed,
       onShowTickChange,
       onTotalDistanceChange,
       onPlanUploaded,
-      elosGridRange,
-    },
-    ref
-  ) => {
+    }, ref  ) =>
+      {
     // Add context hooks
     const { 
       gcsLocation, setGcsLocation,
       observerLocation, setObserverLocation,
       repeaterLocation, setRepeaterLocation 
     } = useLocation();
-    
-    const { flightPlan: contextFlightPlan, setFlightPlan: setContextFlightPlan } = useFlightPlanContext();
+    const { config } = useFlightConfiguration();
+
+    const {
+      elosGridRange: contextGridRange,
+      markerConfigs,
+      isAnalyzing,
+      setIsAnalyzing,
+      setResults,
+      results,
+      setError,
+      error,
+      setMarkerConfig
+    } = useLOSAnalysis();
+        
+    const { 
+      flightPlan: contextFlightPlan, 
+      setFlightPlan: setContextFlightPlan,
+      setDistance 
+    } = useFlightPlanContext();
 
     const [totalDistance, setTotalDistance] = useState<number>(0);
     const lineRef = useRef<GeoJSON.FeatureCollection | null>(null);
@@ -82,6 +99,7 @@ const Map = forwardRef<MapRef, MapProps>(
     const startMarkerRef = useRef<mapboxgl.Marker | null>(null);
     const endMarkerRef = useRef<mapboxgl.Marker | null>(null);
     const elosGridRef = useRef<ELOSGridAnalysisRef | null>(null);
+    const { metrics } = useFlightConfiguration();
 
     useEffect(() => {
       if (mapRef?.current) {
@@ -95,8 +113,20 @@ const Map = forwardRef<MapRef, MapProps>(
       if (contextFlightPlan && mapRef.current) {
         console.log("Displaying flight plan from context:", contextFlightPlan);
         addGeoJSONToMap(contextFlightPlan);
+        
+        // Calculate distance using Turf
+        const line = turf.lineString(
+          contextFlightPlan.features[0].geometry.coordinates.map(
+            (coord: [number, number, number]) => [coord[0], coord[1]]
+          )
+        );
+        const calculatedDistance = turf.length(line, { units: "kilometers" });
+    
+        // Use setDistance from context destructured at top level
+        setDistance(calculatedDistance);
       }
-    }, [contextFlightPlan]); // Only re-run when contextFlightPlan changes
+    }, [contextFlightPlan, setDistance]); 
+    
 
     const addGeoJSONToMap = (geojson: GeoJSON.FeatureCollection) => {
       if (mapRef?.current && geojson.type === "FeatureCollection") {
@@ -230,25 +260,22 @@ const Map = forwardRef<MapRef, MapProps>(
     };
 
     useEffect(() => {
-      if (lineRef.current && estimatedFlightDistance > 0) {
+      if (lineRef.current && metrics.maxDistance > 0) {  // Changed from estimatedFlightDistance
         const line = turf.lineString(
-          // @ts-expect-error This works
           lineRef.current.features[0].geometry.coordinates.map(
             (coord: [number, number]) => [coord[0], coord[1]]
           )
         );
-        const estimatedPoint = turf.along(line, estimatedFlightDistance, {
+        const estimatedPoint = turf.along(line, metrics.maxDistance, {  // Changed from estimatedFlightDistance
           units: "kilometers",
         });
-
-        if (estimatedFlightDistance > totalDistance) {
-          onShowTickChange(true);
+    
+        if (metrics.maxDistance > totalDistance) {  // Changed from estimatedFlightDistance
           if (markerRef.current) {
             markerRef.current.remove();
             markerRef.current = null;
           }
         } else {
-          onShowTickChange(false);
           const [lng, lat] = estimatedPoint.geometry.coordinates as [
             number,
             number
@@ -270,60 +297,10 @@ const Map = forwardRef<MapRef, MapProps>(
           }
         }
       }
-    }, [estimatedFlightDistance, onShowTickChange, totalDistance]);
+    }, [metrics.maxDistance, totalDistance]);
 
-    const terrainElevationMethods: TerrainElevationMethods = {
-      async getRGBElevation(lng: number, lat: number): Promise<number> {
-        try {
-          const tileSize = 512;
-          const zoom = 15;
-          const scale = Math.pow(2, zoom);
-          
-          const latRad = (lat * Math.PI) / 180;
-          const tileX = Math.floor(((lng + 180) / 360) * scale);
-          const tileY = Math.floor(
-            ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * scale
-          );
     
-          const pixelX = Math.floor((((lng + 180) / 360) * scale - tileX) * tileSize);
-          const pixelY = Math.floor(
-            (((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * scale - tileY) *
-              tileSize
-          );
     
-          const tileURL = `https://api.mapbox.com/v4/mapbox.terrain-rgb/${zoom}/${tileX}/${tileY}@2x.pngraw?access_token=${process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}`;
-          const response = await fetch(tileURL);
-          const blob = await response.blob();
-          const imageBitmap = await createImageBitmap(blob);
-    
-          const canvas = document.createElement("canvas");
-          canvas.width = tileSize;
-          canvas.height = tileSize;
-          const context = canvas.getContext("2d");
-          if (!context) throw new Error("Failed to create canvas context");
-    
-          context.drawImage(imageBitmap, 0, 0);
-          const imageData = context.getImageData(0, 0, tileSize, tileSize);
-    
-          const idx = (pixelY * tileSize + pixelX) * 4;
-          const [r, g, b] = [
-            imageData.data[idx],
-            imageData.data[idx + 1],
-            imageData.data[idx + 2],
-          ];
-          
-          return -10000 + (r * 256 * 256 + g * 256 + b) * 0.1;
-        } catch (error) {
-          console.error("RGB elevation error:", error);
-      return 0;
-    }
-  },
-
-  getQueryElevation(lng: number, lat: number): number | null {
-    return mapRef.current?.queryTerrainElevation([lng, lat]) ?? null;
-  }
-};
-
 const toggleLayerVisibility = (layerId: string) => {
   return layerManager.toggleLayerVisibility(layerId);
 };
@@ -331,11 +308,20 @@ const toggleLayerVisibility = (layerId: string) => {
 useImperativeHandle(ref, () => ({
   addGeoJSONToMap,
   runElosAnalysis: async (options?: MarkerAnalysisOptions) => {
+    // Log map initialization check
+    console.log('Checking map initialization...');
     if (!mapRef.current) {
+      console.error('Error: Map is not initialized');
       throw new Error('Map is not initialized');
     }
+    console.log('Map initialized:', mapRef.current);
+
     if (elosGridRef.current) {
+      console.log('elosGridRef initialized:', elosGridRef.current);
+
       if (options) {
+        console.log('Running marker-based analysis with options:', options);
+
         // Marker-based analysis
         await elosGridRef.current.runAnalysis({
           markerOptions: {
@@ -344,15 +330,24 @@ useImperativeHandle(ref, () => ({
             range: options.range
           }
         });
+
+        console.log('Marker-based analysis completed');
       } else {
+        console.log('Running flight path analysis (no options)');
+
         // Flight path analysis
         await elosGridRef.current.runAnalysis();
+
+        console.log('Flight path analysis completed');
       }
+    } else {
+      console.error('Error: elosGridRef is not initialized');
     }
   },
   getMap: () => mapRef.current,
   toggleLayerVisibility,
 }), [addGeoJSONToMap]);
+
 
     //map initialization
     useEffect(() => {
@@ -507,72 +502,131 @@ useImperativeHandle(ref, () => ({
       const { icon, title, color } = markerInfo[markerType];
     
       popupDiv.innerHTML = `
-      <div style="${styles.container}">
-        <div style="${styles.header}">
-          <strong style="color: black; font-size: 14px;">${title} ${icon}</strong>
-          <button id="delete-${markerType}-btn" style="${styles.deleteBtn}">X</button>
-        </div>
-        
-        <div style="${styles.section}">
-          <label style="${styles.label}">Ground Elevation:</label>
-          <span style="${styles.value}">${currentElevation.toFixed(1)}m ASL</span>
-        </div>
-  
-        <div style="${styles.section}" id="los-buttons">
-        </div>
-      </div>
-    `;
-  
-    // Add LOS check buttons for other markers
-    const losButtons = popupDiv.querySelector('#los-buttons');
-    if (losButtons) {
-      // Get current locations and their types
-      const markerLocations = {
-        gcs: gcsLocation,
-        observer: observerLocation,
-        repeater: repeaterLocation
-      };
-  
-      // Add buttons for other markers
-      Object.entries(markerLocations).forEach(([type, location]) => {
-        if (type !== markerType && location) {
-          const button = document.createElement('button');
-          button.style.cssText = styles.losButton;
-          button.textContent = `Check LOS to ${type.toUpperCase()}`;
+        <div style="${styles.container}">
+          <div style="${styles.header}">
+            <strong style="color: black; font-size: 14px;">${title} ${icon}</strong>
+            <button id="delete-${markerType}-btn" style="${styles.deleteBtn}">X</button>
+          </div>
           
-          button.onclick = async () => {
-            const currentLoc = markerLocations[markerType as keyof typeof markerLocations];
-            if (currentLoc && location) {
-              console.log('Checking LOS between:', currentLoc, location);
-              const hasLOS = await checkLineOfSight(currentLoc, location);
-              console.log('LOS result:', hasLOS);
-              
-              // Make the style changes more explicit
-              button.style.cssText = `
-                ${styles.losButton};
-                background-color: ${hasLOS ? '#38a169' : '#e53e3e'};
-                transition: background-color 0.3s ease;
-              `;
-              
-              button.textContent = `${type.toUpperCase()}: ${hasLOS ? 'Visible ✓' : 'No LOS ✗'}`;
-            } else {
-              console.log('Missing location data:', { currentLoc, location });
+          <div style="${styles.section}">
+            <label style="${styles.label}">Ground Elevation:</label>
+            <span style="${styles.value}">${currentElevation.toFixed(1)}m ASL</span>
+          </div>
+        </div>
+      `;
+    
+      // Add LOS check buttons for other markers
+      const losButtons = popupDiv.querySelector('#los-buttons');
+      if (losButtons) {
+        // Get current locations and their types
+        const markerLocations = {
+          gcs: gcsLocation,
+          observer: observerLocation,
+          repeater: repeaterLocation
+        };
+    
+        // Add buttons for other markers
+        Object.entries(markerLocations).forEach(([type, location]) => {
+          if (type !== markerType && location) {
+            const button = document.createElement('button');
+            button.style.cssText = styles.losButton;
+            button.textContent = `Check LOS to ${type.toUpperCase()}`;
+            
+            button.onclick = async () => {
+              const currentLoc = markerLocations[markerType as keyof typeof markerLocations];
+              if (currentLoc && location) {
+                const layerId = `los-${markerType}-${type}`;
+                console.log('Checking LOS between:', currentLoc, location);
+                const hasLOS = await checkLineOfSight(
+                  currentLoc, 
+                  location, 
+                  markerType,
+                  type as 'gcs' | 'observer' | 'repeater'
+                );
+                visualizeLOSCheck(currentLoc, location, hasLOS, layerId);
+                
+                button.style.cssText = `
+                  ${styles.losButton};
+                  background-color: ${hasLOS ? '#38a169' : '#e53e3e'};
+                  transition: background-color 0.3s ease;
+                `;
+                
+                button.textContent = `${type.toUpperCase()}: ${hasLOS ? 'Visible ✓' : 'No LOS ✗'}`;
+              }
+            };
+            
+            losButtons.appendChild(button);
+          }
+        });
+      }
+    
+      // Add event handlers
+      const rangeInput = popupDiv.querySelector(`#${markerType}-range`);
+      const rangeValue = popupDiv.querySelector(`#${markerType}-range-value`);
+      const offsetInput = popupDiv.querySelector(`#${markerType}-offset`);
+      const analyzeButton = popupDiv.querySelector(`#${markerType}-analyze`);
+    
+      // Range input handler
+      if (rangeInput && rangeValue) {
+        rangeInput.addEventListener('input', (e) => {
+          const value = (e.target as HTMLInputElement).value;
+          rangeValue.textContent = `${value}m`;
+          setMarkerConfig(markerType, { gridRange: Number(value) });
+        });
+      }
+    
+      // Offset input handler
+      if (offsetInput) {
+        offsetInput.addEventListener('change', (e) => {
+          const value = Number((e.target as HTMLInputElement).value);
+          setMarkerConfig(markerType, { elevationOffset: value });
+        });
+      }
+    
+      // Analysis button handler
+      if (analyzeButton) {
+        analyzeButton.addEventListener('click', async () => {
+          if (isAnalyzing) return;
+          
+          const currentLoc = markerType === 'gcs' ? gcsLocation :
+                          markerType === 'observer' ? observerLocation :
+                          repeaterLocation;
+                          
+          if (currentLoc && elosGridRef.current) {
+            setIsAnalyzing(true);
+            try {
+              await elosGridRef.current.runAnalysis({
+                markerOptions: {
+                  markerType,
+                  location: currentLoc,
+                  range: markerConfigs[markerType].gridRange
+                }
+              });
+            } catch (error) {
+              console.error('Analysis failed:', error);
+              setError(error.message);
+            } finally {
+              setIsAnalyzing(false);
             }
-          };
-          
-          losButtons.appendChild(button);
+          }
+        });
+      }
+    
+      // Add delete button handler
+      popupDiv.querySelector(`#delete-${markerType}-btn`)?.addEventListener('click', () => {
+        // Clean up analysis layer
+        const layerId = `${markerType}-grid-layer`;
+        if (mapRef.current?.getLayer(layerId)) {
+          layerManager.toggleLayerVisibility(layerId);
         }
+        // Then call onDelete
+        onDelete();
       });
-    }
-  
-    // Add delete button handler
-    popupDiv.querySelector(`#delete-${markerType}-btn`)?.addEventListener('click', onDelete);
-  
-    return new mapboxgl.Popup({ closeButton: false }).setDOMContent(popupDiv);
-  };
-  
-    //Add Markers
-    //GCS Marker
+
+      return new mapboxgl.Popup({ closeButton: false }).setDOMContent(popupDiv);
+    };
+
+    //Add Markers //GCS Marker
     const addGroundStation = () => {
       if (!mapRef.current) return;
     
@@ -729,8 +783,21 @@ useImperativeHandle(ref, () => ({
       });
     };
     // Marker LOS Between Check
-    const checkLineOfSight = async (point1: LocationData, point2: LocationData): Promise<boolean> => {
+    const checkLineOfSight = async (
+      point1: LocationData, 
+      point2: LocationData,
+      type1: 'gcs' | 'observer' | 'repeater',
+      type2: 'gcs' | 'observer' | 'repeater'
+    ): Promise<boolean> => {
       if (!mapRef.current) return false;
+    
+      // Get elevation offsets from marker configs
+      const offset1 = markerConfigs[type1].elevationOffset;
+      const offset2 = markerConfigs[type2].elevationOffset;
+    
+      // Calculate actual elevations with offsets
+      const elevation1 = (point1.elevation || 0) + offset1;
+      const elevation2 = (point2.elevation || 0) + offset2;
     
       const distance = turf.distance(
         turf.point([point1.lng, point1.lat]),
@@ -751,8 +818,7 @@ useImperativeHandle(ref, () => ({
         
         // Calculate expected elevation at this point (linear interpolation)
         const ratio = i / samples;
-        const expectedElevation = 
-          (point1.elevation || 0) + ratio * ((point2.elevation || 0) - (point1.elevation || 0));
+        const expectedElevation = elevation1 + ratio * (elevation2 - elevation1);
         
         // If terrain is higher than our line of sight, return false
         if (pointElevation > expectedElevation) {
@@ -761,6 +827,54 @@ useImperativeHandle(ref, () => ({
       }
       
       return true;
+    };
+
+    const visualizeLOSCheck = (
+      point1: LocationData,
+      point2: LocationData,
+      hasLOS: boolean,
+      layerId: string
+    ) => {
+      if (!mapRef.current) return;
+    
+      // Remove existing layer if present
+      if (mapRef.current.getLayer(layerId)) {
+        mapRef.current.removeLayer(layerId);
+        mapRef.current.removeSource(layerId);
+      }
+    
+      // Create line data
+      const lineData: GeoJSON.Feature = {
+        type: 'Feature',
+        properties: {},
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [point1.lng, point1.lat],
+            [point2.lng, point2.lat]
+          ]
+        }
+      };
+    
+      // Add source and layer
+      mapRef.current.addSource(layerId, {
+        type: 'geojson',
+        data: lineData
+      });
+    
+      mapRef.current.addLayer({
+        id: layerId,
+        type: 'line',
+        source: layerId,
+        paint: {
+          'line-color': hasLOS ? '#38a169' : '#e53e3e',
+          'line-width': 2,
+          'line-dasharray': [2, 1]
+        }
+      });
+    
+      // Register with layer manager
+      layerManager.registerLayer(layerId, true);
     };
 
     return (
@@ -774,23 +888,56 @@ useImperativeHandle(ref, () => ({
           <div className="absolute top-4 right-4 z-10 flex flex-col space-y-2">
             <button
               onClick={addGroundStation}
-              className="map-button ground-station-icon"
+              className={`map-button ground-station-icon ${
+                isAnalyzing ? 'opacity-50' : ''
+              }`}
+              disabled={isAnalyzing}
             >
               Add Ground Station 📡
+              {isAnalyzing && <span className="ml-2">•••</span>}
             </button>
             <button
               onClick={addObserver}
-              className="map-button observer-icon"
+              className={`map-button observer-icon ${
+                isAnalyzing ? 'opacity-50' : ''
+              }`}
+              disabled={isAnalyzing}
             >
               Add Observer 🔭
+              {isAnalyzing && <span className="ml-2">•••</span>}
             </button>
             <button
               onClick={addRepeater}
-              className="map-button repeater-icon"
+              className={`map-button repeater-icon ${
+                isAnalyzing ? 'opacity-50' : ''
+              }`}
+              disabled={isAnalyzing}
             >
               Add Repeater ⚡️
+              {isAnalyzing && <span className="ml-2">•••</span>}
             </button>
           </div>
+    
+          {/* Analysis Status Indicator */}
+          {isAnalyzing && (
+            <div className="absolute bottom-4 left-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg">
+              Running Analysis...
+            </div>
+          )}
+
+          {/* Error UI */}
+          {error && (
+            <div className="absolute bottom-4 left-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center">
+              <span>⚠️</span>
+              <span className="ml-2">{error}</span>
+              <button 
+                onClick={() => setError(null)} 
+                className="ml-2 hover:opacity-75"
+              >
+                ✕
+              </button>
+            </div>
+          )}
         </div>
     
         {contextFlightPlan && (
@@ -798,12 +945,14 @@ useImperativeHandle(ref, () => ({
             ref={elosGridRef}
             map={mapRef.current!}
             flightPath={contextFlightPlan}
-            elosGridRange={elosGridRange}
+            elosGridRange={contextGridRange}
             onError={(error) => {
               console.error('ELOS Analysis error:', error);
+              setError(error.message);
             }}
             onSuccess={(result) => {
               console.log('ELOS Analysis completed:', result);
+              setResults(result);
             }}
           />
         )}
