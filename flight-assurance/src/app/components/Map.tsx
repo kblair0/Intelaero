@@ -100,6 +100,7 @@ const Map = forwardRef<MapRef, MapProps>(
     const endMarkerRef = useRef<mapboxgl.Marker | null>(null);
     const elosGridRef = useRef<ELOSGridAnalysisRef | null>(null);
     const { metrics } = useFlightConfiguration();
+    const [resolvedGeoJSON, setResolvedGeoJSON] = useState<GeoJSON.FeatureCollection | null>(null);
 
     useEffect(() => {
       if (mapRef?.current) {
@@ -110,78 +111,119 @@ const Map = forwardRef<MapRef, MapProps>(
     }, []);
 
     useEffect(() => {
-      if (contextFlightPlan && mapRef.current) {
-        console.log("Displaying flight plan from context:", contextFlightPlan);
-        addGeoJSONToMap(contextFlightPlan);
-        
-        // Calculate distance using Turf
-        const line = turf.lineString(
-          contextFlightPlan.features[0].geometry.coordinates.map(
-            (coord: [number, number, number]) => [coord[0], coord[1]]
-          )
-        );
-        const calculatedDistance = turf.length(line, { units: "kilometers" });
+      // 1. Make sure we have a flight plan and the map is ready
+      if (!contextFlightPlan || !mapRef.current) return;
     
-        // Use setDistance from context destructured at top level
-        setDistance(calculatedDistance);
-      }
-    }, [contextFlightPlan, setDistance]); 
+      // 2. Clone the original flight plan so we don’t mutate context data
+      const newPlan = structuredClone(contextFlightPlan);
     
+      // 3. Prepare to resolve altitudes
+      const homeAlt = newPlan?.properties?.homePosition?.altitude ?? 0;
+    
+      // 4. For each feature that’s a LineString, update altitudes
+      newPlan.features.forEach((feature) => {
+        if (feature.geometry.type !== "LineString") return;
+    
+        const coords = feature.geometry.coordinates; // [lon, lat, alt]
+        const waypoints = feature.properties.waypoints || [];
+    
+        coords.forEach((coord, i) => {
+          const [lon, lat, originalAlt] = coord;
+          const wp = waypoints[i];
+          if (!wp) return; // mismatch fallback
+    
+          switch (wp.altitudeMode) {
+            case "absolute":
+              // Already MSL; do nothing
+              break;
+    
+            case "relative":
+              // originalAltitude is AGL → MSL = homeAlt + originalAltitude
+              coord[2] = homeAlt + originalAlt;
+              break;
+    
+            case "terrain":
+              // originalAltitude is height above ground → MSL = terrainElev + originalAlt
+              {
+                const terrainElev = mapRef.current.queryTerrainElevation([lon, lat]) ?? 0;
+                coord[2] = terrainElev + originalAlt;
+              }
+              break;
+    
+            default:
+              // Optional default: treat as 'absolute'
+              break;
+          }
+        });
+      });
+    
+      // 5. Store your newly resolved geometry in local state
+      setResolvedGeoJSON(newPlan);
+    
+      // 6. (Optional) If you only want *2D distance*:
+      const raw2DLine = turf.lineString(
+        contextFlightPlan.features[0].geometry.coordinates.map(
+          (coord: [number, number, number]) => [coord[0], coord[1]]
+        )
+      );
+      const calculatedDistance = turf.length(raw2DLine, { units: "kilometers" });
+      setDistance(calculatedDistance);
+    
+    }, [contextFlightPlan, mapRef, setDistance]);
 
+    useEffect(() => {
+      if (resolvedGeoJSON && mapRef.current) {
+        console.log("Displaying resolved flight plan:", resolvedGeoJSON);
+        addGeoJSONToMap(resolvedGeoJSON);
+      }
+    }, [resolvedGeoJSON, mapRef]);
+    
+    
     const addGeoJSONToMap = (geojson: GeoJSON.FeatureCollection) => {
       if (mapRef?.current && geojson.type === "FeatureCollection") {
         const features = geojson.features.filter(
           (f) => f.geometry.type === "LineString"
         );
-
+    
         features.forEach((feature, idx) => {
           const layerId = `line-${idx}`;
+          
+          // Clean up existing layers
           if (mapRef?.current?.getSource(layerId)) {
             mapRef?.current.removeLayer(layerId);
             mapRef?.current.removeSource(layerId);
           }
-
-          // @ts-expect-error This works
-          const coordinates = feature.geometry.coordinates as [
-            number,
-            number,
-            number?
-          ][];
-
-          console.log("Coordinates with altitude data:", coordinates);
-          feature.properties = feature.properties || {}; // Ensure properties object exists
-          feature.properties.altitudes = coordinates.map(
-            (coord) => coord[2] || 0
-          );
-          console.log(
-            "Feature properties after adding altitudes:",
-            feature.properties
-          );
-
+    
+          // Using MSL altitudes directly from coordinates
+          const coordinates = feature.geometry.coordinates;
+          
+          // Store altitude information in feature properties
+          feature.properties = {
+            ...feature.properties,
+            altitudes: coordinates.map(coord => coord[2]),
+            // Original data already preserved in properties
+          };
+    
+          // Create the line
           const validCoordinates = coordinates.map(([lng, lat, alt]) => [
             lng,
             lat,
-            alt || 0,
+            alt
           ]);
+          
+          // Calculate distance...
           const line = turf.lineString(validCoordinates);
           const totalDistance = turf.length(line, { units: "kilometers" });
           setTotalDistance(totalDistance);
-          if (onTotalDistanceChange) {
-            console.log("Calculated total distance:", totalDistance);
-            onTotalDistanceChange(totalDistance);
-          }
-
+          
+          // Add to map...
           mapRef?.current?.addSource(layerId, {
             type: "geojson",
             data: feature,
             lineMetrics: true,
           });
-
-          console.log(
-            "Adding layer with altitudes:",
-            feature.properties.altitudes
-          );
-
+    
+          // You can now add rich tooltips with both MSL and original altitudes
           mapRef?.current?.addLayer({
             id: layerId,
             type: "line",
@@ -192,10 +234,32 @@ const Map = forwardRef<MapRef, MapProps>(
             },
             paint: {
               "line-width": 2,
-              "line-color": "#FFFF00", // Static yellow color
+              "line-color": "#FFFF00",
               "line-opacity": 1,
             },
           });
+    
+          // Add hover effects to show altitude information
+          if (mapRef.current) {
+            mapRef.current.on('mouseenter', layerId, (e) => {
+              if (e.features?.length) {
+                const feature = e.features[0];
+                const waypointIndex = Math.floor(e.lngLat.lng); // Approximate nearest waypoint
+                const waypoint = feature.properties.waypoints[waypointIndex];
+                
+                new mapboxgl.Popup()
+                  .setLngLat(e.lngLat)
+                  .setHTML(`
+                    <div>
+                      <p>MSL Altitude: ${feature.geometry.coordinates[waypointIndex][2]}m</p>
+                      <p>Original Altitude: ${waypoint.originalAltitude}m</p>
+                      <p>Mode: ${waypoint.altitudeMode}</p>
+                    </div>
+                  `)
+                  .addTo(map);
+              }
+            });
+          }
 
           const bounds = coordinates.reduce(
             (acc, coord) => {
@@ -227,7 +291,7 @@ const Map = forwardRef<MapRef, MapProps>(
                 .setLngLat([startCoord[0], startCoord[1]])
                 .setPopup(
                   new mapboxgl.Popup({ closeButton: false }).setHTML(
-                    '<strong style="color: black;">Start</strong>'
+                    '<strong style="color: black; bg-white;">Start</strong>'
                   )
                 )
                 .addTo(mapRef?.current);
@@ -245,7 +309,7 @@ const Map = forwardRef<MapRef, MapProps>(
                 .setLngLat([endCoord[0], endCoord[1]])
                 .setPopup(
                   new mapboxgl.Popup({ closeButton: false }).setHTML(
-                    '<strong style="color: black;">Finish</strong>'
+                    '<strong style="color: black; bg-white;">Finish</strong>'
                   )
                 )
                 .addTo(mapRef?.current);
@@ -307,6 +371,7 @@ const toggleLayerVisibility = (layerId: string) => {
 
 useImperativeHandle(ref, () => ({
   addGeoJSONToMap,
+
   runElosAnalysis: async (options?: MarkerAnalysisOptions) => {
     // Log map initialization check
     console.log('Checking map initialization...');
@@ -341,7 +406,7 @@ useImperativeHandle(ref, () => ({
         console.log('Flight path analysis completed');
       }
     } else {
-      console.error('Error: elosGridRef is not initialized');
+      console.error('Error: Input elosGridRef is not initialized');
     }
   },
   getMap: () => mapRef.current,
@@ -500,20 +565,46 @@ useImperativeHandle(ref, () => ({
       };
     
       const { icon, title, color } = markerInfo[markerType];
+      const offset = markerConfigs[markerType].elevationOffset;
+      const stationElevation = currentElevation + offset;
     
       popupDiv.innerHTML = `
-        <div style="${styles.container}">
-          <div style="${styles.header}">
-            <strong style="color: black; font-size: 14px;">${title} ${icon}</strong>
-            <button id="delete-${markerType}-btn" style="${styles.deleteBtn}">X</button>
-          </div>
-          
-          <div style="${styles.section}">
-            <label style="${styles.label}">Ground Elevation:</label>
-            <span style="${styles.value}">${currentElevation.toFixed(1)}m ASL</span>
-          </div>
+      <div class="popup-container">
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-2">
+          <h5 class="font-semibold text-sm text-gray-700">
+            ${title} ${icon}
+          </h5>
+          <button
+            id="delete-${markerType}-btn"
+            class="bg-red-500 text-white text-xs px-2 py-1 rounded hover:bg-red-600 transition"
+          >
+            X
+          </button>
         </div>
-      `;
+
+        <!-- Ground Elevation -->
+        <div class="mb-2">
+          <label class="block text-gray-600">Ground Elevation:</label>
+          <span class="font-medium">${currentElevation.toFixed(1)} m ASL</span>
+        </div>
+
+        <!-- Elevation Offset -->
+        <div class="mb-2">
+          <label class="block text-gray-600">Elevation Offset:</label>
+          <span class="font-medium">${offset.toFixed(1)} m</span>
+        </div>
+
+        <!-- Station Elevation -->
+        <div class="mb-2">
+          <label class="block text-gray-600">Station Elevation:</label>
+          <span class="font-medium">${stationElevation.toFixed(1)} m ASL</span>
+        </div>
+      </div>
+    `;
+
+    
+    
     
       // Add LOS check buttons for other markers
       const losButtons = popupDiv.querySelector('#los-buttons');
@@ -966,21 +1057,21 @@ useImperativeHandle(ref, () => ({
           </div>
         </div>
     
-        {contextFlightPlan && (
-          <ELOSGridAnalysis
-            ref={elosGridRef}
-            map={mapRef.current!}
-            flightPath={contextFlightPlan}
-            elosGridRange={contextGridRange}
-            onError={(error) => {
-              console.error('ELOS Analysis error:', error);
-              setError(error.message);
-            }}
-            onSuccess={(result) => {
-              console.log('ELOS Analysis completed:', result);
-              setResults(result);
-            }}
-          />
+        <ELOSGridAnalysis
+          ref={elosGridRef}
+          map={mapRef.current!}
+          flightPath={contextFlightPlan}
+          elosGridRange={contextGridRange}
+          onError={(error) => {
+            console.error('ELOS Analysis error:', error);
+            setError(error.message);
+          }}
+          onSuccess={(result) => {
+            console.log('ELOS Analysis completed:', result);
+            setResults(result);
+          }}
+        />
+
         )}
       </div>
     );
