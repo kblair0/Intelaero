@@ -42,7 +42,7 @@ module.exports = {
           '@apply bg-transparent shadow-none p-0 border-none !important': {}
         },
         '.toggle-switch': {
-          '@apply relative inline-block w-14 h-7': {},
+          '@apply relative inline-block w-8 h-4': {},
         },
         '.toggle-switch input': {
           '@apply opacity-0 w-0 h-0': {},
@@ -51,13 +51,13 @@ module.exports = {
           '@apply absolute cursor-pointer inset-0 bg-gray-300 transition-all duration-300 rounded-full': {},
         },
         '.toggle-slider:before': {
-          '@apply content-[""] absolute h-5 w-5 left-1 bottom-1 bg-white transition-all duration-300 rounded-full': {},
+          '@apply content-[""] absolute h-3 w-3 left-0.5 bottom-0.5 bg-white transition-all duration-300 rounded-full': {},
         },
         '.toggle-switch input:checked + .toggle-slider': {
           '@apply bg-blue-600': {},
         },
         '.toggle-switch input:checked + .toggle-slider:before': {
-          '@apply translate-x-7': {},
+          '@apply translate-x-4': {},
         },
       })
     }
