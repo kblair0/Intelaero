@@ -32,6 +32,9 @@ module.exports = {
         '.map-button': {
           '@apply inline-block text-black text-xs bg-gray-200 border border-gray-300 rounded-md px-3 py-2 select-none hover:bg-gray-300 transition-colors font-medium shadow-sm hover:shadow-md cursor-pointer opacity-80': {},
         },
+        '.map-legend': {
+          '@apply absolute bottom-4 right-4 mb-2 bg-lightGray/80 border border-gray-300 shadow-md p-3 rounded-md text-xs text-textPrimary font-medium opacity-90 backdrop-blur-sm': {},
+        },
         '.toggle-switch': {
           '@apply relative inline-block w-14 h-7': {},
         },

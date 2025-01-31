@@ -938,6 +938,32 @@ useImperativeHandle(ref, () => ({
               </button>
             </div>
           )}
+          {/* Legend for Visibility Colors */}
+          <div className="map-legend">
+            <h4 className="font-semibold mb-2">Legend</h4>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <span className="w-4 h-4 bg-[#d32f2f] block rounded"></span>
+                <span>0% Visibility (Red)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-4 h-4 bg-[#f57c00] block rounded"></span>
+                <span>25% Visibility (Orange)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-4 h-4 bg-[#fbc02d] block rounded"></span>
+                <span>50% Visibility (Yellow)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-4 h-4 bg-[#7cb342] block rounded"></span>
+                <span>75% Visibility (Green)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-4 h-4 bg-[#1976d2] block rounded"></span>
+                <span>100% Visibility (Blue)</span>
+              </div>
+            </div>
+          </div>
         </div>
     
         {contextFlightPlan && (
