@@ -63,6 +63,7 @@ export default function Home() {
                         "No zero altitude points",
                         "Terrain clearance",
                         "No duplicate waypoints",
+                        "Regulatory Altitude Limits",
                       ]}
                     />
                   </Card>
