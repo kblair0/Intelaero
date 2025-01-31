@@ -12,10 +12,9 @@ const Calculator: React.FC = () => {
     };
 
     return (
-        <Card>
-            <div className="space-y-6">
+            <div>
                 {/* Header */}
-                <div className="pb-2 border-b border-gray-200">
+                <div>
                     <h3 className="text-xl font-semibold text-gray-800">Flight Calculator</h3>
                     <p className="text-sm text-gray-500 mt-1">Adjust parameters and view flight metrics</p>
                 </div>
@@ -111,7 +110,6 @@ const Calculator: React.FC = () => {
                     </div>
                 </div>
             </div>
-        </Card>
     );
 };
 

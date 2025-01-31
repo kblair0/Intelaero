@@ -118,7 +118,7 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
   };
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200 space-y-6">
+    <div>
       {/* Main Analysis Section */}
       <div className="space-y-4">
         <div className="flex flex-col space-y-2">

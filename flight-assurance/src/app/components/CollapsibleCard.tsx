@@ -37,7 +37,7 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
       <div
         className={`transition-all duration-200 ease-in-out overflow-hidden ${
           isExpanded
-            ? "opacity-100 mt-1"
+            ? "opacity-100 mt-2"
             : "max-h-0 opacity-0 mt-0"
         }`}
       >
