@@ -1,4 +1,3 @@
-// context/FlightConfigurationContext.tsx
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useFlightPlanContext } from './FlightPlanContext';
 
@@ -15,6 +14,10 @@ interface MetricsState {
   batteryReserve: string;
   isFeasible: boolean;
   estimatedDistance: number;
+  flightPlanEstimatedTime: string;
+  expectedBatteryConsumption: number;
+  numberOfWaypoints: number;
+  mainAltitudeMode: string;
 }
 
 interface FlightConfigurationContextType {
@@ -32,7 +35,8 @@ const formatFlightTime = (timeInMinutes: number): string => {
 };
 
 export const FlightConfigurationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { distance: flightPlanDistance } = useFlightPlanContext();
+  // Destructure both flightPlan and flightPlanDistance from FlightPlanContext
+  const { flightPlan, distance: flightPlanDistance } = useFlightPlanContext();
   
   const [config, setConfig] = useState<ConfigState>({
     batteryCapacity: "28000",
@@ -46,7 +50,11 @@ export const FlightConfigurationProvider: React.FC<{ children: React.ReactNode }
     reserveTime: "0:00",
     batteryReserve: "0%",
     isFeasible: false,
-    estimatedDistance: 0
+    estimatedDistance: 0,
+    flightPlanEstimatedTime: "0:00",
+    expectedBatteryConsumption: 0,
+    numberOfWaypoints: 0,
+    mainAltitudeMode: "N/A"
   });
 
   const calculateMetrics = useCallback(() => {
@@ -56,13 +64,17 @@ export const FlightConfigurationProvider: React.FC<{ children: React.ReactNode }
     const flightTimeMinutes = batteryCapacity / dischargeRate || 0;
     const maxDistance = (flightTimeMinutes / 60) * assumedSpeed;
 
-    const newMetrics = {
+    const newMetrics: MetricsState = {
       flightTime: formatFlightTime(flightTimeMinutes),
       maxDistance,
       reserveTime: "0:00",
       batteryReserve: "0%",
       isFeasible: true,
-      estimatedDistance: maxDistance
+      estimatedDistance: maxDistance,
+      flightPlanEstimatedTime: "0:00",
+      expectedBatteryConsumption: 0,
+      numberOfWaypoints: 0,
+      mainAltitudeMode: "N/A"
     };
 
     if (flightPlanDistance) {
@@ -73,10 +85,39 @@ export const FlightConfigurationProvider: React.FC<{ children: React.ReactNode }
       newMetrics.reserveTime = formatFlightTime(Math.max(0, reserveTimeMinutes));
       newMetrics.batteryReserve = `${batteryReservePercent.toFixed(2)}%`;
       newMetrics.isFeasible = maxDistance >= flightPlanDistance;
+      newMetrics.flightPlanEstimatedTime = formatFlightTime(flightPlanTimeMinutes);
+      newMetrics.expectedBatteryConsumption = Math.round(dischargeRate * flightPlanTimeMinutes);
+    }
+
+    // Calculate numberOfWaypoints and mainAltitudeMode from the flight plan if available
+    if (flightPlan && flightPlan.features && flightPlan.features.length > 0) {
+      const waypoints = flightPlan.features[0].properties?.waypoints;
+      newMetrics.numberOfWaypoints = waypoints ? waypoints.length : 0;
+
+      // For the main segment (excluding the first and last waypoints)
+      if (waypoints && waypoints.length > 2) {
+        const mainSegment = waypoints.slice(1, -1);
+        // Tally the altitude modes for these waypoints
+        const modeCounts: Record<string, number> = {};
+        mainSegment.forEach((wp: any) => {
+          const mode = wp.altitudeMode;
+          modeCounts[mode] = (modeCounts[mode] || 0) + 1;
+        });
+        // Determine the most common mode
+        let commonMode = "N/A";
+        let maxCount = 0;
+        Object.keys(modeCounts).forEach(mode => {
+          if (modeCounts[mode] > maxCount) {
+            maxCount = modeCounts[mode];
+            commonMode = mode;
+          }
+        });
+        newMetrics.mainAltitudeMode = commonMode;
+      }
     }
 
     setMetrics(newMetrics);
-  }, [config.batteryCapacity, config.dischargeRate, config.assumedSpeed, flightPlanDistance]);
+  }, [config.batteryCapacity, config.dischargeRate, config.assumedSpeed, flightPlanDistance, flightPlan]);
 
   // Update metrics when config or flight plan distance changes
   useEffect(() => {

@@ -190,8 +190,8 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
       </div>
       {/* Marker Analysis Section */}
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold text-gray-700 border-b border-gray-300 pb-2">
-          Marker-Based Line of Sight Analysis
+        <h3 className="text-lg font-semibold text-gray-700 border-b mt-2 border-gray-300 pb-2">
+          Station Based Line of Sight Analysis
         </h3>
 
         {/* Add Markers Advice */}
