@@ -1,6 +1,6 @@
 "use client";
-import { useRef } from 'react';
-import { MapRef } from './components/Map'; 
+import { useRef } from "react";
+import { MapRef } from "./components/Map";
 import Calculator from "./components/Calculator";
 import Image from "next/image";
 import FlightPlanUploader from "./components/FlightPlanUploader";
@@ -8,7 +8,7 @@ import Map from "./components/Map";
 import { FlightPlanProvider } from "./context/FlightPlanContext";
 import { LocationProvider } from "./context/LocationContext";
 import { LOSAnalysisProvider } from "./context/LOSAnalysisContext";
-import { FlightConfigurationProvider } from './context/FlightConfigurationContext';
+import { FlightConfigurationProvider } from "./context/FlightConfigurationContext";
 import PlanVerification from "./components/PlanVerification";
 import Card from "./components/Card";
 import TwoColumn from "./components/TwoColumn";
@@ -58,14 +58,7 @@ export default function Home() {
                     <FlightPlanUploader />
                   </Card>
                   <Card>
-                    <PlanVerification
-                      checks={[
-                        "No zero altitude points",
-                        "Terrain clearance",
-                        "No duplicate waypoints",
-                        "Regulatory Altitude Limits",
-                      ]}
-                    />
+                    <PlanVerification />
                   </Card>
                 </TwoColumn>
               </CollapsibleCard>
@@ -77,14 +70,14 @@ export default function Home() {
                     <Calculator />
                   </Card>
                   <Card>
-                  <ELOSAnalysisCard mapRef={mapRef} />
+                    <ELOSAnalysisCard mapRef={mapRef} />
                   </Card>
                 </TwoColumn>
               </CollapsibleCard>
 
               {/* Full-width Map Section */}
               <Card>
-              <Map ref={mapRef} />
+                <Map ref={mapRef} />
               </Card>
             </LOSAnalysisProvider>
           </LocationProvider>
