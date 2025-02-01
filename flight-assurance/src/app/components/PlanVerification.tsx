@@ -14,7 +14,10 @@ import { useFlightPlanContext } from "../context/FlightPlanContext";
 const PlanVerification: React.FC = () => {
   const { flightPlan } = useFlightPlanContext();
   const [statuses, setStatuses] = useState<{
-    [key: string]: "loading" | "success" | "error";
+    [key: string]: {
+      status: "loading" | "success" | "error";
+      errorMessages?: string[];
+    };
   }>({});
   const [finalStatus, setFinalStatus] = useState<
     "loading" | "success" | "error"
@@ -30,23 +33,33 @@ const PlanVerification: React.FC = () => {
       ) {
         setStatuses((prev) => ({
           ...prev,
-          "No zero altitude points": "loading",
+          "No zero altitude points": { status: "loading" },
         }));
 
-        const hasZeros = flightPlan?.features.some((feature: any) => {
-          return feature.geometry.coordinates.some((geometry: any) => {
-            return geometry.some((coordinate: any) => coordinate === 0);
+        const zeroAltitudePoints: any[] = [];
+        flightPlan?.features.forEach((feature: any) => {
+          return feature.geometry.coordinates.forEach((geometry: any) => {
+            if (geometry.some((coordinate: any) => coordinate === 0)) {
+              zeroAltitudePoints.push(geometry);
+            }
           });
         });
         setStatuses((prev) => ({
           ...prev,
-          "No zero altitude points": hasZeros ? "error" : "success",
+          "No zero altitude points": zeroAltitudePoints.length
+            ? {
+                status: "error",
+                errorMessages: zeroAltitudePoints.map(
+                  (point) => `Zero altitude found: ${JSON.stringify(point)}`
+                ),
+              }
+            : { status: "success" },
         }));
         return;
       } else {
         setStatuses((prev) => ({
           ...prev,
-          "No zero altitude points": "success",
+          "No zero altitude points": { status: "success" },
         }));
       }
     };
@@ -64,31 +77,38 @@ const PlanVerification: React.FC = () => {
       ) {
         setStatuses((prev) => ({
           ...prev,
-          "No duplicate waypoints": "loading",
+          "No duplicate waypoints": { status: "loading" },
         }));
 
-        const hasDuplicates = flightPlan?.features.some((feature: any) => {
+        const duplicateEntries: any[] = [];
+        flightPlan?.features.forEach((feature: any) => {
           const coordinatesSet = new Set();
-          return feature.geometry.coordinates.some((geometry: any) => {
+          return feature.geometry.coordinates.forEach((geometry: any) => {
             const coordString = JSON.stringify(geometry);
             if (coordinatesSet.has(coordString)) {
-              console.log("Duplicate coordinate found:", geometry);
-              return true;
+              duplicateEntries.push(geometry);
             }
             coordinatesSet.add(coordString);
-            return false;
           });
         });
 
         setStatuses((prev) => ({
           ...prev,
-          "No duplicate waypoints": hasDuplicates ? "error" : "success",
+          "No duplicate waypoints":
+            duplicateEntries.length > 0
+              ? {
+                  status: "error",
+                  errorMessages: duplicateEntries.map(
+                    (entry) => `Duplicate entry found ${JSON.stringify(entry)}`
+                  ),
+                }
+              : { status: "success" },
         }));
         return;
       } else {
         setStatuses((prev) => ({
           ...prev,
-          "No duplicate waypoints": "success",
+          "No duplicate waypoints": { status: "success" },
         }));
       }
     };
@@ -101,7 +121,9 @@ const PlanVerification: React.FC = () => {
       setFinalStatus("loading");
       return;
     }
-    const hasError = Object.values(statuses).includes("error");
+    const hasError = Object.values(statuses).some(
+      (status) => status.status === "error"
+    );
     setFinalStatus(hasError ? "error" : "success");
   }, [statuses]);
 
@@ -121,17 +143,28 @@ const PlanVerification: React.FC = () => {
       {/* List of checks with statuses */}
       <ul className="space-y-2 w-full max-w-md">
         {Object.keys(statuses).map((check) => (
-          <li key={check} className="flex items-center gap-3">
-            <span className="flex-1 text-gray-800">{check}</span>
-            {statuses[check] === "loading" && (
-              <Loader className="animate-spin text-gray-500" />
-            )}
-            {statuses[check] === "success" && (
-              <CheckCircle className="text-green-500" />
-            )}
-            {statuses[check] === "error" && (
-              <XCircle className="text-red-500" />
-            )}
+          <li key={check} className="flex flex-col gap-1">
+            <div className="flex items-center gap-3">
+              <span className="flex-1 text-gray-800">{check}</span>
+              {statuses[check]?.status === "loading" && (
+                <Loader className="animate-spin text-gray-500" />
+              )}
+              {statuses[check]?.status === "success" && (
+                <CheckCircle className="text-green-500" />
+              )}
+              {statuses[check]?.status === "error" && (
+                <XCircle className="text-red-500" />
+              )}
+            </div>
+            {statuses[check]?.status === "error" &&
+              statuses[check]?.errorMessages &&
+              statuses[check]?.errorMessages.length > 0 && (
+                <ul className="ml-6 list-disc text-red-500">
+                  {statuses[check]?.errorMessages.map((message, index) => (
+                    <li key={index}>{message}</li>
+                  ))}
+                </ul>
+              )}
           </li>
         ))}
       </ul>
