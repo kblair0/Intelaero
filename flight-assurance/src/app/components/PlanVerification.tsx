@@ -24,6 +24,14 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, checks }) =
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showTerrainPopup, setShowTerrainPopup] = useState(false);
 
+  const getMinClearanceDistance = (): number | null => {
+    if (!analysisData) return null;
+    const clearances = analysisData.flightAltitudes.map((alt, idx) => alt - analysisData.terrainElevations[idx]);
+    const minClearance = Math.min(...clearances);
+    const index = clearances.indexOf(minClearance);
+    return analysisData.distances[index];
+  };
+
   useEffect(() => {
     const map = mapRef.current?.getMap();
     console.log('State Update:');
@@ -122,15 +130,6 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, checks }) =
     setFinalStatus(hasError ? "error" : "success");
   }, [statuses]);
 
-  //logging map state
-  useEffect(() => {
-    const map = mapRef.current?.getMap();
-    console.log('Map State Changed:', {
-      mapRef: mapRef.current,
-      map: map,
-      mapInstance: !!map
-    });
-  }, [mapRef.current]);
 
   const handleTerrainAnalysis = () => {
     const map = mapRef.current?.getMap();
@@ -219,6 +218,50 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, checks }) =
     >
       {isAnalyzing ? 'Analyzing...' : 'See Terrain Clearance Analysis'}
     </button>
+
+    {/* New Terrain Clearance Check UI Section */}
+    <div className="w-full max-w-md p-4 mt-4 border-t pt-3 bg-gray-100 rounded-md">
+        <h3 className="text-md font-semibold mb-2">Terrain Clearance Verification</h3>
+        {analysisData ? (
+          <div className="flex flex-col gap-2">
+            {analysisData.minimumClearanceHeight >= 0 ? (
+              <div className="flex items-center gap-2 text-green-600">
+                <CheckCircle />
+                <span>Flight plan clearance is safe (no terrain hit).</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-red-600">
+                <XCircle />
+                <span>
+                  Clearance below ground: {analysisData.minimumClearanceHeight.toFixed(1)}m
+                </span>
+              </div>
+            )}
+            <div className="text-sm text-gray-700">
+              <div>
+                <strong>Minimum Clearance:</strong>{" "}
+                {analysisData.minimumClearanceHeight.toFixed(1)}m
+              </div>
+              {getMinClearanceDistance() !== null && (
+                <div>
+                  <strong>Location of Closest Approach:</strong>{" "}
+                  {getMinClearanceDistance()?.toFixed(2)} km along the route
+                </div>
+              )}
+              {analysisData.minimumClearanceHeight < 0 && (
+                <div className="text-sm text-red-600">
+                  The flight path intersects the terrain. Please review and adjust your plan.
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <Loader className="animate-spin text-gray-500 w-6 h-6" />
+            <span>Waiting for terrain clearance data...</span>
+          </div>
+        )}
+      </div>
 
       {/* Stats Box */}
       <div className="w-full max-w-md p-4 mt-4 border-t pt-3 bg-gray-100 rounded-md">
