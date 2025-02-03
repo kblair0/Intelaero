@@ -9,6 +9,7 @@ import React, {
   useState,
   forwardRef,
   useImperativeHandle,
+  useCallback,
 } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
@@ -189,81 +190,82 @@ const Map = forwardRef<MapRef, MapProps>(
       }
     }, [resolvedGeoJSON, mapRef]);
 
-    const addGeoJSONToMap = (geojson: GeoJSON.FeatureCollection) => {
-      if (mapRef?.current && geojson.type === "FeatureCollection") {
-        const features = geojson.features.filter(
-          (f) => f.geometry.type === "LineString"
-        );
+    const addGeoJSONToMap = useCallback(
+      (geojson: GeoJSON.FeatureCollection) => {
+        if (mapRef?.current && geojson.type === "FeatureCollection") {
+          const features = geojson.features.filter(
+            (f) => f.geometry.type === "LineString"
+          );
 
-        features.forEach((feature, idx) => {
-          const layerId = `line-${idx}`;
+          features.forEach((feature, idx) => {
+            const layerId = `line-${idx}`;
 
-          // Clean up existing layers
-          if (mapRef?.current?.getSource(layerId)) {
-            mapRef?.current.removeLayer(layerId);
-            mapRef?.current.removeSource(layerId);
-          }
+            // Clean up existing layers
+            if (mapRef?.current?.getSource(layerId)) {
+              mapRef?.current.removeLayer(layerId);
+              mapRef?.current.removeSource(layerId);
+            }
 
-          // Using MSL altitudes directly from coordinates
-          const coordinates = (feature.geometry as GeoJSON.LineString)
-            .coordinates;
+            // Using MSL altitudes directly from coordinates
+            const coordinates = (feature.geometry as GeoJSON.LineString)
+              .coordinates;
 
-          // Store altitude information in feature properties
-          feature.properties = {
-            ...feature.properties,
-            altitudes: coordinates.map((coord) => coord[2]),
-            // Original data already preserved in properties
-          };
+            // Store altitude information in feature properties
+            feature.properties = {
+              ...feature.properties,
+              altitudes: coordinates.map((coord) => coord[2]),
+              // Original data already preserved in properties
+            };
 
-          // Create the line
-          const validCoordinates = coordinates.map(([lng, lat, alt]) => [
-            lng,
-            lat,
-            alt,
-          ]);
+            // Create the line
+            const validCoordinates = coordinates.map(([lng, lat, alt]) => [
+              lng,
+              lat,
+              alt,
+            ]);
 
-          // Calculate distance...
-          const line = turf.lineString(validCoordinates);
-          const totalDistance = turf.length(line, { units: "kilometers" });
-          setTotalDistance(totalDistance);
+            // Calculate distance...
+            const line = turf.lineString(validCoordinates);
+            const totalDistance = turf.length(line, { units: "kilometers" });
+            setTotalDistance(totalDistance);
 
-          // Add to map...
-          mapRef?.current?.addSource(layerId, {
-            type: "geojson",
-            data: feature,
-            lineMetrics: true,
-          });
+            // Add to map...
+            mapRef?.current?.addSource(layerId, {
+              type: "geojson",
+              data: feature,
+              lineMetrics: true,
+            });
 
-          // You can now add rich tooltips with both MSL and original altitudes
-          mapRef?.current?.addLayer({
-            id: layerId,
-            type: "line",
-            source: layerId,
-            layout: {
-              "line-join": "round",
-              "line-cap": "round",
-            },
-            paint: {
-              "line-width": 2,
-              "line-color": "#FFFF00",
-              "line-opacity": 1,
-            },
-          });
+            // You can now add rich tooltips with both MSL and original altitudes
+            mapRef?.current?.addLayer({
+              id: layerId,
+              type: "line",
+              source: layerId,
+              layout: {
+                "line-join": "round",
+                "line-cap": "round",
+              },
+              paint: {
+                "line-width": 2,
+                "line-color": "#FFFF00",
+                "line-opacity": 1,
+              },
+            });
 
-          // Add hover effects to show altitude information
-          if (mapRef.current) {
-            mapRef.current.on("mouseenter", layerId, (e) => {
-              if (e.features?.length) {
-                const feature = e.features[0];
-                const waypointIndex = Math.floor(e.lngLat.lng); // Approximate nearest waypoint
-                const waypoint = feature.properties?.waypoints
-                  ? feature.properties.waypoints[waypointIndex]
-                  : null;
+            // Add hover effects to show altitude information
+            if (mapRef.current) {
+              mapRef.current.on("mouseenter", layerId, (e) => {
+                if (e.features?.length) {
+                  const feature = e.features[0];
+                  const waypointIndex = Math.floor(e.lngLat.lng); // Approximate nearest waypoint
+                  const waypoint = feature.properties?.waypoints
+                    ? feature.properties.waypoints[waypointIndex]
+                    : null;
 
-                new mapboxgl.Popup()
-                  .setLngLat(e.lngLat)
-                  .setHTML(
-                    `
+                  new mapboxgl.Popup()
+                    .setLngLat(e.lngLat)
+                    .setHTML(
+                      `
                     <div>
                       <p>MSL Altitude: ${
                         (feature.geometry as GeoJSON.LineString).coordinates[
@@ -274,73 +276,75 @@ const Map = forwardRef<MapRef, MapProps>(
                       <p>Mode: ${waypoint.altitudeMode}</p>
                     </div>
                   `
-                  )
-                  .addTo(mapRef.current!);
+                    )
+                    .addTo(mapRef.current!);
+                }
+              });
+            }
+
+            const bounds = coordinates.reduce(
+              (acc, coord) => {
+                const [lng, lat] = coord;
+                acc[0] = Math.min(acc[0], lng);
+                acc[1] = Math.min(acc[1], lat);
+                acc[2] = Math.max(acc[2], lng);
+                acc[3] = Math.max(acc[3], lat);
+                return acc;
+              },
+              [Infinity, Infinity, -Infinity, -Infinity] as number[]
+            );
+            mapRef?.current?.fitBounds(
+              bounds as [number, number, number, number],
+              {
+                padding: 50,
+                duration: 1000,
+                pitch: 70,
+                zoom: 12.5,
               }
-            });
-          }
+            );
 
-          const bounds = coordinates.reduce(
-            (acc, coord) => {
-              const [lng, lat] = coord;
-              acc[0] = Math.min(acc[0], lng);
-              acc[1] = Math.min(acc[1], lat);
-              acc[2] = Math.max(acc[2], lng);
-              acc[3] = Math.max(acc[3], lat);
-              return acc;
-            },
-            [Infinity, Infinity, -Infinity, -Infinity] as number[]
-          );
-          mapRef?.current?.fitBounds(
-            bounds as [number, number, number, number],
-            {
-              padding: 50,
-              duration: 1000,
-              pitch: 70,
-              zoom: 12.5,
-            }
-          );
-
-          const startCoord = coordinates[0];
-          if (startMarkerRef.current) {
-            startMarkerRef.current.setLngLat([startCoord[0], startCoord[1]]);
-          } else {
-            if (mapRef.current) {
-              const newStartMarker = new mapboxgl.Marker({ color: "green" })
-                .setLngLat([startCoord[0], startCoord[1]])
-                .setPopup(
-                  new mapboxgl.Popup({ closeButton: false }).setHTML(
-                    '<strong style="color: black; bg-white;">Start</strong>'
+            const startCoord = coordinates[0];
+            if (startMarkerRef.current) {
+              startMarkerRef.current.setLngLat([startCoord[0], startCoord[1]]);
+            } else {
+              if (mapRef.current) {
+                const newStartMarker = new mapboxgl.Marker({ color: "green" })
+                  .setLngLat([startCoord[0], startCoord[1]])
+                  .setPopup(
+                    new mapboxgl.Popup({ closeButton: false }).setHTML(
+                      '<strong style="color: black; bg-white;">Start</strong>'
+                    )
                   )
-                )
-                .addTo(mapRef?.current);
-              newStartMarker.togglePopup();
-              startMarkerRef.current = newStartMarker;
+                  .addTo(mapRef?.current);
+                newStartMarker.togglePopup();
+                startMarkerRef.current = newStartMarker;
+              }
             }
-          }
 
-          const endCoord = coordinates[coordinates.length - 1];
-          if (endMarkerRef.current) {
-            endMarkerRef.current.setLngLat([endCoord[0], endCoord[1]]);
-          } else {
-            if (mapRef.current) {
-              const newEndMarker = new mapboxgl.Marker({ color: "red" })
-                .setLngLat([endCoord[0], endCoord[1]])
-                .setPopup(
-                  new mapboxgl.Popup({ closeButton: false }).setHTML(
-                    '<strong style="color: black; bg-white;">Finish</strong>'
+            const endCoord = coordinates[coordinates.length - 1];
+            if (endMarkerRef.current) {
+              endMarkerRef.current.setLngLat([endCoord[0], endCoord[1]]);
+            } else {
+              if (mapRef.current) {
+                const newEndMarker = new mapboxgl.Marker({ color: "red" })
+                  .setLngLat([endCoord[0], endCoord[1]])
+                  .setPopup(
+                    new mapboxgl.Popup({ closeButton: false }).setHTML(
+                      '<strong style="color: black; bg-white;">Finish</strong>'
+                    )
                   )
-                )
-                .addTo(mapRef?.current);
-              newEndMarker.togglePopup();
-              endMarkerRef.current = newEndMarker;
+                  .addTo(mapRef?.current);
+                newEndMarker.togglePopup();
+                endMarkerRef.current = newEndMarker;
+              }
             }
-          }
 
-          lineRef.current = geojson;
-        });
-      }
-    };
+            lineRef.current = geojson;
+          });
+        }
+      },
+      [mapRef]
+    );
 
     useEffect(() => {
       if (lineRef.current && metrics.maxDistance > 0) {

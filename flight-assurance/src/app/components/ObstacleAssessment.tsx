@@ -47,52 +47,51 @@ const ObstacleAssessment: React.FC<ObstacleAssessmentProps> = ({
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [waypointDistances, setWaypointDistances] = useState<number[]>([]);
 
-  const getTerrainElevation = async (coordinates: [number, number]): Promise<number> => {
-    const mapInstance = map.getMap();
-    if (!mapInstance) {
-      console.error('Map instance not available');
-      return 0;
-    }
-
-    try {
-      // Check if terrain source exists
-      if (!mapInstance.getSource('mapbox-dem')) {
-        // Add the terrain source if it doesn't exist
-        mapInstance.addSource('mapbox-dem', {
-          type: 'raster-dem',
-          url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
-          tileSize: 512,
-          maxzoom: 15
-        });
-
-        // Set terrain properties
-        mapInstance.setTerrain({
-          source: 'mapbox-dem',
-          exaggeration: 1.5
-        });
-
-        // Wait for the source to load
-        await new Promise<void>((resolve) => {
-          const checkSource = () => {
-            if (mapInstance.isSourceLoaded('mapbox-dem')) {
-              resolve();
-            } else {
-              mapInstance.once('sourcedata', () => checkSource());
-            }
-          };
-          checkSource();
-        });
-      }
-
-      const elevation = mapInstance.queryTerrainElevation(coordinates);
-      return elevation ?? 0;
-    } catch (error) {
-      console.error('Error getting terrain elevation:', error);
-      return 0;
-    }
-  };
-
   useEffect(() => {
+    const getTerrainElevation = async (coordinates: [number, number]): Promise<number> => {
+      const mapInstance = map.getMap();
+      if (!mapInstance) {
+        console.error('Map instance not available');
+        return 0;
+      }
+  
+      try {
+        // Check if terrain source exists
+        if (!mapInstance.getSource('mapbox-dem')) {
+          // Add the terrain source if it doesn't exist
+          mapInstance.addSource('mapbox-dem', {
+            type: 'raster-dem',
+            url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
+            tileSize: 512,
+            maxzoom: 15
+          });
+  
+          // Set terrain properties
+          mapInstance.setTerrain({
+            source: 'mapbox-dem',
+            exaggeration: 1.5
+          });
+  
+          // Wait for the source to load
+          await new Promise<void>((resolve) => {
+            const checkSource = () => {
+              if (mapInstance.isSourceLoaded('mapbox-dem')) {
+                resolve();
+              } else {
+                mapInstance.once('sourcedata', () => checkSource());
+              }
+            };
+            checkSource();
+          });
+        }
+  
+        const elevation = mapInstance.queryTerrainElevation(coordinates);
+        return elevation ?? 0;
+      } catch (error) {
+        console.error('Error getting terrain elevation:', error);
+        return 0;
+      }
+    };
     const processTerrainData = async () => {
       try {
         setError(null);
@@ -185,7 +184,7 @@ const ObstacleAssessment: React.FC<ObstacleAssessmentProps> = ({
     };
   
     processTerrainData();
-  }, [flightPlan, onDataProcessed, map,getTerrainElevation]);
+  }, [flightPlan, map, onDataProcessed]);
 
   useEffect(() => {
     console.log('Map object:', map);
