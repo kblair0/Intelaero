@@ -192,6 +192,33 @@ const Map = forwardRef<MapRef, MapProps>(
         });
       });
 
+// --- Query the terrain altitude at the home position ---
+const homePosition = newPlan.properties.homePosition;
+const homeTerrainElev = mapRef.current?.queryTerrainElevation([homePosition.longitude, homePosition.latitude]) ?? 0;
+homePosition.altitude = homeTerrainElev;
+if (
+  newPlan.features.length > 0 &&
+  newPlan.features[0].geometry.type === "LineString" &&
+  newPlan.features[0].geometry.coordinates.length > 0
+) {
+  newPlan.features[0].geometry.coordinates[0][2] = homeTerrainElev;
+}
+
+// --- Set the home altitude in properties to exactly match the terrain altitude ---
+homePosition.altitude = homeTerrainElev;
+console.log("New Home Position Altitude (properties):", homePosition);
+
+// --- Update the geometry coordinate for the home waypoint (assumed to be at index 0) ---
+if (
+  newPlan.features.length > 0 &&
+  newPlan.features[0].geometry.type === "LineString" &&
+  newPlan.features[0].geometry.coordinates.length > 0
+) {
+  newPlan.features[0].geometry.coordinates[0][2] = homeTerrainElev;
+  console.log("Updated home coordinate in geometry:", newPlan.features[0].geometry.coordinates[0]);
+}
+
+
       // 5. Store your newly resolved geometry in local state
       setResolvedGeoJSON(newPlan);
 
@@ -214,7 +241,9 @@ const Map = forwardRef<MapRef, MapProps>(
         properties: {
           homePosition: newPlan.properties.homePosition || {},
         },
-      });
+      }
+    
+    );
 
       // Extract the 2D coordinates (ignore altitude) from the first feature.
   const coords2D = newPlan.features[0].geometry.coordinates.map(
@@ -490,10 +519,7 @@ const Map = forwardRef<MapRef, MapProps>(
           }
         },
         getMap: () => {
-          console.log('getMap called:', {
-            mapRefCurrent: mapRef.current,
-            hasMap: !!mapRef.current
-          });
+
           // Return the actual map instance instead of the ref
           return mapRef.current;
         },
