@@ -3,6 +3,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { Line } from "react-chartjs-2";
 import { useObstacleAnalysis } from "../context/ObstacleAnalysisContext";
+import annotationPlugin from 'chartjs-plugin-annotation';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -13,7 +14,10 @@ import {
   Tooltip,
   Legend,
   Filler,
+  annotationPlugin,
 } from "chart.js";
+
+
 
 // Register the required chart components (if not already registered globally)
 ChartJS.register(
@@ -73,29 +77,76 @@ const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }
 
   const chartOptions = {
     responsive: true,
+    interaction: {
+      mode: "index" as const,
+      intersect: false,
+    },
     plugins: {
       legend: {
         display: true,
         position: "top" as const,
       },
       tooltip: {
+        enabled: true,
+        position: 'nearest',
         callbacks: {
           title: (tooltipItems: any[]) => {
             if (!tooltipItems.length) return "";
             const xVal = tooltipItems[0].parsed.x;
-            return `Distance: ${xVal} km`;
+            return `Distance: ${(xVal/100).toFixed(2)} km`;
+          },
+          label: (context: any) => {
+            const label = context.dataset.label || '';
+            const value = context.parsed.y;
+            if (label.includes('Terrain')) {
+              return `Terrain: ${value.toFixed(1)} m`;
+            } else if (label.includes('Flight')) {
+              return `Flight: ${value.toFixed(1)} m`;
+            }
+            return `${label}: ${value.toFixed(1)} m`;
           },
           footer: (tooltipItems: any[]) => {
             if (tooltipItems.length === 2) {
               const terrainElevation = tooltipItems[0].parsed.y;
               const flightAltitude = tooltipItems[1].parsed.y;
               const clearance = flightAltitude - terrainElevation;
-              return `Clearance: ${clearance.toFixed(2)} m`;
+              return `Clearance: ${clearance.toFixed(1)} m`;
             }
             return "";
-          },
+          }
         },
       },
+      annotation: {
+        animations: {
+          numbers: {
+            properties: ['x', 'y'],
+            type: 'number'
+          }
+        },
+        annotations: {
+          clearanceLine: {
+            type: 'line',
+            borderColor: 'rgba(128, 128, 128, 0.8)',
+            borderWidth: 2,
+            display: false,
+            enter: (ctx: any) => {
+              if (ctx.chart.tooltip?.dataPoints?.length === 2) {
+                return true;
+              }
+              return false;
+            },
+            leave: () => false,
+            value: (ctx: any) => {
+              const tooltip = ctx.chart.tooltip;
+              if (tooltip?.dataPoints?.length === 2) {
+                return tooltip.dataPoints[0].parsed.x;
+              }
+              return 0;
+            },
+            scaleID: 'x'
+          }
+        }
+      }
     },
     scales: {
       x: {
@@ -111,6 +162,25 @@ const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }
         },
       },
     },
+    // Add hover handlers
+    onHover: (event: any, elements: any[], chart: any) => {
+      const tooltip = chart.tooltip;
+      if (tooltip?.dataPoints?.length === 2) {
+        const xValue = tooltip.dataPoints[0].parsed.x;
+        const yLow = tooltip.dataPoints[0].parsed.y;
+        const yHigh = tooltip.dataPoints[1].parsed.y;
+        
+        // Update the clearance line
+        const clearanceLine = chart.options.plugins.annotation.annotations.clearanceLine;
+        clearanceLine.display = true;
+        clearanceLine.yMin = yLow;
+        clearanceLine.yMax = yHigh;
+        clearanceLine.xMin = xValue;
+        clearanceLine.xMax = xValue;
+        
+        chart.update('none');
+      }
+    }
   };
 
   // Render the popup as a portal attached to document.body.
