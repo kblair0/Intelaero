@@ -123,6 +123,7 @@ const Map = forwardRef<MapRef, MapProps>(
     useEffect(() => {
       // 1. Make sure we have a flight plan and the map is ready
       if (!contextFlightPlan || !mapRef.current) return;
+      if (contextFlightPlan.totalDistance) return; // Skip if already processed
 
       console.log('Starting Altitude Resolution:', {
         inputPlan: contextFlightPlan
@@ -214,6 +215,44 @@ const Map = forwardRef<MapRef, MapProps>(
           homePosition: newPlan.properties.homePosition || {},
         },
       });
+
+      // Extract the 2D coordinates (ignore altitude) from the first feature.
+  const coords2D = newPlan.features[0].geometry.coordinates.map(
+    (coord: [number, number, number]) => [coord[0], coord[1]]
+  );
+  // Create a Turf line from these 2D coordinates.
+  const routeLine = turf.lineString(coords2D);
+
+  // Compute cumulative distances along the route (in kilometers)
+  let cumulativeDistance = 0;
+  const waypointDistances = newPlan.features[0].geometry.coordinates.map(
+    (coord: [number, number, number], idx: number, arr: [number, number, number][]) => {
+      if (idx === 0) return 0;
+      const segment = turf.lineString([
+        arr[idx - 1].slice(0, 2),
+        coord.slice(0, 2)
+      ]);
+      cumulativeDistance += turf.length(segment, { units: "kilometers" });
+      return cumulativeDistance;
+    }
+  );
+
+  // Compute the total distance of the route (in kilometers)
+  const totalDistance = turf.length(routeLine, { units: "kilometers" });
+
+  // Create a new processed flight plan object that includes the computed Turf data
+  const processedFlightPlan = {
+    ...newPlan,
+    waypointDistances,  // cumulative distances at each coordinate (km)
+    totalDistance       // overall route distance (km)
+  };
+
+  // Update FlightPlanContext with the new processed flight plan data
+  setContextFlightPlan(processedFlightPlan);
+  setDistance(totalDistance);
+
+  console.log("Updated FlightPlanContext with processed data:", processedFlightPlan);
+
     
       // 6. (Optional) If you only want *2D distance*:
       const raw2DLine = turf.lineString(
@@ -225,7 +264,7 @@ const Map = forwardRef<MapRef, MapProps>(
         units: "kilometers",
       });
       setDistance(calculatedDistance);
-    }, [contextFlightPlan, mapRef, setDistance]);
+    }, [contextFlightPlan, mapRef, setContextFlightPlan, setDistance]);
 
     useEffect(() => {
       if (resolvedGeoJSON && mapRef.current) {

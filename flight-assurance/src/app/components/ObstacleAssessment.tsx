@@ -1,8 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Line } from "react-chartjs-2";
 import * as turf from "@turf/turf";
-import mapboxgl from "mapbox-gl";
-import annotationPlugin from 'chartjs-plugin-annotation';
 import {
   Chart as ChartJS,
   LineElement,
@@ -12,7 +10,6 @@ import {
   Legend,
   Tooltip,
   Filler,
-  annotationPlugin,
 } from "chart.js";
 import { useObstacleAnalysis, ObstacleAnalysisOutput } from "../context/ObstacleAnalysisContext";
 
@@ -146,6 +143,7 @@ const ObstacleAssessment = ({ flightPlan, map, onDataProcessed }: ObstacleAssess
         flightAltitudes: interpolatedAltitudes,
         terrainElevations: terrainElevationsArray,
         distances: distancesArray,
+        waypointDistances: waypointDistancesArray, 
         minimumClearanceHeight: minimumClearance,
         highestObstacle: maxTerrainHeight
       };

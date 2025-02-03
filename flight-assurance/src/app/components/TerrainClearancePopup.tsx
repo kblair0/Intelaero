@@ -3,7 +3,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { Line } from "react-chartjs-2";
 import { useObstacleAnalysis } from "../context/ObstacleAnalysisContext";
-import annotationPlugin from 'chartjs-plugin-annotation';
+import annotationPlugin from "chartjs-plugin-annotation";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -14,9 +14,9 @@ import {
   Tooltip,
   Legend,
   Filler,
-  annotationPlugin,
 } from "chart.js";
 import { CheckCircle, XCircle } from "lucide-react";
+import { useFlightPlanContext } from "../context/FlightPlanContext";
 
 // Register the required chart components (if not already registered globally)
 ChartJS.register(
@@ -27,7 +27,8 @@ ChartJS.register(
   Title,
   Tooltip,
   Legend,
-  Filler
+  Filler,
+  annotationPlugin // Register annotation plugin
 );
 
 interface TerrainClearancePopupProps {
@@ -35,22 +36,24 @@ interface TerrainClearancePopupProps {
 }
 
 const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }) => {
-  // Retrieve the obstacle analysis data from context
+  // Retrieve obstacle analysis data (for altitude, clearance, etc.)
   const { analysisData } = useObstacleAnalysis();
+  // Retrieve the processed flight plan (which now includes waypointDistances, totalDistance, etc.)
+  const { flightPlan } = useFlightPlanContext();
 
-  // If there is no analysis data yet, return a fallback UI.
-  if (!analysisData) {
+  // Fallback: if either analysis data or flight plan is missing, show a simple message.
+  if (!analysisData || !flightPlan) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
         <div className="bg-white rounded-lg p-6">
-          <p>No analysis data yet...</p>
+          <p>No analysis or flight plan data available.</p>
           <button onClick={onClose}>Close</button>
         </div>
       </div>
     );
   }
 
-  // Helper to calculate the distance along the route where minimum clearance occurs.
+  // Helper function remains unchanged (it uses analysisData for clearance computations)
   const getMinClearanceDistance = (): number | null => {
     const clearances = analysisData.flightAltitudes.map(
       (alt, idx) => alt - analysisData.terrainElevations[idx]
@@ -60,7 +63,7 @@ const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }
     return analysisData.distances[index];
   };
 
-  // Prepare the data for the chart using the analysisData from context
+  // Prepare chart data using the analysisData fields.
   const chartData = {
     labels: analysisData.distances.map((d) => d.toFixed(2)),
     datasets: [
@@ -83,6 +86,36 @@ const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }
       },
     ],
   };
+
+  const waypointAnnotations = (flightPlan.waypointDistances || []).reduce(
+    (acc, distance, idx) => {
+      const waypoint = flightPlan.features?.[0]?.properties?.waypoints?.[idx];
+      const labelContent = waypoint
+        ? `WP ${idx + 1}: ${waypoint.altitudeMode} (${waypoint.originalAltitude} m)`
+        : `WP ${idx + 1}`;
+      acc[`waypoint_${idx}`] = {
+        type: "line",
+        mode: "vertical",
+        scaleID: "x",
+        value: distance * 100,
+        borderColor: "rgba(0, 0, 0, 0.6)",
+        borderWidth: 1,
+        label: {
+          enabled: true,
+          content: labelContent,
+          position: "center",
+          rotation: -90,
+          backgroundColor: "rgba(0,0,0,0.7)",
+          color: "#fff",
+          font: { size: 10 },
+        },
+      };
+      return acc;
+    },
+    {} as Record<string, any>
+  );
+  
+
 
   const chartOptions = {
     responsive: true,
@@ -133,6 +166,7 @@ const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }
           },
         },
         annotations: {
+          ...waypointAnnotations,
           clearanceLine: {
             type: "line",
             borderColor: "rgba(128, 128, 128, 0.8)",
@@ -171,22 +205,18 @@ const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }
         },
       },
     },
-    // Add hover handlers to update the annotation
     onHover: (event: any, elements: any[], chart: any) => {
       const tooltip = chart.tooltip;
       if (tooltip?.dataPoints?.length === 2) {
         const xValue = tooltip.dataPoints[0].parsed.x;
         const yLow = tooltip.dataPoints[0].parsed.y;
         const yHigh = tooltip.dataPoints[1].parsed.y;
-
-        // Update the clearance line
         const clearanceLine = chart.options.plugins.annotation.annotations.clearanceLine;
         clearanceLine.display = true;
         clearanceLine.yMin = yLow;
         clearanceLine.yMax = yHigh;
         clearanceLine.xMin = xValue;
         clearanceLine.xMax = xValue;
-
         chart.update("none");
       }
     },
@@ -198,10 +228,7 @@ const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }
         {/* Popup Header */}
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-semibold">Terrain Clearance Analysis</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 focus:outline-none"
-          >
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-700 focus:outline-none">
             Close
           </button>
         </div>
@@ -215,16 +242,12 @@ const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }
         <div className="mt-4">
           <h3 className="text-lg font-medium mb-2">Flight Plan Statistics</h3>
           <div className="flex justify-between text-sm text-gray-700">
-            <span>Minimum Clearance Height:</span>
-            <span>{analysisData.minimumClearanceHeight.toFixed(2)} m</span>
-          </div>
-          <div className="flex justify-between text-sm text-gray-700">
-            <span>Highest Terrain Altitude:</span>
-            <span>{analysisData.highestObstacle.toFixed(2)} m</span>
+            <span>Total Distance:</span>
+            <span>{flightPlan.totalDistance ? flightPlan.totalDistance.toFixed(2) : "N/A"} km</span>
           </div>
         </div>
 
-        {/* New Terrain Clearance Verification Section */}
+        {/* Terrain Clearance Verification Section */}
         <div className="mt-4 border-t pt-4">
           <h3 className="text-lg font-medium mb-2">Terrain Clearance Verification</h3>
           {analysisData.minimumClearanceHeight >= 0 ? (
@@ -235,22 +258,20 @@ const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }
           ) : (
             <div className="flex items-center gap-2 text-red-600">
               <XCircle />
-              <span>
-                Clearance below ground: {analysisData.minimumClearanceHeight.toFixed(2)} m
-              </span>
+              <span>Clearance below ground: {analysisData.minimumClearanceHeight.toFixed(2)} m</span>
             </div>
           )}
           <div className="text-sm text-gray-700 mt-2">
             <div>
-              <strong>Minimum Clearance:</strong>{" "}
-              {analysisData.minimumClearanceHeight.toFixed(2)} m
+              <strong>Minimum Clearance:</strong> {analysisData.minimumClearanceHeight.toFixed(2)} m
             </div>
-            {analysisData.flightAltitudes && analysisData.terrainElevations && analysisData.distances && (
-              <div>
-                <strong>Closest Approach:</strong>{" "}
-                {getMinClearanceDistance()?.toFixed(2)} km along the route
-              </div>
-            )}
+            {analysisData.flightAltitudes &&
+              analysisData.terrainElevations &&
+              analysisData.distances && (
+                <div>
+                  <strong>Closest Approach:</strong> {getMinClearanceDistance()?.toFixed(2)} km along the route
+                </div>
+              )}
             {analysisData.minimumClearanceHeight < 0 && (
               <div className="text-sm text-red-600">
                 The flight path intersects the terrain. Please adjust your plan.
