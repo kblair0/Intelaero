@@ -1,12 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// components/ELOSAnalysisCard.tsx
 import React, { useState } from 'react';
 import { useLocation } from '../context/LocationContext';
 import { useLOSAnalysis } from '../context/LOSAnalysisContext';
 import { LocationData } from '../components/Map';
 import { MapRef } from './Map';
 import { useFlightPlanContext } from '../context/FlightPlanContext';
-// New import for the layer manager and its constants
 import { layerManager, MAP_LAYERS } from './LayerManager';
 
 interface ELOSAnalysisCardProps {
@@ -38,7 +36,7 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
   const {
     // Configuration
     elosGridRange,
-    gridSize, 
+    gridSize,
     markerConfigs,
     setElosGridRange,
     setGridSize,
@@ -53,8 +51,7 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
     setError,
   } = useLOSAnalysis();
 
-
-  // --- New: Single state object for grid layer visibility ---
+  // Global layer visibility state
   const [layerVisibility, setLayerVisibility] = useState<Record<string, boolean>>({
     [MAP_LAYERS.ELOS_GRID]: true,
     [MAP_LAYERS.GCS_GRID]: true,
@@ -62,7 +59,7 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
     [MAP_LAYERS.REPEATER_GRID]: true,
   });
 
-  // --- New: Generic function to toggle a specific layer ---
+  // Toggle function for layers
   const toggleLayerVisibility = (layerId: string) => {
     if (!mapRef.current) return;
     layerManager.toggleLayerVisibility(layerId);
@@ -78,11 +75,10 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
       return;
     }
 
-    // Just store them in a dictionary:
     const locations = {
       gcs: gcsLocation,
       observer: observerLocation,
-      repeater: repeaterLocation
+      repeater: repeaterLocation,
     };
 
     const location = locations[markerType];
@@ -98,7 +94,7 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
       await mapRef.current.runElosAnalysis({
         markerType,
         location,
-        range
+        range,
       });
     } catch (err: any) {
       setError(err.message || 'Analysis failed');
@@ -141,7 +137,7 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
           <h2 className="text-xl font-semibold flex items-center gap-2">
             <span className="text-blue-500">✈️</span>
             <span className="flex-grow">Drone LOS Analysis</span>
-            {/* New Toggle for Full Analysis Grid (Flight Path) */}
+            {/* Toggle for Full Analysis Grid */}
             <div className="flex flex-row items-center gap-2">
               <span className="text-xs">Show/Hide</span>
               <label className="toggle-switch">
@@ -158,48 +154,43 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
             Determine which points along the flight path the drone can see within the selected grid range.
           </span>
         </div>
-  
-{/* Wrap the sliders in a flex container */}
-<div className="flex flex-row gap-4">
-  {/* Grid Range Slider */}
-  <div className="flex-1">
-    <div className="flex justify-between text-m mb-1">
-      <span>Grid Range:</span>
-      <span>{elosGridRange}m</span>
-    </div>
-    <p className="text-xs text-gray-500 mb-2">
-      Distance from your drone to be analysed
-    </p>
-    <input
-      type="range"
-      min="500"
-      max="5000"
-      value={elosGridRange}
-      onChange={(e) => setElosGridRange(Number(e.target.value))}
-      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-    />
-  </div>
 
-  {/* Grid Size Slider */}
-  <div className="flex-1">
-    <div className="flex justify-between text-m mb-1">
-      <span>Grid Size:</span>
-      <span>{gridSize}m</span>
-    </div>
-    <p className="text-xs text-gray-500 mb-2">
-      The lower the number, the higher the fidelity
-    </p>
-    <input
-      type="range"
-      min="20"
-      max="300"
-      value={gridSize}
-      onChange={(e) => setGridSize(Number(e.target.value))}
-      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-    />
-  </div>
-</div>
+        {/* Global configuration sliders arranged side by side */}
+        <div className="flex flex-row gap-4">
+          {/* Grid Range Slider */}
+          <div className="flex-1">
+            <div className="flex justify-between text-m mb-1">
+              <span>Grid Range:</span>
+              <span>{elosGridRange}m</span>
+            </div>
+            <p className="text-xs text-gray-500 mb-2">Distance from your drone to be analysed</p>
+            <input
+              type="range"
+              min="500"
+              max="5000"
+              value={elosGridRange}
+              onChange={(e) => setElosGridRange(Number(e.target.value))}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            />
+          </div>
 
+          {/* Global Grid Size Slider */}
+          <div className="flex-1">
+            <div className="flex justify-between text-m mb-1">
+              <span>Grid Size:</span>
+              <span>{gridSize}m</span>
+            </div>
+            <p className="text-xs text-gray-500 mb-2">The lower the number, the higher the fidelity</p>
+            <input
+              type="range"
+              min="20"
+              max="300"
+              value={gridSize}
+              onChange={(e) => setGridSize(Number(e.target.value))}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            />
+          </div>
+        </div>
 
         {!isFlightPlanLoaded && (
           <div className="p-2 bg-yellow-100 text-yellow-700 text-xs rounded mt-2">
@@ -219,76 +210,94 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
           {isAnalyzing ? 'Analyzing...' : 'Run Full Analysis'}
         </button>
       </div>
+
       {/* Marker Analysis Section */}
-      <div className="space-y-4">
+      <div className="space-y-4 mt-6">
         <h3 className="text-lg font-semibold text-gray-700 border-b mt-2 border-gray-300 pb-2">
           Station Based Line of Sight Analysis
         </h3>
 
-        {/* Add Markers Advice */}
         {(!gcsLocation && !observerLocation && !repeaterLocation) && (
           <div className="p-3 mb-3 bg-yellow-100 border border-yellow-400 text-sm text-yellow-700 rounded">
             ⚠️ To unlock 📡GCS Station/🔭Observer Station/⚡️Repeater Station Line of Sight analysis, drop markers on the map.
           </div>
         )}
+
         {/* GCS Section */}
         {gcsLocation && (
-  <div className="bg-gray-50 p-4 rounded">
-    <div className="flex items-center justify-between mb-3">
-      <div className="flex items-center gap-1">
-        <span>📡</span>
-        <h4 className="text-sm font-semibold text-blue-600">GCS Station</h4>
-      </div>
-      {/* New Toggle for GCS Analysis Grid */}
-      <div className="flex flex-row items-center gap-2">
-        <span className="text-xs">Show/Hide</span>
-        <label className="toggle-switch">
-          <input
-            type="checkbox"
-            checked={layerVisibility[MAP_LAYERS.GCS_GRID]}
-            onChange={() => toggleLayerVisibility(MAP_LAYERS.GCS_GRID)}
-          />
-          <span className="toggle-slider"></span>
-        </label>
-      </div>
-    </div>
+          <div className="bg-gray-50 p-4 rounded">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-1">
+                <span>📡</span>
+                <h4 className="text-sm font-semibold text-blue-600">GCS Station</h4>
+              </div>
+              {/* Toggle for GCS Analysis Grid */}
+              <div className="flex flex-row items-center gap-2">
+                <span className="text-xs">Show/Hide</span>
+                <label className="toggle-switch">
+                  <input
+                    type="checkbox"
+                    checked={layerVisibility[MAP_LAYERS.GCS_GRID]}
+                    onChange={() => toggleLayerVisibility(MAP_LAYERS.GCS_GRID)}
+                  />
+                  <span className="toggle-slider"></span>
+                </label>
+              </div>
+            </div>
 
             <LocationDisplay title="GCS Location" location={gcsLocation} />
 
-            <div className="space-y-3">
-              {/* Elevation Offset */}
-              <div className="flex items-center justify-between">
-                <label className="text-xs text-gray-600">Elevation Offset (m):</label>
-                <input
-                  type="number"
-                  value={markerConfigs.gcs.elevationOffset}
-                  onChange={(e) => handleMarkerConfigChange('gcs', 'elevationOffset', Number(e.target.value))}
-                  className="w-20 px-2 py-1 text-xs border rounded"
-                />
-              </div>
-
-              {/* Grid Range */}
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-gray-600">Analysis Range (m):</label>
+            {/* Marker-specific sliders arranged side by side */}
+            <div className="flex flex-row gap-4 mb-4">
+              {/* Marker Grid Range */}
+              <div className="flex-1">
+                <div className="flex justify-between text-xs mb-1">
+                  <span>Analysis Range:</span>
+                  <span>{markerConfigs.gcs.gridRange}m</span>
+                </div>
                 <input
                   type="range"
                   min="500"
                   max="5000"
                   value={markerConfigs.gcs.gridRange}
                   onChange={(e) => handleMarkerConfigChange('gcs', 'gridRange', Number(e.target.value))}
-                  className="flex-grow h-2 bg-blue-100 rounded"
+                  className="w-full h-2 bg-blue-100 rounded-lg appearance-none cursor-pointer"
                 />
-                <span className="text-xs w-12">{markerConfigs.gcs.gridRange}m</span>
               </div>
-
-              {/* Analyze Button */}
-              <button
-                onClick={() => handleAnalyzeMarker('gcs')}
-                className="px-3 py-1 bg-blue-500 text-white text-xs rounded hover:opacity-90"
-              >
-                Analyze
-              </button>
+              {/* Marker Grid Size */}
+              <div className="flex-1">
+                <div className="flex justify-between text-xs mb-1">
+                  <span>Grid Size:</span>
+                  <span>{gridSize}m</span>
+                </div>
+                <input
+                  type="range"
+                  min="20"
+                  max="300"
+                  value={gridSize}
+                  onChange={(e) => setGridSize(Number(e.target.value))}
+                  className="w-full h-2 bg-blue-100 rounded-lg appearance-none cursor-pointer"
+                />
+              </div>
             </div>
+
+            {/* Elevation Offset */}
+            <div className="flex items-center justify-between mb-3">
+              <label className="text-xs text-gray-600">Elevation Offset (m):</label>
+              <input
+                type="number"
+                value={markerConfigs.gcs.elevationOffset}
+                onChange={(e) => handleMarkerConfigChange('gcs', 'elevationOffset', Number(e.target.value))}
+                className="w-20 px-2 py-1 text-xs border rounded"
+              />
+            </div>
+
+            <button
+              onClick={() => handleAnalyzeMarker('gcs')}
+              className="px-3 py-1 bg-blue-500 text-white text-xs rounded hover:opacity-90"
+            >
+              Analyze
+            </button>
           </div>
         )}
 
@@ -300,7 +309,7 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
                 <span>🔭</span>
                 <h4 className="text-sm font-semibold text-green-600">Observer Station</h4>
               </div>
-              {/* New Toggle for Observer Analysis Grid */}
+              {/* Toggle for Observer Analysis Grid */}
               <div className="flex flex-row items-center gap-2">
                 <span className="text-xs">Show/Hide</span>
                 <label className="toggle-switch">
@@ -316,40 +325,57 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
 
             <LocationDisplay title="Observer Location" location={observerLocation} />
 
-            <div className="space-y-3">
-              {/* Elevation Offset */}
-              <div className="flex items-center justify-between">
-                <label className="text-xs text-gray-600">Elevation Offset (m):</label>
-                <input
-                  type="number"
-                  value={markerConfigs.observer.elevationOffset}
-                  onChange={(e) => handleMarkerConfigChange('observer', 'elevationOffset', Number(e.target.value))}
-                  className="w-20 px-2 py-1 text-xs border rounded"
-                />
-              </div>
-
-              {/* Grid Range */}
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-gray-600">Analysis Range (m):</label>
+            {/* Marker-specific sliders arranged side by side */}
+            <div className="flex flex-row gap-4 mb-4">
+              {/* Marker Grid Range */}
+              <div className="flex-1">
+                <div className="flex justify-between text-xs mb-1">
+                  <span>Analysis Range:</span>
+                  <span>{markerConfigs.observer.gridRange}m</span>
+                </div>
                 <input
                   type="range"
                   min="500"
                   max="5000"
                   value={markerConfigs.observer.gridRange}
                   onChange={(e) => handleMarkerConfigChange('observer', 'gridRange', Number(e.target.value))}
-                  className="flex-grow h-2 bg-green-100 rounded"
+                  className="w-full h-2 bg-green-100 rounded-lg appearance-none cursor-pointer"
                 />
-                <span className="text-xs w-12">{markerConfigs.observer.gridRange}m</span>
               </div>
-
-              {/* Analyze Button */}
-              <button
-                onClick={() => handleAnalyzeMarker('observer')}
-                className="px-3 py-1 bg-green-500 text-white text-xs rounded hover:opacity-90"
-              >
-                Analyze
-              </button>
+              {/* Marker Grid Size */}
+              <div className="flex-1">
+                <div className="flex justify-between text-xs mb-1">
+                  <span>Grid Size:</span>
+                  <span>{gridSize}m</span>
+                </div>
+                <input
+                  type="range"
+                  min="20"
+                  max="300"
+                  value={gridSize}
+                  onChange={(e) => setGridSize(Number(e.target.value))}
+                  className="w-full h-2 bg-green-100 rounded-lg appearance-none cursor-pointer"
+                />
+              </div>
             </div>
+
+            {/* Elevation Offset */}
+            <div className="flex items-center justify-between mb-3">
+              <label className="text-xs text-gray-600">Elevation Offset (m):</label>
+              <input
+                type="number"
+                value={markerConfigs.observer.elevationOffset}
+                onChange={(e) => handleMarkerConfigChange('observer', 'elevationOffset', Number(e.target.value))}
+                className="w-20 px-2 py-1 text-xs border rounded"
+              />
+            </div>
+
+            <button
+              onClick={() => handleAnalyzeMarker('observer')}
+              className="px-3 py-1 bg-green-500 text-white text-xs rounded hover:opacity-90"
+            >
+              Analyze
+            </button>
           </div>
         )}
 
@@ -361,7 +387,7 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
                 <span>⚡️</span>
                 <h4 className="text-sm font-semibold text-red-600">Repeater Station</h4>
               </div>
-              {/* New Toggle for Repeater Analysis Grid */}
+              {/* Toggle for Repeater Analysis Grid */}
               <div className="flex flex-row items-center gap-2">
                 <span className="text-xs">Show/Hide</span>
                 <label className="toggle-switch">
@@ -377,40 +403,57 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
 
             <LocationDisplay title="Repeater Location" location={repeaterLocation} />
 
-            <div className="space-y-3">
-              {/* Elevation Offset */}
-              <div className="flex items-center justify-between">
-                <label className="text-xs text-gray-600">Elevation Offset (m):</label>
-                <input
-                  type="number"
-                  value={markerConfigs.repeater.elevationOffset}
-                  onChange={(e) => handleMarkerConfigChange('repeater', 'elevationOffset', Number(e.target.value))}
-                  className="w-20 px-2 py-1 text-xs border rounded"
-                />
-              </div>
-
-              {/* Grid Range */}
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-gray-600">Analysis Range (m):</label>
+            {/* Marker-specific sliders arranged side by side */}
+            <div className="flex flex-row gap-4 mb-4">
+              {/* Marker Grid Range */}
+              <div className="flex-1">
+                <div className="flex justify-between text-xs mb-1">
+                  <span>Analysis Range:</span>
+                  <span>{markerConfigs.repeater.gridRange}m</span>
+                </div>
                 <input
                   type="range"
                   min="500"
                   max="5000"
                   value={markerConfigs.repeater.gridRange}
                   onChange={(e) => handleMarkerConfigChange('repeater', 'gridRange', Number(e.target.value))}
-                  className="flex-grow h-2 bg-red-100 rounded"
+                  className="w-full h-2 bg-red-100 rounded-lg appearance-none cursor-pointer"
                 />
-                <span className="text-xs w-12">{markerConfigs.repeater.gridRange}m</span>
               </div>
-
-              {/* Analyze Individual Button */}
-              <button
-                onClick={() => handleAnalyzeMarker('repeater')}
-                className="px-3 py-1 bg-red-500 text-white text-xs rounded hover:opacity-90"
-              >
-                Analyze Own LOS
-              </button>
+              {/* Marker Grid Size */}
+              <div className="flex-1">
+                <div className="flex justify-between text-xs mb-1">
+                  <span>Grid Size:</span>
+                  <span>{gridSize}m</span>
+                </div>
+                <input
+                  type="range"
+                  min="20"
+                  max="300"
+                  value={gridSize}
+                  onChange={(e) => setGridSize(Number(e.target.value))}
+                  className="w-full h-2 bg-red-100 rounded-lg appearance-none cursor-pointer"
+                />
+              </div>
             </div>
+
+            {/* Elevation Offset */}
+            <div className="flex items-center justify-between mb-3">
+              <label className="text-xs text-gray-600">Elevation Offset (m):</label>
+              <input
+                type="number"
+                value={markerConfigs.repeater.elevationOffset}
+                onChange={(e) => handleMarkerConfigChange('repeater', 'elevationOffset', Number(e.target.value))}
+                className="w-20 px-2 py-1 text-xs border rounded"
+              />
+            </div>
+
+            <button
+              onClick={() => handleAnalyzeMarker('repeater')}
+              className="px-3 py-1 bg-red-500 text-white text-xs rounded hover:opacity-90"
+            >
+              Analyze Own LOS
+            </button>
 
             <div className="space-y-3 mt-4">
               <div className="flex items-center justify-between">
@@ -451,8 +494,8 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
             </div>
           </div>
         )}
-      </div> 
-    </div> 
+      </div>
+    </div>
   );
 };
 

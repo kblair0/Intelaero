@@ -174,7 +174,15 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef }) => {
 
       <h2 className="text-lg font-medium">Plan Verification</h2>
 
-      {/* Overall Status Indicator */}
+      <div className="flex flex-col items-center">
+      {/* Display the label if there's no flight plan */}
+      {!flightPlan && (
+        <div className="mb-2 text-gray-700 text-center">
+          Awaiting Flight Plan Upload
+        </div>
+      )}
+            {/* Overall Status Indicator */}
+
       {finalStatus === "loading" ? (
         <Loader className="animate-spin text-gray-500 w-16 h-16" />
       ) : finalStatus === "success" ? (
@@ -182,6 +190,9 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef }) => {
       ) : (
         <XCircle className="text-red-500 w-16 h-16" />
       )}
+    </div>
+
+
 
       {/* List of checks with statuses */}
       <ul className="space-y-2 w-full max-w-md">
