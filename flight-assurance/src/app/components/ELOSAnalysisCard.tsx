@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // components/ELOSAnalysisCard.tsx
 import React, { useState } from 'react';
 import { useLocation } from '../context/LocationContext';
@@ -44,12 +45,10 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
     // Analysis State
     isAnalyzing,
     results,
-    error,
 
     // Analysis Actions
     setIsAnalyzing,
     setError,
-    resetAnalysis,
   } = useLOSAnalysis();
 
   // --- New: Single state object for grid layer visibility ---
