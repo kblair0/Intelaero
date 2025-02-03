@@ -143,35 +143,44 @@ console.log('Flight Plan Parse Details:', {
 /**
  * Parse a KML file using @mapbox/togeojson, then produce a minimal FlightPlanData.
  * This example simply extracts the **first** LineString in the KML.
+ * Infer home psotion is the first waypoint.
  */
-function parseKMLFile(
-  kmlText: string
-): import("../context/FlightPlanContext").FlightPlanData {
-  // Convert text → XML DOM
+
+function inferHomePosition(coordinates: [number, number, number][]): {
+  latitude: number;
+  longitude: number;
+  altitude: number;
+} | null {
+  if (coordinates.length === 0) return null;
+
+  // Use first coordinate as default home position
+  const firstPoint = coordinates[0];
+  return {
+    latitude: firstPoint[1], // Lat
+    longitude: firstPoint[0], // Lon
+    altitude: firstPoint[2] ?? 0, // Alt, default to 0 if missing
+  };
+}
+
+function parseKMLFile(kmlText: string): FlightPlanData {
   const kmlDom = parser?.parseFromString(kmlText, "application/xml");
-  // Convert KML DOM → GeoJSON
   const geojsonResult = toGeoJSON.kml(kmlDom) as GeoJSON.FeatureCollection;
 
-  // For a minimal approach, let's find the first LineString
   let lineStringCoords: [number, number, number][] = [];
   let name = "KML Flight Path";
 
-  // Use a default home for KML in case we don't have one
-  const homePosition = {
-    latitude: 0,
-    longitude: 0,
-    altitude: 0,
-  };
-
   for (const feature of geojsonResult.features) {
     if (feature.geometry?.type === "LineString") {
-      const coords3D = feature.geometry.coordinates as [number, number, number][];
-      lineStringCoords = coords3D.map(([lon, lat, alt]) => [lon, lat, alt ?? 0]);
+      lineStringCoords = feature.geometry.coordinates.map(([lon, lat, alt]) => [
+        lon,
+        lat,
+        alt ?? 0,
+      ]);
 
       if (feature.properties?.name) {
         name = feature.properties.name;
       }
-      break; // just the first LineString
+      break;
     }
   }
 
@@ -179,22 +188,22 @@ function parseKMLFile(
     throw new Error("No LineString geometry found in KML");
   }
 
-  // Build waypoints array
-  const waypoints = lineStringCoords.map((coord, i) => {
-    return {
-      index: i,
-      altitudeMode: "absolute" as const,
-      originalAltitude: coord[2], // 0
-      commandType: 16, // e.g. MAV_CMD_NAV_WAYPOINT
-      frame: 0,
-      params: [0, 0, 0, 0], // placeholders
-    };
-  });
+  // 🛠️ Infer home position if not provided
+  const homePosition = inferHomePosition(lineStringCoords);
+
+  const waypoints = lineStringCoords.map((coord, i) => ({
+    index: i,
+    altitudeMode: "absolute" as const,
+    originalAltitude: coord[2],
+    commandType: 16,
+    frame: 0,
+    params: [0, 0, 0, 0],
+  }));
 
   return {
     type: "FeatureCollection",
     properties: {
-      homePosition,
+      homePosition, // 👈 Now inferred when missing
     },
     features: [
       {
@@ -214,6 +223,7 @@ function parseKMLFile(
     ],
   };
 }
+
 
 interface FlightPlanUploaderProps {
   onPlanUploaded?: (
@@ -244,7 +254,7 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded 
           if (fileExtension === "waypoints") {
             flightData = parseQGCFile(reader.result as string);
           } else if (fileExtension === "geojson") {
-            flightData = JSON.parse(reader.result as string);
+            flightData = parseGeoJSONFile(reader.result as string);
           } else if (fileExtension === "kml") {
             flightData = parseKMLFile(reader.result as string);
           } else {
@@ -278,16 +288,66 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded 
     onDrop,
   });
 
+  function parseGeoJSONFile(geojsonText: string): import("../context/FlightPlanContext").FlightPlanData {
+    const geojsonResult = JSON.parse(geojsonText) as GeoJSON.FeatureCollection;
+  
+    if (!geojsonResult.features || geojsonResult.features.length === 0) {
+      throw new Error("Invalid GeoJSON: No features found.");
+    }
+  
+    const flightFeature = geojsonResult.features.find(
+      (f) => f.geometry?.type === "LineString"
+    );
+  
+    if (!flightFeature) {
+      throw new Error("No valid flight path found in GeoJSON.");
+    }
+  
+    const lineStringCoords = (flightFeature.geometry as GeoJSON.LineString)
+      .coordinates as [number, number, number][];
+  
+    // 🛠️ Infer home position if missing
+    const homePosition = geojsonResult.properties?.homePosition || inferHomePosition(lineStringCoords);
+  
+    return {
+      type: "FeatureCollection",
+      properties: {
+        homePosition,
+      },
+      features: [flightFeature],
+    };
+  }
+  
+  function inferHomePosition(coordinates: [number, number, number][]): {
+    latitude: number;
+    longitude: number;
+    altitude: number;
+  } | null {
+    if (coordinates.length === 0) return null;
+  
+    // Use first coordinate as default home position
+    const firstPoint = coordinates[0];
+    return {
+      latitude: firstPoint[1], // Lat
+      longitude: firstPoint[0], // Lon
+      altitude: firstPoint[2] ?? 0, // Alt, default to 0 if missing
+    };
+  }
+  
+
   // Example button for loading a sample .geojson from the public folder
   const loadExampleGeoJSON = async () => {
     try {
       const response = await fetch("/example.geojson");
-      const data = await response.json();
-
-      setFlightPlan(data);
-
+      const rawData = await response.json();
+  
+      // Process the data through our parsing function
+      const processedData = parseGeoJSONFile(JSON.stringify(rawData)); 
+  
+      setFlightPlan(processedData); // ✅ Now homePosition is guaranteed!
+  
       if (onPlanUploaded) {
-        onPlanUploaded(data);
+        onPlanUploaded(processedData);
       }
       setFileUploadStatus("processed");
     } catch (error) {
@@ -295,6 +355,7 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded 
       setFileUploadStatus("error");
     }
   };
+  
 
   return (
     <div className="flex-1 bg-white shadow-lg p-6 rounded-lg border border-gray-200">

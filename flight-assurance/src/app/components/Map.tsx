@@ -410,7 +410,6 @@ const Map = forwardRef<MapRef, MapProps>(
       ref,
       () => ({
         addGeoJSONToMap,
-
         runElosAnalysis: async (options?: MarkerAnalysisOptions) => {
           // Log map initialization check
           console.log("Checking map initialization...");
@@ -451,7 +450,14 @@ const Map = forwardRef<MapRef, MapProps>(
             console.error("Error: Input elosGridRef is not initialized");
           }
         },
-        getMap: () => mapRef.current,
+        getMap: () => {
+          console.log('getMap called:', {
+            mapRefCurrent: mapRef.current,
+            hasMap: !!mapRef.current
+          });
+          // Return the actual map instance instead of the ref
+          return mapRef.current;
+        },
         toggleLayerVisibility,
       }),
       [addGeoJSONToMap]
@@ -650,7 +656,7 @@ const Map = forwardRef<MapRef, MapProps>(
             id="delete-${markerType}-btn"
             class="bg-red-500 text-white text-xs px-2 py-1 rounded hover:bg-red-600 transition"
           >
-            X
+            Delete
           </button>
         </div>
 
