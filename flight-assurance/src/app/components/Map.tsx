@@ -125,10 +125,10 @@ const Map = forwardRef<MapRef, MapProps>(
       if (!contextFlightPlan || !mapRef.current) return;
       if (contextFlightPlan.totalDistance) return; // Skip if already processed
 
-      console.log('Starting Altitude Resolution:', {
-        inputPlan: contextFlightPlan
+      console.log("Starting Altitude Resolution:", {
+        inputPlan: contextFlightPlan,
       });
-    
+
       // 2. Clone the original flight plan so we don’t mutate context data
       const newPlan = structuredClone(contextFlightPlan);
 
@@ -147,31 +147,34 @@ const Map = forwardRef<MapRef, MapProps>(
           const wp = waypoints[i];
           if (!wp) return; // mismatch fallback
 
-          const terrainElev = mapRef.current?.queryTerrainElevation([lon, lat]) ?? 0;
+          const terrainElev =
+            mapRef.current?.queryTerrainElevation([lon, lat]) ?? 0;
           console.log(`Waypoint ${i} processing:`, {
             longitude: lon,
             latitude: lat,
             originalAltitude: originalAlt,
             terrainElevation: terrainElev,
             mode: wp.altitudeMode,
-            beforeResolution: coord[2]
+            beforeResolution: coord[2],
           });
-    
+
           switch (wp.altitudeMode) {
             case "absolute":
               // Already MSL; do nothing
               break;
-    
-              case "relative":
-                if (wp.commandType === 22) { // MAV_CMD_NAV_TAKEOFF
-                  // Use the takeoff location's ground elevation as base
-                  const takeoffGroundElev = mapRef.current?.queryTerrainElevation([lon, lat]) ?? 0;
-                  coord[2] = takeoffGroundElev + originalAlt;  // AGL from ground at takeoff point
-                } else {
-                  coord[2] = terrainElev + originalAlt;
-                }
-                break;
-    
+
+            case "relative":
+              if (wp.commandType === 22) {
+                // MAV_CMD_NAV_TAKEOFF
+                // Use the takeoff location's ground elevation as base
+                const takeoffGroundElev =
+                  mapRef.current?.queryTerrainElevation([lon, lat]) ?? 0;
+                coord[2] = takeoffGroundElev + originalAlt; // AGL from ground at takeoff point
+              } else {
+                coord[2] = terrainElev + originalAlt;
+              }
+              break;
+
             case "terrain":
               // originalAltitude is height above ground → MSL = terrainElev + originalAlt
               {
@@ -187,7 +190,7 @@ const Map = forwardRef<MapRef, MapProps>(
           }
           console.log(`Waypoint ${i} resolved:`, {
             finalAltitude: coord[2],
-            heightAGL: coord[2] - terrainElev
+            heightAGL: coord[2] - terrainElev,
           });
         });
       });
@@ -205,7 +208,7 @@ const Map = forwardRef<MapRef, MapProps>(
           properties: {
             name: feature.properties.name || `Feature ${index}`,
             altitudeModes: feature.properties.altitudeModes || [],
-            altitudes: feature.geometry.coordinates.map(coord => coord[2]), // ✅ Extract resolved altitudes
+            altitudes: feature.geometry.coordinates.map((coord) => coord[2]), // ✅ Extract resolved altitudes
             originalAltitudes: feature.properties.originalAltitudes || [],
             rawCommands: feature.properties.rawCommands || [],
             waypoints: feature.properties.waypoints || [],
@@ -217,43 +220,49 @@ const Map = forwardRef<MapRef, MapProps>(
       });
 
       // Extract the 2D coordinates (ignore altitude) from the first feature.
-  const coords2D = newPlan.features[0].geometry.coordinates.map(
-    (coord: [number, number, number]) => [coord[0], coord[1]]
-  );
-  // Create a Turf line from these 2D coordinates.
-  const routeLine = turf.lineString(coords2D);
+      const coords2D = newPlan.features[0].geometry.coordinates.map(
+        (coord: [number, number, number]) => [coord[0], coord[1]]
+      );
+      // Create a Turf line from these 2D coordinates.
+      const routeLine = turf.lineString(coords2D);
 
-  // Compute cumulative distances along the route (in kilometers)
-  let cumulativeDistance = 0;
-  const waypointDistances = newPlan.features[0].geometry.coordinates.map(
-    (coord: [number, number, number], idx: number, arr: [number, number, number][]) => {
-      if (idx === 0) return 0;
-      const segment = turf.lineString([
-        arr[idx - 1].slice(0, 2),
-        coord.slice(0, 2)
-      ]);
-      cumulativeDistance += turf.length(segment, { units: "kilometers" });
-      return cumulativeDistance;
-    }
-  );
+      // Compute cumulative distances along the route (in kilometers)
+      let cumulativeDistance = 0;
+      const waypointDistances = newPlan.features[0].geometry.coordinates.map(
+        (
+          coord: [number, number, number],
+          idx: number,
+          arr: [number, number, number][]
+        ) => {
+          if (idx === 0) return 0;
+          const segment = turf.lineString([
+            arr[idx - 1].slice(0, 2),
+            coord.slice(0, 2),
+          ]);
+          cumulativeDistance += turf.length(segment, { units: "kilometers" });
+          return cumulativeDistance;
+        }
+      );
 
-  // Compute the total distance of the route (in kilometers)
-  const totalDistance = turf.length(routeLine, { units: "kilometers" });
+      // Compute the total distance of the route (in kilometers)
+      const totalDistance = turf.length(routeLine, { units: "kilometers" });
 
-  // Create a new processed flight plan object that includes the computed Turf data
-  const processedFlightPlan = {
-    ...newPlan,
-    waypointDistances,  // cumulative distances at each coordinate (km)
-    totalDistance       // overall route distance (km)
-  };
+      // Create a new processed flight plan object that includes the computed Turf data
+      const processedFlightPlan = {
+        ...newPlan,
+        waypointDistances, // cumulative distances at each coordinate (km)
+        totalDistance, // overall route distance (km)
+      };
 
-  // Update FlightPlanContext with the new processed flight plan data
-  setContextFlightPlan(processedFlightPlan);
-  setDistance(totalDistance);
+      // Update FlightPlanContext with the new processed flight plan data
+      setContextFlightPlan(processedFlightPlan);
+      setDistance(totalDistance);
 
-  console.log("Updated FlightPlanContext with processed data:", processedFlightPlan);
+      console.log(
+        "Updated FlightPlanContext with processed data:",
+        processedFlightPlan
+      );
 
-    
       // 6. (Optional) If you only want *2D distance*:
       const raw2DLine = turf.lineString(
         contextFlightPlan.features[0].geometry.coordinates.map(
@@ -272,51 +281,52 @@ const Map = forwardRef<MapRef, MapProps>(
         addGeoJSONToMap(resolvedGeoJSON);
       }
     }, [resolvedGeoJSON, mapRef]);
+
     const addGeoJSONToMap = useCallback(
       (geojson: GeoJSON.FeatureCollection) => {
         if (mapRef?.current && geojson.type === "FeatureCollection") {
           const features = geojson.features.filter(
             (f) => f.geometry.type === "LineString"
           );
-    
+
           features.forEach((feature, idx) => {
             const layerId = `line-${idx}`;
-    
+
             // Clean up existing layers
             if (mapRef?.current?.getSource(layerId)) {
               mapRef?.current.removeLayer(layerId);
               mapRef?.current.removeSource(layerId);
             }
-    
+
             // Using MSL altitudes directly from coordinates
             const coordinates = feature.geometry.coordinates;
-    
+
             // Store altitude information in feature properties
             feature.properties = {
               ...feature.properties,
               altitudes: coordinates.map((coord) => coord[2]),
               // Original data already preserved in properties
             };
-    
+
             // Create the line
             const validCoordinates = coordinates.map(([lng, lat, alt]) => [
               lng,
               lat,
               alt,
             ]);
-    
+
             // Calculate distance...
             const line = turf.lineString(validCoordinates);
             const totalDistance = turf.length(line, { units: "kilometers" });
             setTotalDistance(totalDistance);
-    
+
             // Add to map...
             mapRef?.current?.addSource(layerId, {
               type: "geojson",
               data: feature,
               lineMetrics: true,
             });
-    
+
             mapRef?.current?.addLayer({
               id: layerId,
               type: "line",
@@ -331,7 +341,7 @@ const Map = forwardRef<MapRef, MapProps>(
                 "line-opacity": 1,
               },
             });
-    
+
             // Fit bounds to line
             const bounds = coordinates.reduce(
               (acc, coord) => {
@@ -344,7 +354,7 @@ const Map = forwardRef<MapRef, MapProps>(
               },
               [Infinity, Infinity, -Infinity, -Infinity] as number[]
             );
-    
+
             mapRef?.current?.fitBounds(
               bounds as [number, number, number, number],
               {
@@ -490,9 +500,9 @@ const Map = forwardRef<MapRef, MapProps>(
           }
         },
         getMap: () => {
-          console.log('getMap called:', {
+          console.log("getMap called:", {
             mapRefCurrent: mapRef.current,
-            hasMap: !!mapRef.current
+            hasMap: !!mapRef.current,
           });
           // Return the actual map instance instead of the ref
           return mapRef.current;
@@ -502,80 +512,81 @@ const Map = forwardRef<MapRef, MapProps>(
       [addGeoJSONToMap]
     );
 
-  // Map initialization
-  useEffect(() => {
-    if (mapContainerRef.current) {
-      try {
-        // Initialize the Mapbox map
-        const map = new mapboxgl.Map({
-          container: mapContainerRef.current,
-          style: "mapbox://styles/mapbox-map-design/ckhqrf2tz0dt119ny6azh975y",
-          center: [0, 0],
-          zoom: 2.5, // Default startup zoom (but we'll enforce a fixed zoom for DEM)
-          projection: "globe",
-        });
+    // Map initialization
+    useEffect(() => {
+      if (mapContainerRef.current) {
+        try {
+          // Initialize the Mapbox map
+          const map = new mapboxgl.Map({
+            container: mapContainerRef.current,
+            style:
+              "mapbox://styles/mapbox-map-design/ckhqrf2tz0dt119ny6azh975y",
+            center: [0, 0],
+            zoom: 2.5, // Default startup zoom (but we'll enforce a fixed zoom for DEM)
+            projection: "globe",
+          });
 
-        map.on("load", () => {
-          const fixedZoom = 15; // 🔥 Set fixed zoom level for DEM consistency
+          map.on("load", () => {
+            const fixedZoom = 15; // 🔥 Set fixed zoom level for DEM consistency
 
-          try {
-            // Add terrain source
-            map.addSource("mapbox-dem", {
-              type: "raster-dem",
-              url: "mapbox://mapbox.mapbox-terrain-dem-v1",
-              tileSize: 512,
-              maxzoom: 15,
-            });
+            try {
+              // Add terrain source
+              map.addSource("mapbox-dem", {
+                type: "raster-dem",
+                url: "mapbox://mapbox.mapbox-terrain-dem-v1",
+                tileSize: 512,
+                maxzoom: 15,
+              });
 
-            map.setTerrain({
-              source: "mapbox-dem",
-              exaggeration: 1.5,
-            });
+              map.setTerrain({
+                source: "mapbox-dem",
+                exaggeration: 1.5,
+              });
 
-            // Sky layer for enhanced visualization
-            map.addLayer({
-              id: "sky",
-              type: "sky",
-              paint: {
-                "sky-type": "atmosphere",
-                "sky-atmosphere-sun": [0.0, 90.0],
-                "sky-atmosphere-sun-intensity": 15,
-              },
-            });
+              // Sky layer for enhanced visualization
+              map.addLayer({
+                id: "sky",
+                type: "sky",
+                paint: {
+                  "sky-type": "atmosphere",
+                  "sky-atmosphere-sun": [0.0, 90.0],
+                  "sky-atmosphere-sun-intensity": 15,
+                },
+              });
 
-            // 🔥 Preload DEM tiles at fixed zoom level
-            map.once("idle", () => {
-              console.log(`✅ Preloading DEM tiles at zoom ${fixedZoom}...`);
-              map.setZoom(fixedZoom); // Enforce fixed zoom for consistent terrain queries
+              // 🔥 Preload DEM tiles at fixed zoom level
+              map.once("idle", () => {
+                console.log(`✅ Preloading DEM tiles at zoom ${fixedZoom}...`);
+                map.setZoom(fixedZoom); // Enforce fixed zoom for consistent terrain queries
 
-              setTimeout(() => {
-                console.log("✅ DEM tiles preloaded. Restoring previous zoom level.");
-                map.setZoom(2.5); // Restore initial zoom level
-              }, 500);
-            });
+                setTimeout(() => {
+                  console.log(
+                    "✅ DEM tiles preloaded. Restoring previous zoom level."
+                  );
+                  map.setZoom(2.5); // Restore initial zoom level
+                }, 500);
+              });
 
-            // Set global map reference
-            mapRef.current = map;
-            layerManager.setMap(map);
-            console.log("✅ Map fully initialized with all layers");
-
-          } catch (error) {
-            console.error("❌ Error initializing map layers:", error);
-          }
-        });
-      } catch (error) {
-        console.error("❌ Error creating map:", error);
+              // Set global map reference
+              mapRef.current = map;
+              layerManager.setMap(map);
+              console.log("✅ Map fully initialized with all layers");
+            } catch (error) {
+              console.error("❌ Error initializing map layers:", error);
+            }
+          });
+        } catch (error) {
+          console.error("❌ Error creating map:", error);
+        }
       }
-    }
 
-    return () => {
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-      }
-    };
-  }, []);
-
+      return () => {
+        if (mapRef.current) {
+          mapRef.current.remove();
+          mapRef.current = null;
+        }
+      };
+    }, []);
 
     const fetchTerrainElevation = async (
       lng: number,
