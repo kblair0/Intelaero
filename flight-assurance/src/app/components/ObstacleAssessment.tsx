@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useState, useCallback } from "react";
 import { Line } from "react-chartjs-2";
 import * as turf from "@turf/turf";
@@ -35,6 +36,7 @@ const ObstacleAssessment = ({ flightPlan, map, onDataProcessed }: ObstacleAssess
   const [flightAltitudes, setFlightAltitudes] = useState<number[]>([]);
   const [terrainElevations, setTerrainElevations] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [waypointDistances, setWaypointDistances] = useState<number[]>([]);
   const { setAnalysisData } = useObstacleAnalysis();
 
@@ -106,7 +108,6 @@ const ObstacleAssessment = ({ flightPlan, map, onDataProcessed }: ObstacleAssess
 
       setTerrainElevations(terrainElevationsArray);
       
-      const flightAltitudesArray = coordinates.map(([, , alt]) => alt);
       const distancesArray = sampledPoints.map((_, idx) => (idx * interval) / 1000);
       
       const waypointDistancesArray: number[] = [];

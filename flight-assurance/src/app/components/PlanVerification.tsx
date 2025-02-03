@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect } from "react";
 import { CheckCircle, XCircle, Loader } from "lucide-react";
 import { useFlightPlanContext } from "../context/FlightPlanContext";
@@ -8,10 +9,9 @@ import { MapRef } from "./Map";
 
 interface PlanVerificationProps {
   mapRef: React.RefObject<MapRef>;
-  checks: string[];
 }
 
-const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, checks }) => {
+const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef }) => {
   const { flightPlan } = useFlightPlanContext();
   const { analysisData, setAnalysisData } = useObstacleAnalysis();
   const [statuses, setStatuses] = useState<{
@@ -20,13 +20,17 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, checks }) =
       errorMessages?: string[];
     };
   }>({});
-  const [finalStatus, setFinalStatus] = useState<"loading" | "success" | "error">("loading");
+  const [finalStatus, setFinalStatus] = useState<
+    "loading" | "success" | "error"
+  >("loading");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showTerrainPopup, setShowTerrainPopup] = useState(false);
 
   const getMinClearanceDistance = (): number | null => {
     if (!analysisData) return null;
-    const clearances = analysisData.flightAltitudes.map((alt, idx) => alt - analysisData.terrainElevations[idx]);
+    const clearances = analysisData.flightAltitudes.map(
+      (alt, idx) => alt - analysisData.terrainElevations[idx]
+    );
     const minClearance = Math.min(...clearances);
     const index = clearances.indexOf(minClearance);
     return analysisData.distances[index];
@@ -34,13 +38,13 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, checks }) =
 
   useEffect(() => {
     const map = mapRef.current?.getMap();
-    console.log('State Update:');
-    console.log('- Flight Plan:', !!flightPlan);
-    console.log('- Map Reference:', !!mapRef.current?.getMap());
-    console.log('- Map Ref Current:', mapRef.current);
-    console.log('- getMap() returns:', map);
-    console.log('- Is Analyzing:', isAnalyzing);
-  }, [flightPlan, mapRef.current?.getMap(), isAnalyzing]);
+    console.log("State Update:");
+    console.log("- Flight Plan:", !!flightPlan);
+    console.log("- Map Reference:", !!mapRef.current?.getMap());
+    console.log("- Map Ref Current:", mapRef.current);
+    console.log("- getMap() returns:", map);
+    console.log("- Is Analyzing:", isAnalyzing);
+  }, [flightPlan, isAnalyzing, mapRef]);
 
   // Original zero altitude check
   useEffect(() => {
@@ -60,7 +64,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, checks }) =
             }
           });
         });
-        
+
         setStatuses((prev) => ({
           ...prev,
           "No zero altitude points": zeroAltitudePoints.length
@@ -130,35 +134,34 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, checks }) =
     setFinalStatus(hasError ? "error" : "success");
   }, [statuses]);
 
-
   const handleTerrainAnalysis = () => {
     const map = mapRef.current?.getMap();
-    console.log('Terrain Analysis Handler:', {
+    console.log("Terrain Analysis Handler:", {
       hasFlightPlan: !!flightPlan,
       mapRef: mapRef.current,
       map: map,
-      isAnalyzing
+      isAnalyzing,
     });
-    
+
     if (!flightPlan || !map) {
-      console.log('Missing required data:', {
+      console.log("Missing required data:", {
         hasFlightPlan: !!flightPlan,
-        hasMap: !!map
+        hasMap: !!map,
       });
       return;
     }
-    
+
     setIsAnalyzing(true);
     setShowTerrainPopup(true);
-    
-    const event = new CustomEvent('triggerTerrainAnalysis');
+
+    const event = new CustomEvent("triggerTerrainAnalysis");
     window.dispatchEvent(event);
   };
 
   return (
     <div className="flex flex-col gap-4 items-center p-4 border rounded-lg shadow-md bg-white w-full">
       {/* Hidden ObstacleAssessment */}
-      <div style={{ display: 'none' }}>
+      <div style={{ display: "none" }}>
         <ObstacleAssessment
           flightPlan={flightPlan}
           map={mapRef.current?.getMap() || null}
@@ -209,19 +212,23 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, checks }) =
         ))}
       </ul>
 
-      <button 
-      onClick={handleTerrainAnalysis}
-      disabled={!flightPlan || !mapRef.current?.getMap() || isAnalyzing}
-      className={`px-3 py-1 bg-blue-500 text-white text-xs rounded hover:opacity-90 ${
-        (!flightPlan || !mapRef.current?.getMap() || isAnalyzing) ? 'opacity-50 cursor-not-allowed' : ''
-      }`}
-    >
-      {isAnalyzing ? 'Analyzing...' : 'See Terrain Clearance Analysis'}
-    </button>
+      <button
+        onClick={handleTerrainAnalysis}
+        disabled={!flightPlan || !mapRef.current?.getMap() || isAnalyzing}
+        className={`px-3 py-1 bg-blue-500 text-white text-xs rounded hover:opacity-90 ${
+          !flightPlan || !mapRef.current?.getMap() || isAnalyzing
+            ? "opacity-50 cursor-not-allowed"
+            : ""
+        }`}
+      >
+        {isAnalyzing ? "Analyzing..." : "See Terrain Clearance Analysis"}
+      </button>
 
-    {/* New Terrain Clearance Check UI Section */}
-    <div className="w-full max-w-md p-4 mt-4 border-t pt-3 bg-gray-100 rounded-md">
-        <h3 className="text-md font-semibold mb-2">Terrain Clearance Verification</h3>
+      {/* New Terrain Clearance Check UI Section */}
+      <div className="w-full max-w-md p-4 mt-4 border-t pt-3 bg-gray-100 rounded-md">
+        <h3 className="text-md font-semibold mb-2">
+          Terrain Clearance Verification
+        </h3>
         {analysisData ? (
           <div className="flex flex-col gap-2">
             {analysisData.minimumClearanceHeight >= 0 ? (
@@ -233,7 +240,8 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, checks }) =
               <div className="flex items-center gap-2 text-red-600">
                 <XCircle />
                 <span>
-                  Clearance below ground: {analysisData.minimumClearanceHeight.toFixed(1)}m
+                  Clearance below ground:{" "}
+                  {analysisData.minimumClearanceHeight.toFixed(1)}m
                 </span>
               </div>
             )}
@@ -250,7 +258,8 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, checks }) =
               )}
               {analysisData.minimumClearanceHeight < 0 && (
                 <div className="text-sm text-red-600">
-                  The flight path intersects the terrain. Please review and adjust your plan.
+                  The flight path intersects the terrain. Please review and
+                  adjust your plan.
                 </div>
               )}
             </div>
@@ -268,25 +277,41 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, checks }) =
         <h3 className="text-md font-semibold mb-2">Flight Plan Statistics</h3>
         <div className="flex justify-between text-sm text-gray-700">
           <span>Minimum Altitude:</span>
-          <span>{analysisData ? `${Math.min(...analysisData.flightAltitudes).toFixed(1)}m` : '--'}</span>
+          <span>
+            {analysisData
+              ? `${Math.min(...analysisData.flightAltitudes).toFixed(1)}m`
+              : "--"}
+          </span>
         </div>
         <div className="flex justify-between text-sm text-gray-700">
           <span>Maximum Altitude:</span>
-          <span>{analysisData ? `${Math.max(...analysisData.flightAltitudes).toFixed(1)}m` : '--'}</span>
+          <span>
+            {analysisData
+              ? `${Math.max(...analysisData.flightAltitudes).toFixed(1)}m`
+              : "--"}
+          </span>
         </div>
         <div className="flex justify-between text-sm text-red-600">
           <span>Lowest Clearance Height:</span>
-          <span>{analysisData?.minimumClearanceHeight ? `${analysisData.minimumClearanceHeight.toFixed(1)}m` : '--'}</span>
+          <span>
+            {analysisData?.minimumClearanceHeight
+              ? `${analysisData.minimumClearanceHeight.toFixed(1)}m`
+              : "--"}
+          </span>
         </div>
         <div className="flex justify-between text-sm text-blue-600">
           <span>Highest Terrain Altitude:</span>
-          <span>{analysisData?.highestObstacle ? `${analysisData.highestObstacle.toFixed(1)}m` : '--'}</span>
+          <span>
+            {analysisData?.highestObstacle
+              ? `${analysisData.highestObstacle.toFixed(1)}m`
+              : "--"}
+          </span>
         </div>
       </div>
 
       {/* Terrain Clearance Popup */}
       {showTerrainPopup && (
-        <TerrainClearancePopup 
+        <TerrainClearancePopup
           onClose={() => {
             setShowTerrainPopup(false);
             setIsAnalyzing(false);
