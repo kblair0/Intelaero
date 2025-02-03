@@ -7,7 +7,7 @@ import { useFlightPlanContext } from "../context/FlightPlanContext";
 import toGeoJSON from "@mapbox/togeojson";
 
 // DOMParser is used to parse the KML text into an XML DOM.
-const parser = new DOMParser();
+const parser = typeof window !== "undefined" ? new DOMParser() : null;
 
 /**
  * Convert the QGC `frame` integer into a string altitude mode.
@@ -148,7 +148,7 @@ function parseKMLFile(
   kmlText: string
 ): import("../context/FlightPlanContext").FlightPlanData {
   // Convert text → XML DOM
-  const kmlDom = parser.parseFromString(kmlText, "application/xml");
+  const kmlDom = parser?.parseFromString(kmlText, "application/xml");
   // Convert KML DOM → GeoJSON
   const geojsonResult = toGeoJSON.kml(kmlDom) as GeoJSON.FeatureCollection;
 

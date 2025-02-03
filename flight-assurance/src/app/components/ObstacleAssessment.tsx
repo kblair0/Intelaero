@@ -48,45 +48,51 @@ const ObstacleAssessment = forwardRef<any, ObstacleAssessmentProps>(
     const [waypointDistances, setWaypointDistances] = useState<number[]>([]);
     const { setAnalysisData } = useObstacleAnalysis();
 
-    // Modified: Use the map instance directly (without getMap())
+  useEffect(() => {
     const getTerrainElevation = async (coordinates: [number, number]): Promise<number> => {
-      if (!map) {
-        console.error("Map instance not available");
+      const mapInstance = map.getMap();
+      if (!mapInstance) {
+        console.error('Map instance not available');
         return 0;
       }
+  
       try {
-        // Check if the terrain source exists; if not, add it.
-        if (!map.getSource("mapbox-dem")) {
-          map.addSource("mapbox-dem", {
-            type: "raster-dem",
-            url: "mapbox://mapbox.mapbox-terrain-dem-v1",
+        // Check if terrain source exists
+        if (!mapInstance.getSource('mapbox-dem')) {
+          // Add the terrain source if it doesn't exist
+          mapInstance.addSource('mapbox-dem', {
+            type: 'raster-dem',
+            url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
             tileSize: 512,
-            maxzoom: 15,
+            maxzoom: 15
           });
-          map.setTerrain({
-            source: "mapbox-dem",
-            exaggeration: 1.5,
+  
+          // Set terrain properties
+          mapInstance.setTerrain({
+            source: 'mapbox-dem',
+            exaggeration: 1.5
           });
+  
+          // Wait for the source to load
           await new Promise<void>((resolve) => {
             const checkSource = () => {
-              if (map.isSourceLoaded("mapbox-dem")) {
+              if (mapInstance.isSourceLoaded('mapbox-dem')) {
                 resolve();
               } else {
-                map.once("sourcedata", () => checkSource());
+                mapInstance.once('sourcedata', () => checkSource());
               }
             };
             checkSource();
           });
         }
-        // Directly use map.queryTerrainElevation()
-        const elevation = map.queryTerrainElevation(coordinates);
+  
+        const elevation = mapInstance.queryTerrainElevation(coordinates);
         return elevation ?? 0;
       } catch (error) {
-        console.error("Error getting terrain elevation:", error);
+        console.error('Error getting terrain elevation:', error);
         return 0;
       }
     };
-
     const processTerrainData = async () => {
       try {
         setError(null);
@@ -141,39 +147,160 @@ const ObstacleAssessment = forwardRef<any, ObstacleAssessmentProps>(
           return coordinates[index][2];
         });
         setFlightAltitudes(interpolatedAltitudes);
-        const clearances = interpolatedAltitudes.map(
-          (flightAlt, idx) => flightAlt - terrainElevationsArray[idx]
-        );
-        const minimumClearanceHeight = Math.min(...clearances);
-        const highestObstacle = Math.max(...terrainElevationsArray);
-        const outputData: ObstacleAnalysisOutput = {
-          flightAltitudes: interpolatedAltitudes,
-          terrainElevations: terrainElevationsArray,
-          distances: distancesArray,
-          minimumClearanceHeight,
-          highestObstacle,
-          error: null,
-        };
-        setAnalysisData(outputData);
-        if (onDataProcessed) {
-          onDataProcessed(outputData);
-        }
-      } catch (err) {
-        console.error("Error processing terrain data:", err);
-        setError(err instanceof Error ? err.message : "Unknown error occurred");
+  
+      } catch (error) {
+        console.error('Error processing terrain data:', error);
+        setError(error instanceof Error ? error.message : 'Unknown error occurred');
       }
     };
+  
+    processTerrainData();
+  }, [flightPlan, map, onDataProcessed]);
 
-    useImperativeHandle(ref, () => ({
-      runAnalysis: processTerrainData,
-    }));
+  useEffect(() => {
+    console.log('Map object:', map);
+    console.log('Map methods:', Object.keys(map));
+    // This will help us see what methods are actually available
+  }, [map]);
+  
+  // chart elevation both along the route and at waypoints
+  const chartData = {
+    labels: distances.map((d) => d.toFixed(2)), // X-axis labels (distances for terrain profile)
+    datasets: [
+      {
+        label: "Terrain Elevation (m)",
+        data: distances.map((d, idx) => ({
+          x: d, // Distance on the X-axis
+          y: terrainElevations[idx], // Elevation on the Y-axis
+        })),
+        borderColor: "rgba(75, 192, 192, 1)",
+        backgroundColor: "rgba(75, 192, 192, 0.2)",
+        fill: true,
+        pointRadius: 0, // No points for terrain line
+      },
+      {
+        label: "Flight Path Altitude (m)",
+        data: distances.map((d, idx) => ({
+          x: d, // Distance on the X-axis
+          y: flightAltitudes[idx], // Altitude on the Y-axis
+        })),
+        borderColor: "rgba(255, 99, 132, 1)", // Line color
+        backgroundColor: "rgba(255, 99, 132, 0.2)", // Fill color
+        fill: false, // No fill below the line
+        pointRadius: 2, // Small points along the line
+        showLine: true, // Draw a connecting line
+      },
 
-    if (error) {
-      return <div className="text-red-500">Error: {error}</div>;
-    }
-    return null;
+      //   This doesn't work yet      {
+      //          label: "Waypoints",
+      //          data: waypointDistances.map((dist, idx) => ({
+      //            x: dist, // Use the cumulative distance as the X-axis value
+      //            y: flightAltitudes[idx] || 0, // Y-axis value corresponds to the altitude
+      //          })),
+      //          borderColor: "rgba(0, 0, 0, 1)", // Marker color
+      //          pointRadius: 5, // Marker size
+      //          pointStyle: "rect", // Square marker style
+      //          showLine: true, // No connecting line
+      //        },
+    ],
+  };
+
+  const chartOptions = {
+    responsive: true,
+    interaction: {
+      mode: "index",
+      intersect: false,
+    },
+    plugins: {
+      legend: {
+        display: true,
+        position: "top",
+      },
+      tooltip: {
+        callbacks: {
+          title: (tooltipItems: string | any[]) => {
+            if (!tooltipItems.length) return "";
+            const xVal = tooltipItems[0].parsed.x; 
+            const xValInKm = xVal / 100; 
+            const xValInMeters = xValInKm * 1000; 
+            return `Distance: ${xValInMeters.toFixed(0)} m`;
+          },
+          footer: (tooltipItems: string | any[]) => {
+            if (tooltipItems.length === 2) {
+              const terrainElevation = tooltipItems[0].parsed.y;
+              const flightAltitude = tooltipItems[1].parsed.y;
+              const gap = flightAltitude - terrainElevation;
+              return `Separation: ${gap.toFixed(2)} m`;
+            }
+            return "";
+          },
+        },
+        external: function(context: { chart: any; tooltip: any; }) {
+          const { chart, tooltip } = context;
+          if (!tooltip || !tooltip.opacity || tooltip.dataPoints.length < 2) return;
+  
+          const ctx = chart.ctx;
+          const point1 = tooltip.dataPoints[0].element;
+          const point2 = tooltip.dataPoints[1].element;
+  
+          if (point1 && point2) {
+            const { x: x1, y: y1 } = point1.getProps(['x', 'y']);
+            const { x: x2, y: y2 } = point2.getProps(['x', 'y']);
+  
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)'; // Customize the line color
+            ctx.stroke();
+            ctx.restore();
+          }
+        },
+      },
+    },
+    scales: {
+      x: {
+        title: {
+          display: true,
+          text: "Distance (kms)",
+        },
+        ticks: {
+          callback: function (_: any, index: number) {
+            if (index >= distances.length) return "";
+            const distance = distances[index];
+            const scaling = distances[distances.length - 1] > 10 ? 1 : 0.1;
+            return scaling === 1
+              ? `${distance.toFixed(1)} km`
+              : `${(distance * 1000).toFixed(0)} m`;
+          },
+        },
+      },
+      y: {
+        title: {
+          display: true,
+          text: "Elevation (m)",
+        },
+      },
+    },
+  };
+  
+  // Render the error UI
+  if (error) {
+    return <div className="text-red-500">Error: {error}</div>;
   }
-);
-
-ObstacleAssessment.displayName = "ObstacleAssessment";
-export default ObstacleAssessment;
+  
+  // Render the chart
+  return (
+    <div>
+      <Line
+        key={JSON.stringify(chartData)}
+        data={chartData}
+        //  @ts-expect-error This works
+        options={chartOptions}
+      />
+    </div>
+  );
+  };
+  export default ObstacleAssessment;
+  

@@ -1,6 +1,5 @@
 import React from 'react';
 import { useFlightConfiguration } from "../context/FlightConfigurationContext";
-import CollapsibleCard from "./CollapsibleCard";
 
 const Calculator: React.FC = () => {
     const { config, metrics, updateConfig } = useFlightConfiguration();

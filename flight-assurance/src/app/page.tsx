@@ -77,17 +77,17 @@ export default function Home() {
                   </TwoColumn>
                 </CollapsibleCard>
 
-                {/* Battery Calculations and LOS Cards */}
-                <CollapsibleCard title="Energy and LOS Analyses">
-                  <TwoColumn>
-                    <Card>
-                      <Calculator />
-                    </Card>
-                    <Card>
-                      <ELOSAnalysisCard mapRef={mapRef} />
-                    </Card>
-                  </TwoColumn>
-                </CollapsibleCard>
+              {/* Battery Calculations and LOS Cards */}
+              <CollapsibleCard title="Energy and LOS Analyses">
+                <TwoColumn>
+                  <Card>
+                    <Calculator />
+                  </Card>
+                  <Card>
+                    <ELOSAnalysisCard mapRef={mapRef} />
+                  </Card>
+                </TwoColumn>
+              </CollapsibleCard>
 
                 {/* Full-width Map Section */}
                 <Card>
@@ -101,3 +101,4 @@ export default function Home() {
     </div>
   );
 }
+
