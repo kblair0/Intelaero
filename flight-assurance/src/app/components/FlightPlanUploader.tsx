@@ -106,6 +106,16 @@ function parseQGCFile(
     throw new Error("No valid waypoints with lat/lon found in the .waypoints file.");
   }
 
+console.log('Flight Plan Parse Details:', {
+  waypoints: waypoints.map((wp, idx) => ({
+    waypointNumber: idx,
+    rawAltitude: wp.originalAltitude,
+    altitudeMode: wp.altitudeMode,
+    frame: wp.frame
+  })),
+  homeAltitude: homePosition.altitude
+});
+
   return {
     type: "FeatureCollection",
     properties: {

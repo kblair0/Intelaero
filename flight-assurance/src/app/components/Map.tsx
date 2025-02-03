@@ -113,6 +113,10 @@ const Map = forwardRef<MapRef, MapProps>(
     useEffect(() => {
       // 1. Make sure we have a flight plan and the map is ready
       if (!contextFlightPlan || !mapRef.current) return;
+
+      console.log('Starting Altitude Resolution:', {
+        inputPlan: contextFlightPlan
+      });
     
       // 2. Clone the original flight plan so we don’t mutate context data
       const newPlan = structuredClone(contextFlightPlan);
@@ -131,16 +135,31 @@ const Map = forwardRef<MapRef, MapProps>(
           const [lon, lat, originalAlt] = coord;
           const wp = waypoints[i];
           if (!wp) return; // mismatch fallback
+
+          const terrainElev = mapRef.current?.queryTerrainElevation([lon, lat]) ?? 0;
+          console.log(`Waypoint ${i} processing:`, {
+            longitude: lon,
+            latitude: lat,
+            originalAltitude: originalAlt,
+            terrainElevation: terrainElev,
+            mode: wp.altitudeMode,
+            beforeResolution: coord[2]
+          });
     
           switch (wp.altitudeMode) {
             case "absolute":
               // Already MSL; do nothing
               break;
     
-            case "relative":
-              // originalAltitude is AGL → MSL = homeAlt + originalAltitude
-              coord[2] = homeAlt + originalAlt;
-              break;
+              case "relative":
+                if (wp.commandType === 22) { // MAV_CMD_NAV_TAKEOFF
+                  // Use the takeoff location's ground elevation as base
+                  const takeoffGroundElev = mapRef.current?.queryTerrainElevation([lon, lat]) ?? 0;
+                  coord[2] = takeoffGroundElev + originalAlt;  // AGL from ground at takeoff point
+                } else {
+                  coord[2] = terrainElev + originalAlt;
+                }
+                break;
     
             case "terrain":
               // originalAltitude is height above ground → MSL = terrainElev + originalAlt
@@ -154,11 +173,36 @@ const Map = forwardRef<MapRef, MapProps>(
               // Optional default: treat as 'absolute'
               break;
           }
+          console.log(`Waypoint ${i} resolved:`, {
+            finalAltitude: coord[2],
+            heightAGL: coord[2] - terrainElev
+          });
         });
       });
     
       // 5. Store your newly resolved geometry in local state
       setResolvedGeoJSON(newPlan);
+
+      console.log("Resolved Flight Plan:", {
+        type: newPlan.type,
+        features: newPlan.features.map((feature, index) => ({
+          geometry: {
+            type: feature.geometry.type,
+            coordinates: feature.geometry.coordinates,
+          },
+          properties: {
+            name: feature.properties.name || `Feature ${index}`,
+            altitudeModes: feature.properties.altitudeModes || [],
+            altitudes: feature.geometry.coordinates.map(coord => coord[2]), // ✅ Extract resolved altitudes
+            originalAltitudes: feature.properties.originalAltitudes || [],
+            rawCommands: feature.properties.rawCommands || [],
+            waypoints: feature.properties.waypoints || [],
+          },
+        })),
+        properties: {
+          homePosition: newPlan.properties.homePosition || {},
+        },
+      });
     
       // 6. (Optional) If you only want *2D distance*:
       const raw2DLine = turf.lineString(
@@ -239,28 +283,8 @@ const Map = forwardRef<MapRef, MapProps>(
             },
           });
     
-          // Add hover effects to show altitude information
-          if (mapRef.current) {
-            mapRef.current.on('mouseenter', layerId, (e) => {
-              if (e.features?.length) {
-                const feature = e.features[0];
-                const waypointIndex = Math.floor(e.lngLat.lng); // Approximate nearest waypoint
-                const waypoint = feature.properties.waypoints[waypointIndex];
-                
-                new mapboxgl.Popup()
-                  .setLngLat(e.lngLat)
-                  .setHTML(`
-                    <div>
-                      <p>MSL Altitude: ${feature.geometry.coordinates[waypointIndex][2]}m</p>
-                      <p>Original Altitude: ${waypoint.originalAltitude}m</p>
-                      <p>Mode: ${waypoint.altitudeMode}</p>
-                    </div>
-                  `)
-                  .addTo(map);
-              }
-            });
-          }
-
+          // Add hover effects to show altitude information of flightplan using resolvedflightpla
+          
           const bounds = coordinates.reduce(
             (acc, coord) => {
               const [lng, lat] = coord;
@@ -414,65 +438,80 @@ useImperativeHandle(ref, () => ({
 }), [addGeoJSONToMap]);
 
 
-    //map initialization
-    useEffect(() => {
-      if (mapContainerRef.current) {
-        try {
-          // Initialize the Mapbox map
-          const map = new mapboxgl.Map({
-            container: mapContainerRef.current,
-            style: "mapbox://styles/mapbox-map-design/ckhqrf2tz0dt119ny6azh975y",
-            center: [0, 0],
-            zoom: 2.5,
-            projection: "globe",
-          });
-    
-          map.on("load", () => {
-            try {
-              // Add terrain source
-              map.addSource("mapbox-dem", {
-                type: "raster-dem",
-                url: "mapbox://mapbox.mapbox-terrain-dem-v1",
-                tileSize: 512,
-                maxzoom: 15,
-              });
-    
-              map.setTerrain({
-                source: "mapbox-dem",
-                exaggeration: 1.5,
-              });
-    
-              map.addLayer({
-                id: "sky",
-                type: "sky",
-                paint: {
-                  "sky-type": "atmosphere",
-                  "sky-atmosphere-sun": [0.0, 90.0],
-                  "sky-atmosphere-sun-intensity": 15,
-                },
-              });
+  // Map initialization
+  useEffect(() => {
+    if (mapContainerRef.current) {
+      try {
+        // Initialize the Mapbox map
+        const map = new mapboxgl.Map({
+          container: mapContainerRef.current,
+          style: "mapbox://styles/mapbox-map-design/ckhqrf2tz0dt119ny6azh975y",
+          center: [0, 0],
+          zoom: 2.5, // Default startup zoom (but we'll enforce a fixed zoom for DEM)
+          projection: "globe",
+        });
 
-              layerManager.setMap(map);
-    
-              // Only set mapRef.current after everything is loaded
-              mapRef.current = map;
-              console.log("Map fully initialized with all layers");
-            } catch (error) {
-              console.error("Error initializing map layers:", error);
-            }
-          });
-        } catch (error) {
-          console.error("Error creating map:", error);
-        }
+        map.on("load", () => {
+          const fixedZoom = 15; // 🔥 Set fixed zoom level for DEM consistency
+
+          try {
+            // Add terrain source
+            map.addSource("mapbox-dem", {
+              type: "raster-dem",
+              url: "mapbox://mapbox.mapbox-terrain-dem-v1",
+              tileSize: 512,
+              maxzoom: 15,
+            });
+
+            map.setTerrain({
+              source: "mapbox-dem",
+              exaggeration: 1.5,
+            });
+
+            // Sky layer for enhanced visualization
+            map.addLayer({
+              id: "sky",
+              type: "sky",
+              paint: {
+                "sky-type": "atmosphere",
+                "sky-atmosphere-sun": [0.0, 90.0],
+                "sky-atmosphere-sun-intensity": 15,
+              },
+            });
+
+            // 🔥 Preload DEM tiles at fixed zoom level
+            map.once("idle", () => {
+              console.log(`✅ Preloading DEM tiles at zoom ${fixedZoom}...`);
+              map.setZoom(fixedZoom); // Enforce fixed zoom for consistent terrain queries
+
+              setTimeout(() => {
+                console.log("✅ DEM tiles preloaded. Restoring previous zoom level.");
+                map.setZoom(2.5); // Restore initial zoom level
+              }, 500);
+            });
+
+            // Set global map reference
+            mapRef.current = map;
+            layerManager.setMap(map);
+            console.log("✅ Map fully initialized with all layers");
+
+          } catch (error) {
+            console.error("❌ Error initializing map layers:", error);
+          }
+        });
+      } catch (error) {
+        console.error("❌ Error creating map:", error);
       }
-    
-      return () => {
-        if (mapRef.current) {
-          mapRef.current.remove();
-          mapRef.current = null;
-        }
-      };
-    }, []);
+    }
+
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
+  }, []);
+
 
     const fetchTerrainElevation = async (lng: number, lat: number): Promise<number> => {
       try {
@@ -1060,7 +1099,7 @@ useImperativeHandle(ref, () => ({
         <ELOSGridAnalysis
           ref={elosGridRef}
           map={mapRef.current!}
-          flightPath={contextFlightPlan}
+          flightPath={resolvedGeoJSON}
           elosGridRange={contextGridRange}
           onError={(error) => {
             console.error('ELOS Analysis error:', error);

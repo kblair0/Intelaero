@@ -1,6 +1,8 @@
+// page.tsx (home)
+
 "use client";
-import { useRef } from 'react';
-import { MapRef } from './components/Map'; 
+import { useRef } from "react";
+import { MapRef } from "./components/Map";
 import Calculator from "./components/Calculator";
 import Image from "next/image";
 import FlightPlanUploader from "./components/FlightPlanUploader";
@@ -8,15 +10,17 @@ import Map from "./components/Map";
 import { FlightPlanProvider } from "./context/FlightPlanContext";
 import { LocationProvider } from "./context/LocationContext";
 import { LOSAnalysisProvider } from "./context/LOSAnalysisContext";
-import { FlightConfigurationProvider } from './context/FlightConfigurationContext';
+import { FlightConfigurationProvider } from "./context/FlightConfigurationContext";
 import PlanVerification from "./components/PlanVerification";
 import Card from "./components/Card";
 import TwoColumn from "./components/TwoColumn";
 import CollapsibleCard from "./components/CollapsibleCard";
 import ELOSAnalysisCard from "./components/ELOSAnalysisCard";
+import { ObstacleAnalysisProvider } from "./context/ObstacleAnalysisContext";
 
 export default function Home() {
   const mapRef = useRef<MapRef>(null);
+
   return (
     <div className="min-h-screen flex flex-col bg-white">
       {/* Logo Section */}
@@ -51,41 +55,45 @@ export default function Home() {
         <FlightConfigurationProvider>
           <LocationProvider>
             <LOSAnalysisProvider>
-              {/* FlightPlan and Verification Cards */}
-              <CollapsibleCard title="Flight Plan and Verification">
-                <TwoColumn>
-                  <Card>
-                    <FlightPlanUploader />
-                  </Card>
-                  <Card>
-                    <PlanVerification
-                      checks={[
-                        "No zero altitude points",
-                        "Terrain clearance",
-                        "No duplicate waypoints",
-                        "Regulatory Altitude Limits",
-                      ]}
-                    />
-                  </Card>
-                </TwoColumn>
-              </CollapsibleCard>
+              <ObstacleAnalysisProvider>
+                {/* FlightPlan and Verification Cards */}
+                <CollapsibleCard title="Flight Plan and Verification">
+                  <TwoColumn>
+                    <Card>
+                      <FlightPlanUploader />
+                    </Card>
+                    <Card>
+                      {/* Pass the mapRef.current to PlanVerification */}
+                      <PlanVerification
+                        checks={[
+                          "No zero altitude points",
+                          "Terrain clearance",
+                          "No duplicate waypoints",
+                          "Regulatory Altitude Limits",
+                        ]}
+                        mapRef={mapRef}
+                      />
+                    </Card>
+                  </TwoColumn>
+                </CollapsibleCard>
 
-              {/* Battery Calculations and LOS Cards */}
-              <CollapsibleCard title="Energy and LOS Analyses">
-                <TwoColumn>
-                  <Card>
-                    <Calculator />
-                  </Card>
-                  <Card>
-                  <ELOSAnalysisCard mapRef={mapRef} />
-                  </Card>
-                </TwoColumn>
-              </CollapsibleCard>
+                {/* Battery Calculations and LOS Cards */}
+                <CollapsibleCard title="Energy and LOS Analyses">
+                  <TwoColumn>
+                    <Card>
+                      <Calculator />
+                    </Card>
+                    <Card>
+                      <ELOSAnalysisCard mapRef={mapRef} />
+                    </Card>
+                  </TwoColumn>
+                </CollapsibleCard>
 
-              {/* Full-width Map Section */}
-              <Card>
-              <Map ref={mapRef} />
-              </Card>
+                {/* Full-width Map Section */}
+                <Card>
+                  <Map ref={mapRef} />
+                </Card>
+              </ObstacleAnalysisProvider>
             </LOSAnalysisProvider>
           </LocationProvider>
         </FlightConfigurationProvider>

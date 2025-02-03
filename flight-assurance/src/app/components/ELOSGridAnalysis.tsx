@@ -282,8 +282,13 @@ const ELOSGridAnalysis = forwardRef<ELOSGridAnalysisRef, Props>((props, ref) => 
 
     // Extract 3D coordinates from flight path
     const flightCoordinates = flightPath.features[0].geometry.type === 'LineString'
-      ? (flightPath.features[0].geometry.coordinates as Coordinates3D[])
-      : [];
+    ? (flightPath.features[0].geometry.coordinates.map(coord => [
+        coord[0], 
+        coord[1], 
+        coord[2] // ✅ Ensure resolved altitude is used
+      ]) as Coordinates3D[])
+    : [];
+  
 
     // Add logging before using flightCoordinates
     console.log('Analysis parameters:', {
@@ -377,7 +382,7 @@ const ELOSGridAnalysis = forwardRef<ELOSGridAnalysisRef, Props>((props, ref) => 
         pointsInRange++;
         
         const isVisible = await checkLineOfSight(
-          coord,
+          [coord[0], coord[1], coord[2]],
           [...center.geometry.coordinates, targetElevation] as Coordinates3D
         );
   
