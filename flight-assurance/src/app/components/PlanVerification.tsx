@@ -221,7 +221,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef }) => {
             : ""
         }`}
       >
-        {isAnalyzing ? "Analyzing..." : "See Terrain Clearance Analysis"}
+        {isAnalyzing ? "Analyzing..." : "Start Terrain Clearance Analysis"}
       </button>
 
       {/* New Terrain Clearance Check UI Section */}

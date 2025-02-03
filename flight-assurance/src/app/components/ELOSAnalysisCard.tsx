@@ -38,8 +38,10 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
   const {
     // Configuration
     elosGridRange,
+    gridSize, 
     markerConfigs,
     setElosGridRange,
+    setGridSize,
     setMarkerConfig,
 
     // Analysis State
@@ -50,6 +52,7 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
     setIsAnalyzing,
     setError,
   } = useLOSAnalysis();
+
 
   // --- New: Single state object for grid layer visibility ---
   const [layerVisibility, setLayerVisibility] = useState<Record<string, boolean>>({
@@ -155,20 +158,49 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
             Determine which points along the flight path the drone can see within the selected grid range.
           </span>
         </div>
-        <div>
-          <div className="flex justify-between text-sm mb-2">
-            <span>Grid Range</span>
-            <span>{elosGridRange}m</span>
-          </div>
-          <input
-            type="range"
-            min="500"
-            max="5000"
-            value={elosGridRange}
-            onChange={(e) => setElosGridRange(Number(e.target.value))}
-            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-          />
-        </div>
+  
+{/* Wrap the sliders in a flex container */}
+<div className="flex flex-row gap-4">
+  {/* Grid Range Slider */}
+  <div className="flex-1">
+    <div className="flex justify-between text-m mb-1">
+      <span>Grid Range:</span>
+      <span>{elosGridRange}m</span>
+    </div>
+    <p className="text-xs text-gray-500 mb-2">
+      Distance from your drone to be analysed
+    </p>
+    <input
+      type="range"
+      min="500"
+      max="5000"
+      value={elosGridRange}
+      onChange={(e) => setElosGridRange(Number(e.target.value))}
+      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+    />
+  </div>
+
+  {/* Grid Size Slider */}
+  <div className="flex-1">
+    <div className="flex justify-between text-m mb-1">
+      <span>Grid Size:</span>
+      <span>{gridSize}m</span>
+    </div>
+    <p className="text-xs text-gray-500 mb-2">
+      The lower the number, the higher the fidelity
+    </p>
+    <input
+      type="range"
+      min="20"
+      max="300"
+      value={gridSize}
+      onChange={(e) => setGridSize(Number(e.target.value))}
+      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+    />
+  </div>
+</div>
+
+
         {!isFlightPlanLoaded && (
           <div className="p-2 bg-yellow-100 text-yellow-700 text-xs rounded mt-2">
             ⚠️ Please load a flight plan before running the analysis.
