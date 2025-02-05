@@ -578,6 +578,7 @@ const Map = forwardRef<MapRef, MapProps>(
                 console.log("✅ Map style and terrain fully loaded");
                 // Set map ref first
                 mapRef.current = map;
+                layerManager.setMap(map);
                 // Then set terrain loaded
                 terrainLoadedRef.current = true;
                 // Finally set map ready

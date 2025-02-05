@@ -462,140 +462,161 @@ const ELOSGridAnalysis = forwardRef<ELOSGridAnalysisRef, Props>((props, ref) => 
   
     return true;
   };
-  
-  const visualizeGrid = useCallback((analysisResults: AnalysisResults | { cells: GridCell[] }, layerId?: string) => {
-    try {
-      // Validate input
-      if (!analysisResults || !Array.isArray(analysisResults.cells)) {
-        console.error('Invalid analysis result:', analysisResults);
-        throw createError('Invalid analysis result', 'MAP_INTERACTION');
-      }
-  
-      console.log('VisualizeGrid called for layer:', layerId || MAP_LAYERS.ELOS_GRID);
-      
-      if (!map) {
-        throw createError('Map is not initialized', 'MAP_INTERACTION');
-      }
-  
-      if (!map.isStyleLoaded()) {
-        console.log('Map style not loaded, deferring visualization');
-        map.once('styledata', () => visualizeGrid(analysisResults, layerId));
-        return;
-      }
-  
-      const targetLayerId = layerId || MAP_LAYERS.ELOS_GRID;
-  
-      // Remove existing layer and source
-      if (map.getLayer(targetLayerId)) {
-        map.removeLayer(targetLayerId);
-      }
-      if (map.getSource(targetLayerId)) {
-        map.removeSource(targetLayerId);
-      }
-  
-      // Create GeoJSON
-      const geojson: GeoJSON.FeatureCollection = {
-        type: 'FeatureCollection',
-        features: analysisResults.cells.map(cell => ({
-          type: 'Feature',
-          geometry: cell.geometry,
-          properties: cell.properties
-        }))
-      };
-  
-      // Add source and layer
-      map.addSource(targetLayerId, {
-        type: 'geojson',
-        data: geojson
-      });
-  
-      map.addLayer({
-        id: targetLayerId,
-        type: 'fill',
-        source: targetLayerId,
-        layout: {
-          visibility: 'visible'
-        },
-        paint: {
-          'fill-color': [
-            'interpolate',
-            ['linear'],
-            ['get', 'visibility'],
-            0, '#d32f2f',
-            25, '#f57c00',
-            50, '#fbc02d',
-            75, '#7cb342',
-            100, '#1976d2'
-          ],
-          'fill-opacity': [
-            'interpolate',
-            ['linear'],
-            ['zoom'],
-            10, 0.7,
-            15, 0.5
-          ]
+  const visualizeGrid = useCallback(
+    (
+      analysisResults: AnalysisResults | { cells: GridCell[] },
+      layerId?: string,
+      // Optionally pass in the current visibility ("visible" or "none")
+      currentVisibility: 'visible' | 'none' = 'visible'
+    ) => {
+      try {
+        // Validate input
+        if (!analysisResults || !Array.isArray(analysisResults.cells)) {
+          console.error('Invalid analysis result:', analysisResults);
+          throw createError('Invalid analysis result', 'MAP_INTERACTION');
         }
-      });
   
-      layerManager.registerLayer(targetLayerId, true);
+        // Use the provided layerId or default to ELOS grid
+        const targetLayerId = layerId || MAP_LAYERS.ELOS_GRID;
+        console.log('VisualizeGrid called for layer:', targetLayerId);
   
-      let popup: mapboxgl.Popup | null = null;
+        if (!map) {
+          throw createError('Map is not initialized', 'MAP_INTERACTION');
+        }
   
-      map.on('mousemove', targetLayerId, (e) => {
-        if (e.features?.length) {
-          const feature = e.features[0];
-          const visibility = feature.properties?.visibility?.toFixed(1);
-          const elevation = feature.properties?.elevation?.toFixed(1);
+        // If the map style isn’t loaded yet, wait for it
+        if (!map.isStyleLoaded()) {
+          console.log('Map style not loaded, deferring visualization');
+          map.once('styledata', () =>
+            visualizeGrid(analysisResults, layerId, currentVisibility)
+          );
+          return;
+        }
   
-          if (popup) {
-            popup.remove();
-          }
+        // Create GeoJSON from analysis cells
+        const geojson: GeoJSON.FeatureCollection = {
+          type: 'FeatureCollection',
+          features: analysisResults.cells.map((cell) => ({
+            type: 'Feature',
+            geometry: cell.geometry,
+            properties: cell.properties,
+          })),
+        };
   
-          popup = new mapboxgl.Popup({ closeButton: false, closeOnMove: true })
-            .setLngLat(e.lngLat)
-            .setHTML(`
-              <div class="bg-white text-black p-2 rounded shadow">
-                <strong>Visibility Analysis</strong>
-                <hr class="my-1 border-gray-300"/>
-                <div class="grid grid-cols-2 gap-1">
-                  <span>Visibility:</span>
-                  <strong>${visibility || 'N/A'}%</strong>
-                  
-                  <span>Terrain Elevation:</span>
-                  <strong>${elevation || 'N/A'}m</strong>
-                  
-                  <span>Distance Range:</span>
-                  <strong>${elosGridRange}m</strong>
-                  
-                  <span>Analysis Method:</span>
-                  <strong>3D Terrain Sampling</strong>
+        // If a source with the targetLayerId already exists, update its data
+        if (map.getSource(targetLayerId)) {
+          const source = map.getSource(targetLayerId) as mapboxgl.GeoJSONSource;
+          source.setData(geojson);
+          // Also update the layer's visibility based on the current toggle state.
+          map.setLayoutProperty(targetLayerId, 'visibility', currentVisibility);
+        } else {
+          // Otherwise, add the new source and layer
+          map.addSource(targetLayerId, {
+            type: 'geojson',
+            data: geojson,
+          });
+  
+          map.addLayer({
+            id: targetLayerId,
+            type: 'fill',
+            source: targetLayerId,
+            layout: {
+              visibility: currentVisibility,
+            },
+            paint: {
+              'fill-color': [
+                'interpolate',
+                ['linear'],
+                ['get', 'visibility'],
+                0, '#d32f2f',
+                25, '#f57c00',
+                50, '#fbc02d',
+                75, '#7cb342',
+                100, '#1976d2',
+              ],
+              'fill-opacity': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                10, 0.7,
+                15, 0.5,
+              ],
+            },
+          });
+          layerManager.registerLayer(targetLayerId, currentVisibility === 'visible');
+        }
+  
+        // --- SET UP EVENT HANDLERS FOR POPUPS ---
+        // Define the mousemove handler. (We attach a property "popup" to it to store a reference.)
+        const onMouseMove = (
+          e: mapboxgl.MapMouseEvent & mapboxgl.EventData
+        ) => {
+          if (e.features && e.features.length > 0) {
+            const feature = e.features[0];
+            const vis = feature.properties?.visibility?.toFixed(1);
+            const elev = feature.properties?.elevation?.toFixed(1);
+  
+            // Remove any existing popup before adding a new one
+            if (onMouseMove.popup) {
+              onMouseMove.popup.remove();
+            }
+            onMouseMove.popup = new mapboxgl.Popup({
+              closeButton: false,
+              closeOnMove: true,
+            })
+              .setLngLat(e.lngLat)
+              .setHTML(`
+                <div class="bg-white text-black p-2 rounded shadow">
+                  <strong>Visibility Analysis</strong>
+                  <hr class="my-1 border-gray-300"/>
+                  <div class="grid grid-cols-2 gap-1">
+                    <span>Visibility:</span>
+                    <strong>${vis || 'N/A'}%</strong>
+                    <span>Terrain Elevation:</span>
+                    <strong>${elev || 'N/A'}m</strong>
+                    <span>Distance Range:</span>
+                    <strong>${elosGridRange}m</strong>
+                    <span>Analysis Method:</span>
+                    <strong>3D Terrain Sampling</strong>
+                  </div>
+                  <p class="text-xs text-gray-600 mt-2">
+                    Checks line of sight across multiple terrain points
+                  </p>
                 </div>
-                <p class="text-xs text-gray-600 mt-2">
-                  Checks line of sight across multiple terrain points
-                </p>
-              </div>
-            `)
-            .addTo(map);
-        }
-      });
+              `)
+              .addTo(map);
+          }
+        };
+        // Attach a property to store the popup reference (so we can remove it later)
+        onMouseMove.popup = onMouseMove.popup || null;
   
-      map.on('mouseleave', targetLayerId, () => {
-        if (popup) {
-          popup.remove();
-          popup = null;
-        }
-      });
+        const onMouseLeave = () => {
+          if (onMouseMove.popup) {
+            onMouseMove.popup.remove();
+            onMouseMove.popup = null;
+          }
+        };
   
-    } catch (error) {
-      console.error('Error in visualizeGrid:', error);
-      throw createError(
-        'Failed to visualize analysis results',
-        'MAP_INTERACTION',
-        error
-      );
-    }
-  }, [map, elosGridRange]);
-
+        // Remove any existing listeners for this layer to avoid duplicate handlers
+        map.off('mousemove', targetLayerId, onMouseMove);
+        map.off('mouseleave', targetLayerId, onMouseLeave);
+        map.on('mousemove', targetLayerId, onMouseMove);
+        map.on('mouseleave', targetLayerId, onMouseLeave);
+      } catch (error) {
+        console.error('Error in visualizeGrid:', error);
+        throw createError(
+          'Failed to visualize analysis results',
+          'MAP_INTERACTION',
+          error
+        );
+      }
+    },
+    [map, elosGridRange, layerManager]
+  );
+  
+  
+  
+  
   const analyzeFromPoint = useCallback(async (
     cells: GridCell[],
     markerOptions: AnalysisOptions['markerOptions']
@@ -738,8 +759,6 @@ const ELOSGridAnalysis = forwardRef<ELOSGridAnalysisRef, Props>((props, ref) => 
           totalCells: AnalysisResults.cells.length,
           stats: AnalysisResults.stats
         });
-    
-        await visualizeGrid(AnalysisResults);
   
         // Visualize results
         console.log("Visualizing results on the map...");

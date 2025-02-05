@@ -39,6 +39,7 @@ class LayerManager {
       }
 
       const currentVisibility = this.map.getLayoutProperty(layerId, 'visibility');
+      console.log(`Before toggling, ${layerId} visibility is ${currentVisibility}`);
       const newVisibility = currentVisibility === 'visible' ? 'none' : 'visible';
       
       this.map.setLayoutProperty(layerId, 'visibility', newVisibility);
