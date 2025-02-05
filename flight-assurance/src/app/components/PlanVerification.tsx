@@ -1,3 +1,4 @@
+// PlanVerification.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect } from "react";
 import { CheckCircle, XCircle, Loader } from "lucide-react";
@@ -6,6 +7,7 @@ import { useObstacleAnalysis } from "../context/ObstacleAnalysisContext";
 import TerrainClearancePopup from "./TerrainClearancePopup";
 import ObstacleAssessment from "./ObstacleAssessment";
 import { MapRef } from "./Map";
+import StatusRow from "./StatusRow";
 
 interface PlanVerificationProps {
   mapRef: React.RefObject<MapRef>;
@@ -36,6 +38,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef }) => {
     return analysisData.distances[index];
   };
 
+  // Debug logging to help trace state updates
   useEffect(() => {
     const map = mapRef.current?.getMap();
     console.log("State Update:");
@@ -46,7 +49,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef }) => {
     console.log("- Is Analyzing:", isAnalyzing);
   }, [flightPlan, isAnalyzing, mapRef]);
 
-  // Original zero altitude check
+  // Zero altitude check
   useEffect(() => {
     const checkForZeros = async () => {
       if (!flightPlan) return;
@@ -58,7 +61,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef }) => {
 
         const zeroAltitudePoints: any[] = [];
         flightPlan?.features.forEach((feature: any) => {
-          return feature.geometry.coordinates.forEach((geometry: any) => {
+          feature.geometry.coordinates.forEach((geometry: any) => {
             if (geometry.some((coordinate: any) => coordinate === 0)) {
               zeroAltitudePoints.push(geometry);
             }
@@ -82,7 +85,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef }) => {
     checkForZeros();
   }, [flightPlan]);
 
-  // Original duplicate check
+  // Duplicate waypoint check
   useEffect(() => {
     const checkForDuplicates = async () => {
       if (!flightPlan) return;
@@ -95,7 +98,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef }) => {
         const duplicateEntries: any[] = [];
         flightPlan?.features.forEach((feature: any) => {
           const coordinatesSet = new Set();
-          return feature.geometry.coordinates.forEach((geometry: any) => {
+          feature.geometry.coordinates.forEach((geometry: any) => {
             const coordString = JSON.stringify(geometry);
             if (coordinatesSet.has(coordString)) {
               duplicateEntries.push(geometry);
@@ -111,7 +114,8 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef }) => {
               ? {
                   status: "error",
                   errorMessages: duplicateEntries.map(
-                    (entry) => `Duplicate entry found ${JSON.stringify(entry)}`
+                    (entry) =>
+                      `Duplicate entry found: ${JSON.stringify(entry)}`
                   ),
                 }
               : { status: "success" },
@@ -122,7 +126,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef }) => {
     checkForDuplicates();
   }, [flightPlan]);
 
-  // Status effect
+  // Update overall final status based on individual checks
   useEffect(() => {
     if (Object.keys(statuses).length === 0) {
       setFinalStatus("loading");
@@ -154,14 +158,19 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef }) => {
     setIsAnalyzing(true);
     setShowTerrainPopup(true);
 
+    // Dispatch event to trigger terrain analysis
     const event = new CustomEvent("triggerTerrainAnalysis");
     window.dispatchEvent(event);
   };
 
   return (
-    <div className="flex flex-col gap-4 items-center p-4 border rounded-lg shadow-md bg-white w-full">
-      {/* Hidden ObstacleAssessment */}
-      <div style={{ display: "none" }}>
+    <div
+      className="flex flex-col gap-4 items-center p-4 border rounded-lg shadow-md bg-white w-full transition-all"
+      role="region"
+      aria-labelledby="plan-verification-heading"
+    >
+      {/* Hidden ObstacleAssessment Component */}
+      <div className="hidden">
         <ObstacleAssessment
           flightPlan={flightPlan}
           map={mapRef.current?.getMap() || null}
@@ -172,71 +181,49 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef }) => {
         />
       </div>
 
-      <h2 className="text-lg font-medium">Plan Verification</h2>
+      <h2 id="plan-verification-heading" className="text-lg font-medium">
+        Plan Verification
+      </h2>
 
-      <div className="flex flex-col items-center">
-      {/* Display the label if there's no flight plan */}
-      {!flightPlan && (
-        <div className="mb-2 text-gray-700 text-center">
-          Awaiting Flight Plan Upload
-        </div>
-      )}
-            {/* Overall Status Indicator */}
-
-      {finalStatus === "loading" ? (
-        <Loader className="animate-spin text-gray-500 w-16 h-16" />
-      ) : finalStatus === "success" ? (
-        <CheckCircle className="text-green-500 w-16 h-16" />
-      ) : (
-        <XCircle className="text-red-500 w-16 h-16" />
-      )}
-    </div>
-
-
-
-      {/* List of checks with statuses */}
-      <ul className="space-y-2 w-full max-w-md">
-        {Object.keys(statuses).map((check) => (
-          <li key={check} className="flex flex-col gap-1">
-            <div className="flex items-center gap-3">
-              <span className="flex-1 text-gray-800">{check}</span>
-              {statuses[check]?.status === "loading" && (
-                <Loader className="animate-spin text-gray-500" />
-              )}
-              {statuses[check]?.status === "success" && (
-                <CheckCircle className="text-green-500" />
-              )}
-              {statuses[check]?.status === "error" && (
-                <XCircle className="text-red-500" />
-              )}
-            </div>
-            {statuses[check]?.status === "error" &&
-              statuses[check]?.errorMessages &&
-              statuses[check]?.errorMessages.length > 0 && (
-                <ul className="ml-6 list-disc text-red-500">
-                  {statuses[check]?.errorMessages.map((message, index) => (
-                    <li key={index}>{message}</li>
-                  ))}
-                </ul>
-              )}
-          </li>
-        ))}
-      </ul>
-
-      <button
-        onClick={handleTerrainAnalysis}
-        disabled={!flightPlan || !mapRef.current?.getMap() || isAnalyzing}
-        className={`px-3 py-1 bg-blue-500 text-white text-xs rounded hover:opacity-90 ${
-          !flightPlan || !mapRef.current?.getMap() || isAnalyzing
-            ? "opacity-50 cursor-not-allowed"
-            : ""
-        }`}
+      {/* Overall Status Section */}
+      <section
+        className="flex flex-col items-center"
+        aria-label="Overall Status"
       >
-        {isAnalyzing ? "Analyzing..." : "Start Terrain Clearance Analysis"}
-      </button>
+        {!flightPlan && (
+          <div className="mb-2 text-gray-700 text-center">
+            Awaiting Flight Plan Upload
+          </div>
+        )}
+        {finalStatus === "loading" ? (
+          <Loader className="animate-spin text-gray-500 w-16 h-16" />
+        ) : finalStatus === "success" ? (
+          <CheckCircle className="text-green-500 w-16 h-16" />
+        ) : (
+          <XCircle className="text-red-500 w-16 h-16" />
+        )}
+      </section>
 
-      {/* New Terrain Clearance Check UI Section */}
-      <div className="w-full max-w-md p-4 mt-4 border-t pt-3 bg-gray-100 rounded-md">
+      {/* Plan Checks Section */}
+      <section className="w-full max-w-md" aria-label="Plan Checks">
+        <h3 className="text-md font-semibold mb-2">Plan Checks</h3>
+        <ul className="space-y-2">
+          {Object.keys(statuses).map((check) => (
+            <StatusRow
+              key={check}
+              label={check}
+              status={statuses[check].status}
+              errorMessages={statuses[check].errorMessages}
+            />
+          ))}
+        </ul>
+      </section>
+
+      {/* Terrain Clearance Verification Section */}
+      <section
+        className="w-full max-w-md"
+        aria-label="Terrain Clearance Verification"
+      >
         <h3 className="text-md font-semibold mb-2">
           Terrain Clearance Verification
         </h3>
@@ -281,11 +268,13 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef }) => {
             <span>Waiting for terrain clearance data...</span>
           </div>
         )}
-      </div>
+      </section>
 
-      {/* Stats Box */}
-      <div className="w-full max-w-md p-4 mt-4 border-t pt-3 bg-gray-100 rounded-md">
-        <h3 className="text-md font-semibold mb-2">Flight Plan Statistics</h3>
+      {/* Flight Plan Statistics Section */}
+      <section className="w-full max-w-md" aria-label="Flight Plan Statistics">
+        <h3 className="text-md font-semibold mb-2">
+          Flight Plan Statistics
+        </h3>
         <div className="flex justify-between text-sm text-gray-700">
           <span>Minimum Altitude:</span>
           <span>
@@ -305,7 +294,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef }) => {
         <div className="flex justify-between text-sm text-red-600">
           <span>Lowest Clearance Height:</span>
           <span>
-            {analysisData?.minimumClearanceHeight
+            {analysisData?.minimumClearanceHeight !== undefined
               ? `${analysisData.minimumClearanceHeight.toFixed(1)}m`
               : "--"}
           </span>
@@ -313,12 +302,25 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef }) => {
         <div className="flex justify-between text-sm text-blue-600">
           <span>Highest Terrain Altitude:</span>
           <span>
-            {analysisData?.highestObstacle
+            {analysisData?.highestObstacle !== undefined
               ? `${analysisData.highestObstacle.toFixed(1)}m`
               : "--"}
           </span>
         </div>
-      </div>
+      </section>
+
+      {/* Terrain Analysis Button */}
+      <button
+        onClick={handleTerrainAnalysis}
+        disabled={!flightPlan || !mapRef.current?.getMap() || isAnalyzing}
+        className={`px-3 py-1 bg-blue-500 text-white text-xs rounded hover:opacity-90 focus:outline-none transition-all ${
+          !flightPlan || !mapRef.current?.getMap() || isAnalyzing
+            ? "opacity-50 cursor-not-allowed"
+            : ""
+        }`}
+      >
+        {isAnalyzing ? "Analyzing..." : "Run Terrain Analysis"}
+      </button>
 
       {/* Terrain Clearance Popup */}
       {showTerrainPopup && (

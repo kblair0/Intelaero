@@ -106,15 +106,15 @@ function parseQGCFile(
     throw new Error("No valid waypoints with lat/lon found in the .waypoints file.");
   }
 
-console.log('Flight Plan Parse Details:', {
-  waypoints: waypoints.map((wp, idx) => ({
-    waypointNumber: idx,
-    rawAltitude: wp.originalAltitude,
-    altitudeMode: wp.altitudeMode,
-    frame: wp.frame
-  })),
-  homeAltitude: homePosition.altitude
-});
+  console.log("Flight Plan Parse Details:", {
+    waypoints: waypoints.map((wp, idx) => ({
+      waypointNumber: idx,
+      rawAltitude: wp.originalAltitude,
+      altitudeMode: wp.altitudeMode,
+      frame: wp.frame,
+    })),
+    homeAltitude: homePosition.altitude,
+  });
 
   return {
     type: "FeatureCollection",
@@ -143,9 +143,8 @@ console.log('Flight Plan Parse Details:', {
 /**
  * Parse a KML file using @mapbox/togeojson, then produce a minimal FlightPlanData.
  * This example simply extracts the **first** LineString in the KML.
- * Infer home psotion is the first waypoint.
+ * Infer home position is the first waypoint.
  */
-
 function inferHomePosition(coordinates: [number, number, number][]): {
   latitude: number;
   longitude: number;
@@ -162,7 +161,7 @@ function inferHomePosition(coordinates: [number, number, number][]): {
   };
 }
 
-function parseKMLFile(kmlText: string): FlightPlanData {
+function parseKMLFile(kmlText: string): import("../context/FlightPlanContext").FlightPlanData {
   const kmlDom = parser?.parseFromString(kmlText, "application/xml");
   const geojsonResult = toGeoJSON.kml(kmlDom) as GeoJSON.FeatureCollection;
 
@@ -171,7 +170,7 @@ function parseKMLFile(kmlText: string): FlightPlanData {
 
   for (const feature of geojsonResult.features) {
     if (feature.geometry?.type === "LineString") {
-      lineStringCoords = feature.geometry.coordinates.map(([lon, lat, alt]) => [
+      lineStringCoords = feature.geometry.coordinates.map(([lon, lat, alt]: [number, number, number]) => [
         lon,
         lat,
         alt ?? 0,
@@ -224,7 +223,6 @@ function parseKMLFile(kmlText: string): FlightPlanData {
   };
 }
 
-
 interface FlightPlanUploaderProps {
   onPlanUploaded?: (
     flightData: import("../context/FlightPlanContext").FlightPlanData
@@ -239,13 +237,14 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded 
 
   const { setFlightPlan } = useFlightPlanContext();
 
+
+
   const onDrop = (acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
     const fileExtension = file.name.split(".").pop()?.toLowerCase() || "";
-
     setFileName(file.name);
     setFileUploadStatus("uploading");
-
+  
     const reader = new FileReader();
     reader.onload = () => {
       try {
@@ -257,18 +256,15 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded 
             flightData = parseGeoJSONFile(reader.result as string);
           } else if (fileExtension === "kml") {
             flightData = parseKMLFile(reader.result as string);
-          } else {
-            throw new Error("Unsupported file format");
           }
-
-          // Update context
+  
+          // Remove processed flag if it exists
+          if (flightData.processed) {
+            delete flightData.processed;
+          }
+  
+          // Just set the new flight plan directly without clearing first
           setFlightPlan(flightData);
-
-          // Notify parent if provided
-          if (onPlanUploaded) {
-            onPlanUploaded(flightData);
-          }
-
           setFileUploadStatus("processed");
         }
       } catch (error) {
@@ -288,27 +284,30 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded 
     onDrop,
   });
 
-  function parseGeoJSONFile(geojsonText: string): import("../context/FlightPlanContext").FlightPlanData {
+  function parseGeoJSONFile(
+    geojsonText: string
+  ): import("../context/FlightPlanContext").FlightPlanData {
     const geojsonResult = JSON.parse(geojsonText) as GeoJSON.FeatureCollection;
-  
+
     if (!geojsonResult.features || geojsonResult.features.length === 0) {
       throw new Error("Invalid GeoJSON: No features found.");
     }
-  
+
     const flightFeature = geojsonResult.features.find(
       (f) => f.geometry?.type === "LineString"
     );
-  
+
     if (!flightFeature) {
       throw new Error("No valid flight path found in GeoJSON.");
     }
-  
+
     const lineStringCoords = (flightFeature.geometry as GeoJSON.LineString)
       .coordinates as [number, number, number][];
-  
+
     // 🛠️ Infer home position if missing
-    const homePosition = geojsonResult.properties?.homePosition || inferHomePosition(lineStringCoords);
-  
+    const homePosition =
+      geojsonResult.properties?.homePosition || inferHomePosition(lineStringCoords);
+
     return {
       type: "FeatureCollection",
       properties: {
@@ -317,35 +316,33 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded 
       features: [flightFeature],
     };
   }
-  
+
   function inferHomePosition(coordinates: [number, number, number][]): {
     latitude: number;
     longitude: number;
     altitude: number;
   } | null {
     if (coordinates.length === 0) return null;
-  
+
     // Use first coordinate as default home position
     const firstPoint = coordinates[0];
     return {
-      latitude: firstPoint[1], // Lat
-      longitude: firstPoint[0], // Lon
-      altitude: firstPoint[2] ?? 0, // Alt, default to 0 if missing
+      latitude: firstPoint[1],
+      longitude: firstPoint[0],
+      altitude: firstPoint[2] ?? 0,
     };
   }
-  
 
-  // Example button for loading a sample .geojson from the public folder
   const loadExampleGeoJSON = async () => {
     try {
       const response = await fetch("/example.geojson");
       const rawData = await response.json();
-  
+
       // Process the data through our parsing function
-      const processedData = parseGeoJSONFile(JSON.stringify(rawData)); 
-  
+      const processedData = parseGeoJSONFile(JSON.stringify(rawData));
+
       setFlightPlan(processedData); // ✅ Now homePosition is guaranteed!
-  
+
       if (onPlanUploaded) {
         onPlanUploaded(processedData);
       }
@@ -355,7 +352,6 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded 
       setFileUploadStatus("error");
     }
   };
-  
 
   return (
     <div className="flex-1 bg-white shadow-lg p-6 rounded-lg border border-gray-200">

@@ -59,6 +59,19 @@ interface MarkerAnalysisOptions {
   location: LocationData;
   range: number;
 }
+const waitForDEM = (map: mapboxgl.Map): Promise<void> => {
+  return new Promise((resolve) => {
+    const checkDEM = () => {
+      if (map.isSourceLoaded("mapbox-dem")) {
+        console.log("✅ Terrain data loaded successfully");
+        resolve();
+      } else {
+        map.once("sourcedata", checkDEM);
+      }
+    };
+    checkDEM();
+  });
+};
 
 const Map = forwardRef<MapRef, MapProps>(
   (
@@ -109,200 +122,180 @@ const Map = forwardRef<MapRef, MapProps>(
     const endMarkerRef = useRef<mapboxgl.Marker | null>(null);
     const elosGridRef = useRef<ELOSGridAnalysisRef | null>(null);
     const { metrics } = useFlightConfiguration();
-    const [resolvedGeoJSON, setResolvedGeoJSON] =
-      useState<GeoJSON.FeatureCollection | null>(null);
+    const [resolvedGeoJSON, setResolvedGeoJSON] = useState<GeoJSON.FeatureCollection | null>(null);
+    const terrainLoadedRef = useRef<boolean>(false);
 
-    useEffect(() => {
-      if (mapRef?.current) {
-        mapRef?.current.dragRotate.enable();
-        mapRef?.current.touchZoomRotate.enableRotation();
-        mapRef?.current.addControl(new mapboxgl.NavigationControl());
-      }
-    }, []);
-
-    useEffect(() => {
-      // 1. Make sure we have a flight plan and the map is ready
-      if (!contextFlightPlan || !mapRef.current) return;
-      if (contextFlightPlan.totalDistance) return; // Skip if already processed
-
-      console.log("Starting Altitude Resolution:", {
-        inputPlan: contextFlightPlan,
-      });
-
-      // 2. Clone the original flight plan so we don’t mutate context data
-      const newPlan = structuredClone(contextFlightPlan);
-
-      // 3. Prepare to resolve altitudes
-      const homeAlt = newPlan?.properties?.homePosition?.altitude ?? 0;
-
-      // 4. For each feature that’s a LineString, update altitudes
-      newPlan.features.forEach((feature) => {
-        if (feature.geometry.type !== "LineString") return;
-
-        const coords = feature.geometry.coordinates; // [lon, lat, alt]
-        const waypoints = feature.properties.waypoints || [];
-
-        coords.forEach((coord, i) => {
-          const [lon, lat, originalAlt] = coord;
-          const wp = waypoints[i];
-          if (!wp) return; // mismatch fallback
-
-          const terrainElev =
-            mapRef.current?.queryTerrainElevation([lon, lat]) ?? 0;
-          console.log(`Waypoint ${i} processing:`, {
-            longitude: lon,
-            latitude: lat,
-            originalAltitude: originalAlt,
-            terrainElevation: terrainElev,
-            mode: wp.altitudeMode,
-            beforeResolution: coord[2],
-          });
-
-          switch (wp.altitudeMode) {
-            case "absolute":
-              // Already MSL; do nothing
-              break;
-
-            case "relative":
-              if (wp.commandType === 22) {
-                // MAV_CMD_NAV_TAKEOFF
-                // Use the takeoff location's ground elevation as base
-                const takeoffGroundElev =
-                  mapRef.current?.queryTerrainElevation([lon, lat]) ?? 0;
-                coord[2] = takeoffGroundElev + originalAlt; // AGL from ground at takeoff point
-              } else {
-                coord[2] = terrainElev + originalAlt;
-              }
-              break;
-
-            case "terrain":
-              // originalAltitude is height above ground → MSL = terrainElev + originalAlt
-              {
-                const terrainElev =
-                  mapRef?.current?.queryTerrainElevation([lon, lat]) ?? 0;
-                coord[2] = terrainElev + originalAlt;
-              }
-              break;
-
-            default:
-              // Optional default: treat as 'absolute'
-              break;
-          }
-          console.log(`Waypoint ${i} resolved:`, {
-            finalAltitude: coord[2],
-            heightAGL: coord[2] - terrainElev,
-          });
-        });
-      });
-
-// --- Query the terrain altitude at the home position ---
-const homePosition = newPlan.properties.homePosition;
-const homeTerrainElev = mapRef.current?.queryTerrainElevation([homePosition.longitude, homePosition.latitude]) ?? 0;
-homePosition.altitude = homeTerrainElev;
-if (
-  newPlan.features.length > 0 &&
-  newPlan.features[0].geometry.type === "LineString" &&
-  newPlan.features[0].geometry.coordinates.length > 0
-) {
-  newPlan.features[0].geometry.coordinates[0][2] = homeTerrainElev;
-}
-
-// --- Set the home altitude in properties to exactly match the terrain altitude ---
-homePosition.altitude = homeTerrainElev;
-console.log("New Home Position Altitude (properties):", homePosition);
-
-// --- Update the geometry coordinate for the home waypoint (assumed to be at index 0) ---
-if (
-  newPlan.features.length > 0 &&
-  newPlan.features[0].geometry.type === "LineString" &&
-  newPlan.features[0].geometry.coordinates.length > 0
-) {
-  newPlan.features[0].geometry.coordinates[0][2] = homeTerrainElev;
-  console.log("Updated home coordinate in geometry:", newPlan.features[0].geometry.coordinates[0]);
-}
-
-
-      // 5. Store your newly resolved geometry in local state
-      setResolvedGeoJSON(newPlan);
-
-      console.log("Resolved Flight Plan:", {
-        type: newPlan.type,
-        features: newPlan.features.map((feature, index) => ({
-          geometry: {
-            type: feature.geometry.type,
-            coordinates: feature.geometry.coordinates,
-          },
-          properties: {
-            name: feature.properties.name || `Feature ${index}`,
-            altitudeModes: feature.properties.altitudeModes || [],
-            altitudes: feature.geometry.coordinates.map((coord) => coord[2]), // ✅ Extract resolved altitudes
-            originalAltitudes: feature.properties.originalAltitudes || [],
-            rawCommands: feature.properties.rawCommands || [],
-            waypoints: feature.properties.waypoints || [],
-          },
-        })),
-        properties: {
-          homePosition: newPlan.properties.homePosition || {},
-        },
+    const queryTerrainElevation = useCallback(async (
+      coordinates: [number, number],
+      retryCount = 3
+    ): Promise<number> => {
+      if (!mapRef.current) {
+        throw new Error("Map not initialized");
       }
     
-    );
-
-      // Extract the 2D coordinates (ignore altitude) from the first feature.
-      const coords2D = newPlan.features[0].geometry.coordinates.map(
-        (coord: [number, number, number]) => [coord[0], coord[1]]
-      );
-      // Create a Turf line from these 2D coordinates.
-      const routeLine = turf.lineString(coords2D);
-
-      // Compute cumulative distances along the route (in kilometers)
-      let cumulativeDistance = 0;
-      const waypointDistances = newPlan.features[0].geometry.coordinates.map(
-        (
-          coord: [number, number, number],
-          idx: number,
-          arr: [number, number, number][]
-        ) => {
-          if (idx === 0) return 0;
-          const segment = turf.lineString([
-            arr[idx - 1].slice(0, 2),
-            coord.slice(0, 2),
-          ]);
-          cumulativeDistance += turf.length(segment, { units: "kilometers" });
-          return cumulativeDistance;
+      try {
+        const elevation = mapRef.current.queryTerrainElevation(coordinates);
+        if (elevation !== null && elevation !== undefined) {
+          return elevation;
         }
-      );
+        throw new Error("Invalid elevation value");
+      } catch (error) {
+        console.warn("Primary terrain query failed, trying fallback:", error);
+        if (retryCount > 0) {
+          try {
+            const fallbackElevation = await fetchTerrainElevation(coordinates[0], coordinates[1]);
+            return fallbackElevation;
+          } catch (fallbackError) {
+            if (retryCount > 1) {
+              console.warn("Fallback failed, retrying:", fallbackError);
+              return queryTerrainElevation(coordinates, retryCount - 1);
+            }
+            throw fallbackError;
+          }
+        }
+        throw error;
+      }
+    }, [mapRef]);
 
-      // Compute the total distance of the route (in kilometers)
-      const totalDistance = turf.length(routeLine, { units: "kilometers" });
-
-      // Create a new processed flight plan object that includes the computed Turf data
-      const processedFlightPlan = {
-        ...newPlan,
-        waypointDistances, // cumulative distances at each coordinate (km)
-        totalDistance, // overall route distance (km)
+    //FlightPlan Processing including logging
+    useEffect(() => {
+      if (!contextFlightPlan) {
+        return;
+      }
+    
+      if (contextFlightPlan.processed) {
+        console.log("Flight plan already processed.");
+        return;
+      }
+    
+      const processFlightPlan = async () => {
+        try {
+          if (!mapRef.current) {
+            throw new Error("Map not initialized");
+          }
+    
+          // Calculate bounds of flight plan
+          const bounds = contextFlightPlan.features[0].geometry.coordinates.reduce(
+            (acc, coord) => {
+              acc[0] = Math.min(acc[0], coord[0]);  // min lng
+              acc[1] = Math.min(acc[1], coord[1]);  // min lat
+              acc[2] = Math.max(acc[2], coord[0]);  // max lng
+              acc[3] = Math.max(acc[3], coord[1]);  // max lat
+              return acc;
+            },
+            [Infinity, Infinity, -Infinity, -Infinity]
+          );
+    
+          // Move map to flight plan area first
+          mapRef.current.fitBounds(bounds as [number, number, number, number], {
+            padding: 50,
+            duration: 0
+          });
+    
+          // Wait for tiles to load
+          console.log("Waiting for terrain tiles to load...");
+          await new Promise(resolve => setTimeout(resolve, 2000));
+    
+          console.log("Starting Altitude Resolution:", { inputPlan: contextFlightPlan });
+          const newPlan = structuredClone(contextFlightPlan);
+          
+          // Get and set home position elevation
+          const homePosition = newPlan.properties.homePosition;
+          const homeTerrainElev = await queryTerrainElevation([homePosition.longitude, homePosition.latitude]);
+          homePosition.altitude = homeTerrainElev;
+          if (newPlan.features[0]?.geometry?.coordinates?.[0]) {
+            newPlan.features[0].geometry.coordinates[0][2] = homeTerrainElev;
+          }
+          
+          // Process each feature's waypoints...
+          for (const feature of newPlan.features) {
+            if (feature.geometry.type !== "LineString") continue;
+            const coords = feature.geometry.coordinates;
+            const waypoints = feature.properties.waypoints || [];
+            for (let i = 0; i < coords.length; i++) {
+              const [lon, lat, originalAlt] = coords[i];
+              const wp = waypoints[i];
+              if (!wp) continue;
+              try {
+                const terrainElev = await queryTerrainElevation([lon, lat]);
+                console.log(`Waypoint ${i} processing:`, {
+                  longitude: lon,
+                  latitude: lat,
+                  originalAltitude: originalAlt,
+                  terrainElevation: terrainElev,
+                  mode: wp.altitudeMode,
+                  beforeResolution: coords[i][2],
+                });
+                switch (wp.altitudeMode) {
+                  case "absolute":
+                    break;
+                  case "relative":
+                    if (wp.commandType === 22) {
+                      const takeoffGroundElev = await queryTerrainElevation([lon, lat]);
+                      coords[i][2] = takeoffGroundElev + originalAlt;
+                    } else {
+                      coords[i][2] = terrainElev + originalAlt;
+                    }
+                    break;
+                  case "terrain":
+                    coords[i][2] = terrainElev + originalAlt;
+                    break;
+                  default:
+                    break;
+                }
+                console.log(`Waypoint ${i} resolved:`, {
+                  finalAltitude: coords[i][2],
+                  heightAGL: coords[i][2] - terrainElev,
+                });
+              } catch (error) {
+                console.error(`Error processing waypoint ${i}:`, error);
+                throw error;
+              }
+            }
+          }
+          
+          setResolvedGeoJSON(newPlan);
+    
+          // Process distances
+          const coords2D = newPlan.features[0].geometry.coordinates.map(
+            (coord: [number, number, number]) => [coord[0], coord[1]]
+          );
+          const routeLine = turf.lineString(coords2D);
+    
+          let cumulativeDistance = 0;
+          const waypointDistances = newPlan.features[0].geometry.coordinates.map(
+            (coord, idx, arr) => {
+              if (idx === 0) return 0;
+              const segment = turf.lineString([
+                arr[idx - 1].slice(0, 2),
+                coord.slice(0, 2),
+              ]);
+              cumulativeDistance += turf.length(segment, { units: "kilometers" });
+              return cumulativeDistance;
+            }
+          );
+    
+          const totalDistance = turf.length(routeLine, { units: "kilometers" });
+          newPlan.processed = true;
+    
+          const processedFlightPlan = {
+            ...newPlan,
+            waypointDistances,
+            totalDistance,
+          };
+    
+          setContextFlightPlan(processedFlightPlan);
+          setDistance(totalDistance);
+    
+        } catch (error) {
+          console.error("Error processing flight plan:", error);
+          setError("Failed to process flight plan. Please try again.");
+        }
       };
-
-      // Update FlightPlanContext with the new processed flight plan data
-      setContextFlightPlan(processedFlightPlan);
-      setDistance(totalDistance);
-
-      console.log(
-        "Updated FlightPlanContext with processed data:",
-        processedFlightPlan
-      );
-
-      // 6. (Optional) If you only want *2D distance*:
-      const raw2DLine = turf.lineString(
-        contextFlightPlan.features[0].geometry.coordinates.map(
-          (coord: [number, number, number]) => [coord[0], coord[1]]
-        )
-      );
-      const calculatedDistance = turf.length(raw2DLine, {
-        units: "kilometers",
-      });
-      setDistance(calculatedDistance);
-    }, [contextFlightPlan, mapRef, setContextFlightPlan, setDistance]);
+    
+      processFlightPlan();
+    }, [contextFlightPlan, queryTerrainElevation, setContextFlightPlan, setDistance, setError]);
+    
 
     useEffect(() => {
       if (resolvedGeoJSON && mapRef.current) {
@@ -539,37 +532,34 @@ if (
     );
 
     // Map initialization
+
     useEffect(() => {
       if (mapContainerRef.current) {
         try {
-          // Initialize the Mapbox map
           const map = new mapboxgl.Map({
             container: mapContainerRef.current,
-            style:
-              "mapbox://styles/mapbox-map-design/ckhqrf2tz0dt119ny6azh975y",
+            style: "mapbox://styles/mapbox-map-design/ckhqrf2tz0dt119ny6azh975y",
             center: [0, 0],
-            zoom: 2.5, // Default startup zoom (but we'll enforce a fixed zoom for DEM)
+            zoom: 2.5,
             projection: "globe",
           });
-
-          map.on("load", () => {
-            const fixedZoom = 15; // 🔥 Set fixed zoom level for DEM consistency
-
+    
+          map.once('style.load', () => {  // Changed from on("load") to once('style.load')
             try {
-              // Add terrain source
+              // Add the DEM source
               map.addSource("mapbox-dem", {
                 type: "raster-dem",
                 url: "mapbox://mapbox.mapbox-terrain-dem-v1",
                 tileSize: 512,
                 maxzoom: 15,
               });
-
+    
               map.setTerrain({
                 source: "mapbox-dem",
                 exaggeration: 1.5,
               });
-
-              // Sky layer for enhanced visualization
+    
+              // Add the sky layer
               map.addLayer({
                 id: "sky",
                 type: "sky",
@@ -579,40 +569,49 @@ if (
                   "sky-atmosphere-sun-intensity": 15,
                 },
               });
-
-              // 🔥 Preload DEM tiles at fixed zoom level
-              map.once("idle", () => {
-                console.log(`✅ Preloading DEM tiles at zoom ${fixedZoom}...`);
-                map.setZoom(fixedZoom); // Enforce fixed zoom for consistent terrain queries
-
-                setTimeout(() => {
-                  console.log(
-                    "✅ DEM tiles preloaded. Restoring previous zoom level."
-                  );
-                  map.setZoom(2.5); // Restore initial zoom level
-                }, 500);
+    
+              // Wait for both style and DEM
+              Promise.all([
+                new Promise(resolve => map.once('idle', resolve)),
+                waitForDEM(map)
+              ]).then(() => {
+                console.log("✅ Map style and terrain fully loaded");
+                // Set map ref first
+                mapRef.current = map;
+                // Then set terrain loaded
+                terrainLoadedRef.current = true;
+                // Finally set map ready
+                console.log("Map and DEM ready – all refs set");
+              }).catch((error) => {
+                console.error("Error waiting for map and DEM:", error);
               });
-
-              // Set global map reference
-              mapRef.current = map;
-              layerManager.setMap(map);
-              console.log("✅ Map fully initialized with all layers");
+    
             } catch (error) {
               console.error("❌ Error initializing map layers:", error);
+              throw error;
             }
           });
+          
+          // Listen for any load errors
+          map.on('error', (e) => {
+            console.error("Mapbox error:", e);
+          });
+    
         } catch (error) {
           console.error("❌ Error creating map:", error);
         }
       }
-
+    
+      // Cleanup function
       return () => {
+        terrainLoadedRef.current = false;
         if (mapRef.current) {
           mapRef.current.remove();
           mapRef.current = null;
         }
       };
     }, []);
+    
 
     const fetchTerrainElevation = async (
       lng: number,
@@ -691,12 +690,18 @@ if (
     // Map Marker Popup Implementation
     const createMarkerPopup = (
       markerType: "gcs" | "observer" | "repeater",
-      initialElevation: number | null,
+      initialElevation: number,
       onDelete: () => void
     ) => {
       const popupDiv = document.createElement("div");
-      const currentElevation = initialElevation ?? 0;
+      const currentElevation = initialElevation;
 
+      const markerLocations = {
+        gcs: gcsLocation,
+        observer: observerLocation,
+        repeater: repeaterLocation,
+      };
+    
       const styles = {
         container: "padding: 8px; min-width: 200px;",
         header:
@@ -704,112 +709,113 @@ if (
         deleteBtn:
           "background: #e53e3e; color: white; border: none; padding: 2px 4px; border-radius: 4px; cursor: pointer; font-size: 10px;",
         section: "margin-bottom: 8px;",
-        label:
-          "color: #4a5568; font-size: 12px; display: block; margin-bottom: 4px;",
+        label: "color: #4a5568; font-size: 12px; display: block; margin-bottom: 4px;",
         value: "color: #1a202c; font-size: 12px; font-weight: 500;",
         losButton:
           "background: #4a5568; color: white; border: none; padding: 4px 8px; border-radius: 4px; margin: 2px; font-size: 12px; cursor: pointer; width: 100%;",
       };
-
+    
       const markerInfo = {
         gcs: { icon: "📡", title: "GCS", color: "#3182ce" },
         observer: { icon: "🔭", title: "Observer", color: "#38a169" },
         repeater: { icon: "⚡️", title: "Repeater", color: "#e53e3e" },
       };
-
-      const { icon, title, color } = markerInfo[markerType];
+    
+      const { icon, title } = markerInfo[markerType];
       const offset = markerConfigs[markerType].elevationOffset;
       const stationElevation = currentElevation + offset;
-
+    
       popupDiv.innerHTML = `
-      <div class="popup-container">
-        <!-- Header -->
-        <div class="flex items-center justify-between mb-2">
-          <h5 class="font-semibold text-sm text-gray-700">
-            ${title} ${icon}
-          </h5>
-          <button
-            id="delete-${markerType}-btn"
-            class="bg-red-500 text-white text-xs px-2 py-1 rounded hover:bg-red-600 transition"
-          >
-            Delete
-          </button>
+        <div class="popup-container" style="${styles.container}">
+          <!-- Header -->
+          <div style="${styles.header}">
+            <h5 style="font-weight: 600; font-size: 0.875rem; color: #4a5568;">
+              ${title} ${icon}
+            </h5>
+            <button id="delete-${markerType}-btn" style="${styles.deleteBtn}">
+              Delete
+            </button>
+          </div>
+    
+          <!-- Ground Elevation -->
+          <div style="margin-bottom: 8px;">
+            <label style="${styles.label}">Ground Elevation:</label>
+            <span style="${styles.value}">${currentElevation.toFixed(1)} m ASL</span>
+          </div>
+    
+          <!-- Elevation Offset -->
+          <div style="margin-bottom: 8px;">
+            <label style="${styles.label}">Elevation Offset:</label>
+            <span style="${styles.value}">${offset.toFixed(1)} m</span>
+          </div>
+    
+          <!-- Station Elevation -->
+          <div style="margin-bottom: 8px;">
+            <label style="${styles.label}">Station Elevation:</label>
+            <span style="${styles.value}">${stationElevation.toFixed(1)} m ASL</span>
+          </div>
+    
+          <!-- Container for LOS buttons -->
+          <div id="los-buttons"></div>
         </div>
-
-        <!-- Ground Elevation -->
-        <div class="mb-2">
-          <label class="block text-gray-600">Ground Elevation:</label>
-          <span class="font-medium">${currentElevation.toFixed(1)} m ASL</span>
-        </div>
-
-        <!-- Elevation Offset -->
-        <div class="mb-2">
-          <label class="block text-gray-600">Elevation Offset:</label>
-          <span class="font-medium">${offset.toFixed(1)} m</span>
-        </div>
-
-        <!-- Station Elevation -->
-        <div class="mb-2">
-          <label class="block text-gray-600">Station Elevation:</label>
-          <span class="font-medium">${stationElevation.toFixed(1)} m ASL</span>
-        </div>
-      </div>
-    `;
-
+      `;
+    
       // Add LOS check buttons for other markers
       const losButtons = popupDiv.querySelector("#los-buttons");
       if (losButtons) {
-        // Get current locations and their types
-        const markerLocations = {
-          gcs: gcsLocation,
-          observer: observerLocation,
-          repeater: repeaterLocation,
-        };
-
-        // Add buttons for other markers
         Object.entries(markerLocations).forEach(([type, location]) => {
           if (type !== markerType && location) {
             const button = document.createElement("button");
             button.style.cssText = styles.losButton;
             button.textContent = `Check LOS to ${type.toUpperCase()}`;
-
+    
             button.onclick = async () => {
-              const currentLoc =
-                markerLocations[markerType as keyof typeof markerLocations];
-              if (currentLoc && location) {
-                const layerId = `los-${markerType}-${type}`;
-                console.log("Checking LOS between:", currentLoc, location);
-                const hasLOS = await checkLineOfSight(
-                  currentLoc,
-                  location,
-                  markerType,
-                  type as "gcs" | "observer" | "repeater"
-                );
-                visualizeLOSCheck(currentLoc, location, hasLOS, layerId);
-
-                button.style.cssText = `
-                  ${styles.losButton};
-                  background-color: ${hasLOS ? "#38a169" : "#e53e3e"};
-                  transition: background-color 0.3s ease;
-                `;
-
-                button.textContent = `${type.toUpperCase()}: ${
-                  hasLOS ? "Visible ✓" : "No LOS ✗"
-                }`;
+              try {
+                button.disabled = true;
+                button.textContent = "Checking...";
+    
+                const currentLoc = markerLocations[
+                  markerType as keyof typeof markerLocations
+                ];
+                if (currentLoc && location) {
+                  const layerId = `los-${markerType}-${type}`;
+                  const hasLOS = await checkLineOfSight(
+                    currentLoc,
+                    location,
+                    markerType,
+                    type as "gcs" | "observer" | "repeater"
+                  );
+                  visualizeLOSCheck(currentLoc, location, hasLOS, layerId);
+    
+                  button.style.cssText = `
+                    ${styles.losButton};
+                    background-color: ${hasLOS ? "#38a169" : "#e53e3e"};
+                    transition: background-color 0.3s ease;
+                  `;
+    
+                  button.textContent = `${type.toUpperCase()}: ${
+                    hasLOS ? "Visible ✓" : "No LOS ✗"
+                  }`;
+                }
+              } catch (error) {
+                handleTerrainError(error, "LOS check");
+                button.textContent = "Check failed ⚠️";
+              } finally {
+                button.disabled = false;
               }
             };
-
+    
             losButtons.appendChild(button);
           }
         });
       }
-
+    
       // Add event handlers
       const rangeInput = popupDiv.querySelector(`#${markerType}-range`);
       const rangeValue = popupDiv.querySelector(`#${markerType}-range-value`);
       const offsetInput = popupDiv.querySelector(`#${markerType}-offset`);
       const analyzeButton = popupDiv.querySelector(`#${markerType}-analyze`);
-
+    
       // Range input handler
       if (rangeInput && rangeValue) {
         rangeInput.addEventListener("input", (e) => {
@@ -818,7 +824,7 @@ if (
           setMarkerConfig(markerType, { gridRange: Number(value) });
         });
       }
-
+    
       // Offset input handler
       if (offsetInput) {
         offsetInput.addEventListener("change", (e) => {
@@ -826,19 +832,19 @@ if (
           setMarkerConfig(markerType, { elevationOffset: value });
         });
       }
-
+    
       // Analysis button handler
       if (analyzeButton) {
         analyzeButton.addEventListener("click", async () => {
           if (isAnalyzing) return;
-
+    
           const currentLoc =
             markerType === "gcs"
               ? gcsLocation
               : markerType === "observer"
               ? observerLocation
               : repeaterLocation;
-
+    
           if (currentLoc && elosGridRef.current) {
             setIsAnalyzing(true);
             try {
@@ -862,222 +868,234 @@ if (
           }
         });
       }
-
+    
       // Add delete button handler
       popupDiv
         .querySelector(`#delete-${markerType}-btn`)
         ?.addEventListener("click", () => {
-          // Clean up analysis layer
           const layerId = `${markerType}-grid-layer`;
           if (mapRef.current?.getLayer(layerId)) {
             layerManager.toggleLayerVisibility(layerId);
           }
-          // Then call onDelete
           onDelete();
         });
-
+    
       return new mapboxgl.Popup({ closeButton: false }).setDOMContent(popupDiv);
     };
+    
 
     //Add Markers //GCS Marker
-    const addGroundStation = () => {
+    // Update addGroundStation
+    const addGroundStation = async () => {
       if (!mapRef.current) return;
-
+    
       const center = mapRef.current.getCenter();
-      const elevation = mapRef.current?.queryTerrainElevation(center);
-      const initialLocation: LocationData = {
-        lng: center.lng,
-        lat: center.lat,
-        elevation: elevation ?? null,
-      };
-      console.log("GCS Initial Location:", initialLocation);
-
-      setGcsLocation(initialLocation); // Only context update
-
-      const gcsMarker = new mapboxgl.Marker({ color: "blue", draggable: true })
-        .setLngLat(center)
-        .addTo(mapRef.current);
-
-      // Create popup with enhanced content
-      const popup = createMarkerPopup("gcs", elevation ?? null, () => {
-        gcsMarker.remove();
-        setGcsLocation(null); // Only context update
-      });
-
-      gcsMarker.setPopup(popup).togglePopup();
-
-      // Add dragend event listener
-      gcsMarker.on("dragend", () => {
-        const lngLat = gcsMarker.getLngLat();
-        const newElevation = mapRef.current?.queryTerrainElevation(lngLat);
-        const location: LocationData = {
-          lng: lngLat.lng,
-          lat: lngLat.lat,
-          elevation: newElevation ?? null,
+      try {
+        const elevation = await queryTerrainElevation([center.lng, center.lat]);
+        const initialLocation: LocationData = {
+          lng: center.lng,
+          lat: center.lat,
+          elevation: elevation,
         };
-        setGcsLocation(location); // Only context update
-
-        // Update popup with new elevation
-        const popup = createMarkerPopup("gcs", newElevation ?? null, () => {
+        console.log("GCS Initial Location:", initialLocation);
+    
+        setGcsLocation(initialLocation);
+    
+        const gcsMarker = new mapboxgl.Marker({ color: "blue", draggable: true })
+          .setLngLat(center)
+          .addTo(mapRef.current);
+    
+        const popup = createMarkerPopup("gcs", elevation, () => {
           gcsMarker.remove();
-          setGcsLocation(null); // Only context update
+          setGcsLocation(null);
         });
+    
         gcsMarker.setPopup(popup).togglePopup();
-      });
-    };
-    //Observer Marker
-    const addObserver = () => {
-      if (!mapRef.current) return;
-
-      const center = mapRef.current.getCenter();
-      const elevation = mapRef.current?.queryTerrainElevation(center);
-      const initialLocation: LocationData = {
-        lng: center.lng,
-        lat: center.lat,
-        elevation: elevation ?? null,
-      };
-      console.log("Observer Initial Location:", initialLocation);
-
-      setObserverLocation(initialLocation); // Only keep this context update
-
-      const observerMarker = new mapboxgl.Marker({
-        color: "green",
-        draggable: true,
-      })
-        .setLngLat(center)
-        .addTo(mapRef.current);
-
-      const popup = createMarkerPopup("observer", elevation ?? null, () => {
-        observerMarker.remove();
-        setObserverLocation(null); // Only keep this context update
-      });
-
-      observerMarker.setPopup(popup).togglePopup();
-
-      observerMarker.on("dragend", () => {
-        const lngLat = observerMarker.getLngLat();
-        const newElevation = mapRef.current?.queryTerrainElevation(lngLat);
-        const location: LocationData = {
-          lng: lngLat.lng,
-          lat: lngLat.lat,
-          elevation: newElevation ?? null,
-        };
-        setObserverLocation(location); // Only keep this context update
-
-        const popup = createMarkerPopup(
-          "observer",
-          newElevation ?? null,
-          () => {
-            observerMarker.remove();
-            setObserverLocation(null); // Only keep this context update
+    
+        gcsMarker.on("dragend", async () => {
+          const lngLat = gcsMarker.getLngLat();
+          try {
+            const newElevation = await queryTerrainElevation([lngLat.lng, lngLat.lat]);
+            const location: LocationData = {
+              lng: lngLat.lng,
+              lat: lngLat.lat,
+              elevation: newElevation,
+            };
+            setGcsLocation(location);
+    
+            const popup = createMarkerPopup("gcs", newElevation, () => {
+              gcsMarker.remove();
+              setGcsLocation(null);
+            });
+            gcsMarker.setPopup(popup).togglePopup();
+          } catch (error) {
+            console.error("Error updating GCS elevation:", error);
           }
-        );
-        observerMarker.setPopup(popup).togglePopup();
-      });
-    };
-
-    const addRepeater = () => {
-      if (!mapRef.current) return;
-
-      const center = mapRef.current.getCenter();
-      const elevation = mapRef.current?.queryTerrainElevation(center);
-      const initialLocation: LocationData = {
-        lng: center.lng,
-        lat: center.lat,
-        elevation: elevation ?? null,
-      };
-      console.log("Repeater Initial Location:", initialLocation);
-
-      setRepeaterLocation(initialLocation); // Only keep this context update
-
-      const repeaterMarker = new mapboxgl.Marker({
-        color: "red",
-        draggable: true,
-      })
-        .setLngLat(center)
-        .addTo(mapRef.current);
-
-      const popup = createMarkerPopup("repeater", elevation ?? null, () => {
-        repeaterMarker.remove();
-        setRepeaterLocation(null); // Only keep this context update
-      });
-
-      repeaterMarker.setPopup(popup).togglePopup();
-
-      repeaterMarker.on("dragend", () => {
-        const lngLat = repeaterMarker.getLngLat();
-        const newElevation = mapRef.current?.queryTerrainElevation(lngLat);
-        const location: LocationData = {
-          lng: lngLat.lng,
-          lat: lngLat.lat,
-          elevation: newElevation ?? null,
-        };
-        setRepeaterLocation(location); // Only keep this context update
-
-        const popup = createMarkerPopup(
-          "repeater",
-          newElevation ?? null,
-          () => {
-            repeaterMarker.remove();
-            setRepeaterLocation(null); // Only keep this context update
-          }
-        );
-        repeaterMarker.setPopup(popup).togglePopup();
-      });
-    };
-    // Marker LOS Between Check
-    const checkLineOfSight = async (
-      point1: LocationData,
-      point2: LocationData,
-      type1: "gcs" | "observer" | "repeater",
-      type2: "gcs" | "observer" | "repeater"
-    ): Promise<boolean> => {
-      if (!mapRef.current) return false;
-
-      // Get elevation offsets from marker configs
-      const offset1 = markerConfigs[type1].elevationOffset;
-      const offset2 = markerConfigs[type2].elevationOffset;
-
-      // Calculate actual elevations with offsets
-      const elevation1 = (point1.elevation || 0) + offset1;
-      const elevation2 = (point2.elevation || 0) + offset2;
-
-      const distance = turf.distance(
-        turf.point([point1.lng, point1.lat]),
-        turf.point([point2.lng, point2.lat]),
-        { units: "kilometers" }
-      );
-
-      // Sample points along the line
-      const samples = 50;
-      const line = turf.lineString([
-        [point1.lng, point1.lat],
-        [point2.lng, point2.lat],
-      ]);
-
-      for (let i = 0; i <= samples; i++) {
-        const along = turf.along(line, (distance * i) / samples, {
-          units: "kilometers",
         });
-        const [lng, lat] = along.geometry.coordinates;
-
-        // Get elevation at this point
-        const pointElevation =
-          mapRef.current.queryTerrainElevation([lng, lat]) || 0;
-
-        // Calculate expected elevation at this point (linear interpolation)
-        const ratio = i / samples;
-        const expectedElevation =
-          elevation1 + ratio * (elevation2 - elevation1);
-
-        // If terrain is higher than our line of sight, return false
-        if (pointElevation > expectedElevation) {
-          return false;
-        }
+      } catch (error) {
+        console.error("Error initializing GCS:", error);
       }
-
-      return true;
     };
+    
+    // Update addObserver (similar changes)
+    const addObserver = async () => {
+      if (!mapRef.current) return;
+    
+      const center = mapRef.current.getCenter();
+      try {
+        const elevation = await queryTerrainElevation([center.lng, center.lat]);
+        const initialLocation: LocationData = {
+          lng: center.lng,
+          lat: center.lat,
+          elevation: elevation,
+        };
+        console.log("Observer Initial Location:", initialLocation);
+    
+        setObserverLocation(initialLocation);
+    
+        const observerMarker = new mapboxgl.Marker({
+          color: "green",
+          draggable: true,
+        })
+          .setLngLat(center)
+          .addTo(mapRef.current);
+    
+        const popup = createMarkerPopup("observer", elevation, () => {
+          observerMarker.remove();
+          setObserverLocation(null);
+        });
+    
+        observerMarker.setPopup(popup).togglePopup();
+    
+        observerMarker.on("dragend", async () => {
+          const lngLat = observerMarker.getLngLat();
+          try {
+            const newElevation = await queryTerrainElevation([lngLat.lng, lngLat.lat]);
+            const location: LocationData = {
+              lng: lngLat.lng,
+              lat: lngLat.lat,
+              elevation: newElevation,
+            };
+            setObserverLocation(location);
+    
+            const popup = createMarkerPopup("observer", newElevation, () => {
+              observerMarker.remove();
+              setObserverLocation(null);
+            });
+            observerMarker.setPopup(popup).togglePopup();
+          } catch (error) {
+            console.error("Error updating Observer elevation:", error);
+          }
+        });
+      } catch (error) {
+        console.error("Error initializing Observer:", error);
+      }
+    };
+    
+    // Update addRepeater (similar changes)
+    const addRepeater = async () => {
+      if (!mapRef.current) return;
+    
+      const center = mapRef.current.getCenter();
+      try {
+        const elevation = await queryTerrainElevation([center.lng, center.lat]);
+        const initialLocation: LocationData = {
+          lng: center.lng,
+          lat: center.lat,
+          elevation: elevation,
+        };
+        console.log("Repeater Initial Location:", initialLocation);
+    
+        setRepeaterLocation(initialLocation);
+    
+        const repeaterMarker = new mapboxgl.Marker({
+          color: "red",
+          draggable: true,
+        })
+          .setLngLat(center)
+          .addTo(mapRef.current);
+    
+        const popup = createMarkerPopup("repeater", elevation, () => {
+          repeaterMarker.remove();
+          setRepeaterLocation(null);
+        });
+    
+        repeaterMarker.setPopup(popup).togglePopup();
+    
+        repeaterMarker.on("dragend", async () => {
+          const lngLat = repeaterMarker.getLngLat();
+          try {
+            const newElevation = await queryTerrainElevation([lngLat.lng, lngLat.lat]);
+            const location: LocationData = {
+              lng: lngLat.lng,
+              lat: lngLat.lat,
+              elevation: newElevation,
+            };
+            setRepeaterLocation(location);
+    
+            const popup = createMarkerPopup("repeater", newElevation, () => {
+              repeaterMarker.remove();
+              setRepeaterLocation(null);
+            });
+            repeaterMarker.setPopup(popup).togglePopup();
+          } catch (error) {
+            console.error("Error updating Repeater elevation:", error);
+          }
+        });
+      } catch (error) {
+        console.error("Error initializing Repeater:", error);
+      }
+    };
+
+    // Marker LOS Between Check
+ const checkLineOfSight = async (
+  point1: LocationData,
+  point2: LocationData,
+  type1: "gcs" | "observer" | "repeater",
+  type2: "gcs" | "observer" | "repeater"
+): Promise<boolean> => {
+  if (!mapRef.current) return false;
+
+  try {
+    const offset1 = markerConfigs[type1].elevationOffset;
+    const offset2 = markerConfigs[type2].elevationOffset;
+
+    const elevation1 = (point1.elevation || 0) + offset1;
+    const elevation2 = (point2.elevation || 0) + offset2;
+
+    const distance = turf.distance(
+      turf.point([point1.lng, point1.lat]),
+      turf.point([point2.lng, point2.lat]),
+      { units: "kilometers" }
+    );
+
+    const samples = 50;
+    const line = turf.lineString([
+      [point1.lng, point1.lat],
+      [point2.lng, point2.lat],
+    ]);
+
+    for (let i = 0; i <= samples; i++) {
+      const along = turf.along(line, (distance * i) / samples, {
+        units: "kilometers",
+      });
+      const [lng, lat] = along.geometry.coordinates;
+
+      const pointElevation = await queryTerrainElevation([lng, lat]);
+      const ratio = i / samples;
+      const expectedElevation = elevation1 + ratio * (elevation2 - elevation1);
+
+      if (pointElevation > expectedElevation) {
+        return false;
+      }
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Error checking line of sight:", error);
+    return false;
+  }
+};
 
     const visualizeLOSCheck = (
       point1: LocationData,
@@ -1126,6 +1144,16 @@ if (
       // Register with layer manager
       layerManager.registerLayer(layerId, true);
     };
+
+    const handleTerrainError = (error: any, context: string) => {
+        console.error(`Terrain error in ${context}:`, error);
+        if (error instanceof Error) {
+          setError(error.message);
+        } else {
+          setError(`Failed to get terrain elevation: ${context}`);
+        }
+      };
+
 
     return (
       <div>
@@ -1178,16 +1206,16 @@ if (
           {/* Error UI */}
           {error && (
             <div className="absolute bottom-4 left-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center">
-              <span>⚠️</span>
-              <span className="ml-2">{error}</span>
-              <button
+                <span>⚠️</span>
+                <span className="ml-2">{error}</span>
+                <button
                 onClick={() => setError(null)}
                 className="ml-2 hover:opacity-75"
-              >
+                >
                 ✕
-              </button>
+                </button>
             </div>
-          )}
+            )}
           {/* Legend for Visibility Colors */}
           <div className="map-legend">
             <h4 className="font-semibold mb-2">Legend</h4>

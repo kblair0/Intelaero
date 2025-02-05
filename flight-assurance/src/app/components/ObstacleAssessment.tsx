@@ -31,7 +31,7 @@ interface ObstacleAssessmentProps {
   onDataProcessed?: (data: ObstacleAnalysisOutput) => void;
 }
 
-const ObstacleAssessment = ({ flightPlan, map, onDataProcessed }: ObstacleAssessmentProps) => {
+const ObstacleAssessment: React.FC<ObstacleAssessmentProps> = ({ flightPlan, map, onDataProcessed }) => {
   const [distances, setDistances] = useState<number[]>([]);
   const [flightAltitudes, setFlightAltitudes] = useState<number[]>([]);
   const [terrainElevations, setTerrainElevations] = useState<number[]>([]);
@@ -42,31 +42,37 @@ const ObstacleAssessment = ({ flightPlan, map, onDataProcessed }: ObstacleAssess
 
   const getTerrainElevation = useCallback(async (coordinates: [number, number]): Promise<number> => {
     if (!map) return 0;
-
+  
     try {
-      if (!map.getSource('mapbox-dem')) {
-        map.addSource('mapbox-dem', {
-          type: 'raster-dem',
-          url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
-          tileSize: 512,
-          maxzoom: 15
-        });
-
-        map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 });
-
-        // Wait for source to load
-        await new Promise<void>((resolve) => {
-          const checkSource = () => {
-            if (map.isSourceLoaded('mapbox-dem')) {
-              resolve();
-            } else {
-              map.once('sourcedata', checkSource);
-            }
-          };
-          checkSource();
-        });
-      }
-
+      // Wait for terrain source to be loaded
+      await new Promise<void>((resolve, reject) => {
+        if (!map.getSource('mapbox-dem')) {
+          map.addSource('mapbox-dem', {
+            type: 'raster-dem',
+            url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
+            tileSize: 512,
+            maxzoom: 15
+          });
+  
+          map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 });
+        }
+  
+        const checkSource = () => {
+          if (map.isSourceLoaded('mapbox-dem')) {
+            resolve();
+          } else {
+            map.once('sourcedata', checkSource);
+          }
+        };
+        
+        checkSource();
+  
+        // Add timeout to prevent infinite waiting
+        setTimeout(() => {
+          reject(new Error('Terrain source loading timeout'));
+        }, 10000);
+      });
+  
       const elevation = map.queryTerrainElevation(coordinates);
       return elevation ?? 0;
     } catch (error) {
@@ -89,8 +95,21 @@ const ObstacleAssessment = ({ flightPlan, map, onDataProcessed }: ObstacleAssess
         throw new Error("No valid LineString geometry found.");
       }
 
-      const coordinates = lineFeature.geometry.coordinates as [number, number, number][];
-      const flightLine = turf.lineString(coordinates.map(([lng, lat]) => [lng, lat]));
+      // Use the resolved coordinates from the processed flight plan.
+      // These coordinates already have the correct (final) altitudes.
+      const resolvedCoordinates = lineFeature.geometry.coordinates as [number, number, number][];
+      
+      // *** LOG: Print the entire resolved coordinates array ***
+      console.log("Resolved Coordinates Array:", resolvedCoordinates);
+
+      // Extract and log the final altitudes at each waypoint.
+      const finalAltitudesArray = resolvedCoordinates.map(coord => coord[2]);
+      console.log("Final Altitudes at Waypoints:", finalAltitudesArray);
+
+      // Create a Turf line using only the [lng, lat] from the resolved coordinates.
+      const flightLine = turf.lineString(resolvedCoordinates.map(([lng, lat]) => [lng, lat]));
+
+      // Calculate the total length of the flight line in meters.
       const pathLength = turf.length(flightLine, { units: "meters" });
       const interval = 10; // meters between sampled points
       const sampledPoints: [number, number][] = [];
@@ -99,42 +118,61 @@ const ObstacleAssessment = ({ flightPlan, map, onDataProcessed }: ObstacleAssess
         const point = turf.along(flightLine, i, { units: "meters" });
         sampledPoints.push(point.geometry.coordinates as [number, number]);
       }
+      console.log("Sampled Points Array:", sampledPoints);
 
+
+      // Retrieve terrain elevations at each sampled point.
       const terrainElevationsArray: number[] = [];
       for (const point of sampledPoints) {
         const elevation = await getTerrainElevation(point);
         terrainElevationsArray.push(elevation);
       }
-
       setTerrainElevations(terrainElevationsArray);
       
       const distancesArray = sampledPoints.map((_, idx) => (idx * interval) / 1000);
       
+      // Compute cumulative waypoint distances using the resolved coordinates.
       const waypointDistancesArray: number[] = [];
       let cumulativeDistance = 0;
-      for (let idx = 0; idx < coordinates.length; idx++) {
+      for (let idx = 0; idx < resolvedCoordinates.length; idx++) {
         if (idx === 0) {
           waypointDistancesArray.push(0);
         } else {
-          const segment = turf.lineString([coordinates[idx - 1], coordinates[idx]]);
+          const segment = turf.lineString([resolvedCoordinates[idx - 1], resolvedCoordinates[idx]]);
           const segmentLength = turf.length(segment, { units: "kilometers" });
           cumulativeDistance += segmentLength;
           waypointDistancesArray.push(cumulativeDistance);
         }
       }
-
       setWaypointDistances(waypointDistancesArray);
       setDistances(distancesArray);
 
-      const interpolatedAltitudes = sampledPoints.map(([lng, lat]) => {
-        const nearest = turf.nearestPointOnLine(flightLine, turf.point([lng, lat]));
-        const index = nearest.properties.index;
-        return coordinates[index][2];
-      });
 
+      //Step wise altitude changes for waypoints.
+      const interpolatedAltitudes = distancesArray.map((sampleDistance) => {
+        // Find the last waypoint index whose cumulative distance is <= sampleDistance
+        let segmentIndex = 0;
+        for (let i = 0; i < waypointDistancesArray.length; i++) {
+          if (waypointDistancesArray[i] <= sampleDistance) {
+            segmentIndex = i;
+          } else {
+            break;
+          }
+        }
+        // Use the altitude of the last waypoint passed
+        return resolvedCoordinates[segmentIndex][2];
+      });
+      console.log("Interpolated Altitudes Along Flight Path (Piecewise):", interpolatedAltitudes);
       setFlightAltitudes(interpolatedAltitudes);
 
-      // Calculate minimum clearance height and highest obstacle
+      
+      
+      // *** LOG: Print the interpolated altitudes along the flight path ***
+      console.log("Interpolated Altitudes Along Flight Path:", interpolatedAltitudes);
+      
+      setFlightAltitudes(interpolatedAltitudes);
+
+      // Calculate minimum clearance height and highest obstacle.
       const minimumClearance = Math.min(
         ...interpolatedAltitudes.map((alt, idx) => alt - terrainElevationsArray[idx])
       );
@@ -148,6 +186,9 @@ const ObstacleAssessment = ({ flightPlan, map, onDataProcessed }: ObstacleAssess
         minimumClearanceHeight: minimumClearance,
         highestObstacle: maxTerrainHeight
       };
+
+      // *** LOG: Print the final processed obstacle analysis data ***
+      console.log("Final Processed Obstacle Analysis Data:", output);
 
       return output;
     } catch (error) {
@@ -303,7 +344,6 @@ const ObstacleAssessment = ({ flightPlan, map, onDataProcessed }: ObstacleAssess
         },
       },
     },
-    // Add hover handlers
     onHover: (event: any, elements: any[], chart: any) => {
       const tooltip = chart.tooltip;
       if (tooltip?.dataPoints?.length === 2) {
@@ -323,6 +363,7 @@ const ObstacleAssessment = ({ flightPlan, map, onDataProcessed }: ObstacleAssess
       }
     }
   };
+
   if (error) {
     return <div className="text-red-500">Error: {error}</div>;
   }

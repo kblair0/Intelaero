@@ -53,13 +53,13 @@ export interface FlightPlanData extends GeoJSON.FeatureCollection {
     homePosition: {
       latitude: number;
       longitude: number;
-      altitude: number; // MSL altitude from the file
+      altitude: number;
     };
   };
   features: FlightPlanFeature[];
   waypointDistances?: number[];
   totalDistance?: number;
-  
+  processed?: boolean;
 }
 
 /**
