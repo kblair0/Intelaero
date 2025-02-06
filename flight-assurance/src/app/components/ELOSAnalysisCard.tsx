@@ -1,17 +1,23 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useState } from 'react';
-import { useLocation } from '../context/LocationContext';
-import { useLOSAnalysis } from '../context/LOSAnalysisContext';
-import { LocationData } from '../components/Map';
-import { MapRef } from './Map';
-import { useFlightPlanContext } from '../context/FlightPlanContext';
-import { layerManager, MAP_LAYERS } from './LayerManager';
+import React, { useCallback, useEffect, useState } from "react";
+import { useLocation } from "../context/LocationContext";
+import { useLOSAnalysis } from "../context/LOSAnalysisContext";
+import { LocationData } from "../components/Map";
+import { MapRef } from "./Map";
+import { useFlightPlanContext } from "../context/FlightPlanContext";
+import { layerManager, MAP_LAYERS } from "./LayerManager";
 
 interface ELOSAnalysisCardProps {
   mapRef: React.RefObject<MapRef>;
 }
 
-const LocationDisplay = ({ title, location }: { title: string; location?: LocationData | null }) => (
+const LocationDisplay = ({
+  title,
+  location,
+}: {
+  title: string;
+  location?: LocationData | null;
+}) => (
   <div className="mb-3 p-2 bg-gray-50 rounded">
     <h4 className="text-xs font-semibold text-gray-600">{title}</h4>
     {location ? (
@@ -30,7 +36,8 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
   // Get location data from LocationContext
   const { gcsLocation, observerLocation, repeaterLocation } = useLocation();
   const { flightPlan } = useFlightPlanContext();
-  const isFlightPlanLoaded = flightPlan !== null && Object.keys(flightPlan).length > 0;
+  const isFlightPlanLoaded =
+    flightPlan !== null && Object.keys(flightPlan).length > 0;
 
   // Get analysis state and actions from LOSAnalysisContext
   const {
@@ -52,7 +59,9 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
   } = useLOSAnalysis();
 
   // Global layer visibility state
-  const [layerVisibility, setLayerVisibility] = useState<Record<string, boolean>>({
+  const [layerVisibility, setLayerVisibility] = useState<
+    Record<string, boolean>
+  >({
     [MAP_LAYERS.ELOS_GRID]: true,
     [MAP_LAYERS.GCS_GRID]: true,
     [MAP_LAYERS.OBSERVER_GRID]: true,
@@ -69,9 +78,11 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
     }));
   };
 
-  const handleAnalyzeMarker = async (markerType: 'gcs' | 'observer' | 'repeater') => {
+  const handleAnalyzeMarker = async (
+    markerType: "gcs" | "observer" | "repeater"
+  ) => {
     if (!mapRef.current) {
-      setError('Map not initialized');
+      setError("Map not initialized");
       return;
     }
 
@@ -97,33 +108,37 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
         range,
       });
     } catch (err: any) {
-      setError(err.message || 'Analysis failed');
+      setError(err.message || "Analysis failed");
     } finally {
       setIsAnalyzing(false);
     }
   };
 
-  const handleAnalysis = async () => {
+  const handleAnalysis = useCallback(async () => {
     if (!mapRef.current) {
-      setError('Map not initialized');
+      setError("Map not initialized");
       return;
     }
-    console.log('ELOS Analysis Requested');
+    console.log("ELOS Analysis Requested");
     try {
       setIsAnalyzing(true);
       setError(null);
       await mapRef.current.runElosAnalysis();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Analysis failed');
+      setError(err instanceof Error ? err.message : "Analysis failed");
     } finally {
       setIsAnalyzing(false);
     }
-  };
+  }, [mapRef, setIsAnalyzing, setError]);
+
+  useEffect(() => {
+    handleAnalysis();
+  }, [flightPlan, handleAnalysis]);
 
   // Handler for marker configuration updates
   const handleMarkerConfigChange = (
-    markerType: 'gcs' | 'observer' | 'repeater',
-    field: 'elevationOffset' | 'gridRange',
+    markerType: "gcs" | "observer" | "repeater",
+    field: "elevationOffset" | "gridRange",
     value: number
   ) => {
     setMarkerConfig(markerType, { [field]: value });
@@ -151,7 +166,8 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
             </div>
           </h2>
           <span className="text-xs text-gray-500">
-            Determine which points along the flight path the drone can see within the selected grid range.
+            Determine which points along the flight path the drone can see
+            within the selected grid range.
           </span>
         </div>
 
@@ -163,7 +179,9 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
               <span>Grid Range:</span>
               <span>{elosGridRange}m</span>
             </div>
-            <p className="text-xs text-gray-500 mb-2">Distance from your drone to be analysed</p>
+            <p className="text-xs text-gray-500 mb-2">
+              Distance from your drone to be analysed
+            </p>
             <input
               type="range"
               min="500"
@@ -180,7 +198,9 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
               <span>Grid Size:</span>
               <span>{gridSize}m</span>
             </div>
-            <p className="text-xs text-gray-500 mb-2">The lower the number, the higher the fidelity</p>
+            <p className="text-xs text-gray-500 mb-2">
+              The lower the number, the higher the fidelity
+            </p>
             <input
               type="range"
               min="20"
@@ -203,11 +223,11 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
           disabled={!isFlightPlanLoaded || isAnalyzing}
           className={`w-full py-2 rounded-lg font-medium transition-colors ${
             !isFlightPlanLoaded || isAnalyzing
-              ? 'bg-gray-300 cursor-not-allowed'
-              : 'bg-blue-500 hover:bg-blue-600 text-white'
+              ? "bg-gray-300 cursor-not-allowed"
+              : "bg-blue-500 hover:bg-blue-600 text-white"
           }`}
         >
-          {isAnalyzing ? 'Analyzing...' : 'Run Full Analysis'}
+          {isAnalyzing ? "Analyzing..." : "Run Full Analysis"}
         </button>
       </div>
 
@@ -217,9 +237,10 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
           Station Based Line of Sight Analysis
         </h3>
 
-        {(!gcsLocation && !observerLocation && !repeaterLocation) && (
+        {!gcsLocation && !observerLocation && !repeaterLocation && (
           <div className="p-3 mb-3 bg-yellow-100 border border-yellow-400 text-sm text-yellow-700 rounded">
-            ⚠️ To unlock 📡GCS Station/🔭Observer Station/⚡️Repeater Station Line of Sight analysis, drop markers on the map.
+            ⚠️ To unlock 📡GCS Station/🔭Observer Station/⚡️Repeater Station
+            Line of Sight analysis, drop markers on the map.
           </div>
         )}
 
@@ -229,7 +250,9 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-1">
                 <span>📡</span>
-                <h4 className="text-sm font-semibold text-blue-600">GCS Station</h4>
+                <h4 className="text-sm font-semibold text-blue-600">
+                  GCS Station
+                </h4>
               </div>
               {/* Toggle for GCS Analysis Grid */}
               <div className="flex flex-row items-center gap-2">
@@ -260,7 +283,13 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
                   min="500"
                   max="5000"
                   value={markerConfigs.gcs.gridRange}
-                  onChange={(e) => handleMarkerConfigChange('gcs', 'gridRange', Number(e.target.value))}
+                  onChange={(e) =>
+                    handleMarkerConfigChange(
+                      "gcs",
+                      "gridRange",
+                      Number(e.target.value)
+                    )
+                  }
                   className="w-full h-2 bg-blue-100 rounded-lg appearance-none cursor-pointer"
                 />
               </div>
@@ -283,17 +312,25 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
 
             {/* Elevation Offset */}
             <div className="flex items-center justify-between mb-3">
-              <label className="text-xs text-gray-600">Elevation Offset (m):</label>
+              <label className="text-xs text-gray-600">
+                Elevation Offset (m):
+              </label>
               <input
                 type="number"
                 value={markerConfigs.gcs.elevationOffset}
-                onChange={(e) => handleMarkerConfigChange('gcs', 'elevationOffset', Number(e.target.value))}
+                onChange={(e) =>
+                  handleMarkerConfigChange(
+                    "gcs",
+                    "elevationOffset",
+                    Number(e.target.value)
+                  )
+                }
                 className="w-20 px-2 py-1 text-xs border rounded"
               />
             </div>
 
             <button
-              onClick={() => handleAnalyzeMarker('gcs')}
+              onClick={() => handleAnalyzeMarker("gcs")}
               className="px-3 py-1 bg-blue-500 text-white text-xs rounded hover:opacity-90"
             >
               Analyze
@@ -307,7 +344,9 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-1">
                 <span>🔭</span>
-                <h4 className="text-sm font-semibold text-green-600">Observer Station</h4>
+                <h4 className="text-sm font-semibold text-green-600">
+                  Observer Station
+                </h4>
               </div>
               {/* Toggle for Observer Analysis Grid */}
               <div className="flex flex-row items-center gap-2">
@@ -316,14 +355,19 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
                   <input
                     type="checkbox"
                     checked={layerVisibility[MAP_LAYERS.OBSERVER_GRID]}
-                    onChange={() => toggleLayerVisibility(MAP_LAYERS.OBSERVER_GRID)}
+                    onChange={() =>
+                      toggleLayerVisibility(MAP_LAYERS.OBSERVER_GRID)
+                    }
                   />
                   <span className="toggle-slider"></span>
                 </label>
               </div>
             </div>
 
-            <LocationDisplay title="Observer Location" location={observerLocation} />
+            <LocationDisplay
+              title="Observer Location"
+              location={observerLocation}
+            />
 
             {/* Marker-specific sliders arranged side by side */}
             <div className="flex flex-row gap-4 mb-4">
@@ -338,7 +382,13 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
                   min="500"
                   max="5000"
                   value={markerConfigs.observer.gridRange}
-                  onChange={(e) => handleMarkerConfigChange('observer', 'gridRange', Number(e.target.value))}
+                  onChange={(e) =>
+                    handleMarkerConfigChange(
+                      "observer",
+                      "gridRange",
+                      Number(e.target.value)
+                    )
+                  }
                   className="w-full h-2 bg-green-100 rounded-lg appearance-none cursor-pointer"
                 />
               </div>
@@ -361,17 +411,25 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
 
             {/* Elevation Offset */}
             <div className="flex items-center justify-between mb-3">
-              <label className="text-xs text-gray-600">Elevation Offset (m):</label>
+              <label className="text-xs text-gray-600">
+                Elevation Offset (m):
+              </label>
               <input
                 type="number"
                 value={markerConfigs.observer.elevationOffset}
-                onChange={(e) => handleMarkerConfigChange('observer', 'elevationOffset', Number(e.target.value))}
+                onChange={(e) =>
+                  handleMarkerConfigChange(
+                    "observer",
+                    "elevationOffset",
+                    Number(e.target.value)
+                  )
+                }
                 className="w-20 px-2 py-1 text-xs border rounded"
               />
             </div>
 
             <button
-              onClick={() => handleAnalyzeMarker('observer')}
+              onClick={() => handleAnalyzeMarker("observer")}
               className="px-3 py-1 bg-green-500 text-white text-xs rounded hover:opacity-90"
             >
               Analyze
@@ -385,7 +443,9 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-1">
                 <span>⚡️</span>
-                <h4 className="text-sm font-semibold text-red-600">Repeater Station</h4>
+                <h4 className="text-sm font-semibold text-red-600">
+                  Repeater Station
+                </h4>
               </div>
               {/* Toggle for Repeater Analysis Grid */}
               <div className="flex flex-row items-center gap-2">
@@ -394,14 +454,19 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
                   <input
                     type="checkbox"
                     checked={layerVisibility[MAP_LAYERS.REPEATER_GRID]}
-                    onChange={() => toggleLayerVisibility(MAP_LAYERS.REPEATER_GRID)}
+                    onChange={() =>
+                      toggleLayerVisibility(MAP_LAYERS.REPEATER_GRID)
+                    }
                   />
                   <span className="toggle-slider"></span>
                 </label>
               </div>
             </div>
 
-            <LocationDisplay title="Repeater Location" location={repeaterLocation} />
+            <LocationDisplay
+              title="Repeater Location"
+              location={repeaterLocation}
+            />
 
             {/* Marker-specific sliders arranged side by side */}
             <div className="flex flex-row gap-4 mb-4">
@@ -416,7 +481,13 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
                   min="500"
                   max="5000"
                   value={markerConfigs.repeater.gridRange}
-                  onChange={(e) => handleMarkerConfigChange('repeater', 'gridRange', Number(e.target.value))}
+                  onChange={(e) =>
+                    handleMarkerConfigChange(
+                      "repeater",
+                      "gridRange",
+                      Number(e.target.value)
+                    )
+                  }
                   className="w-full h-2 bg-red-100 rounded-lg appearance-none cursor-pointer"
                 />
               </div>
@@ -439,17 +510,25 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
 
             {/* Elevation Offset */}
             <div className="flex items-center justify-between mb-3">
-              <label className="text-xs text-gray-600">Elevation Offset (m):</label>
+              <label className="text-xs text-gray-600">
+                Elevation Offset (m):
+              </label>
               <input
                 type="number"
                 value={markerConfigs.repeater.elevationOffset}
-                onChange={(e) => handleMarkerConfigChange('repeater', 'elevationOffset', Number(e.target.value))}
+                onChange={(e) =>
+                  handleMarkerConfigChange(
+                    "repeater",
+                    "elevationOffset",
+                    Number(e.target.value)
+                  )
+                }
                 className="w-20 px-2 py-1 text-xs border rounded"
               />
             </div>
 
             <button
-              onClick={() => handleAnalyzeMarker('repeater')}
+              onClick={() => handleAnalyzeMarker("repeater")}
               className="px-3 py-1 bg-red-500 text-white text-xs rounded hover:opacity-90"
             >
               Analyze Own LOS
@@ -457,7 +536,9 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
 
             <div className="space-y-3 mt-4">
               <div className="flex items-center justify-between">
-                <label className="text-xs text-gray-600">Select Point-Point LOS Target:</label>
+                <label className="text-xs text-gray-600">
+                  Select Point-Point LOS Target:
+                </label>
                 <select className="w-32 px-2 py-1 text-xs border rounded">
                   <option value="option1">Option 1</option>
                   <option value="option2">Option 2</option>
