@@ -8,6 +8,7 @@ import TerrainClearancePopup from "./TerrainClearancePopup";
 import ObstacleAssessment from "./ObstacleAssessment";
 import { MapRef } from "./Map";
 import StatusRow from "./StatusRow";
+import { useFlightConfiguration } from "../context/FlightConfigurationContext";
 
 interface PlanVerificationProps {
   mapRef: React.RefObject<MapRef>;
@@ -15,6 +16,7 @@ interface PlanVerificationProps {
 
 const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef }) => {
   const { flightPlan } = useFlightPlanContext();
+  const { metrics } = useFlightConfiguration();
   const { analysisData, setAnalysisData } = useObstacleAnalysis();
   const [statuses, setStatuses] = useState<{
     [key: string]: {
@@ -48,6 +50,27 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef }) => {
     console.log("- getMap() returns:", map);
     console.log("- Is Analyzing:", isAnalyzing);
   }, [flightPlan, isAnalyzing, mapRef]);
+
+  useEffect(() => {
+    setStatuses((prev) => ({
+      ...prev,
+      "Battery exceeds flight requirements": { status: "loading" },
+    }));
+    if (metrics?.isFeasible) {
+      setStatuses((prev) => ({
+        ...prev,
+        "Battery exceeds flight requirements": { status: "success" },
+      }));
+    } else {
+      setStatuses((prev) => ({
+        ...prev,
+        "Battery exceeds flight requirements": {
+          status: "error",
+          errorMessages: ["Battery capacity is insufficient for the flight"],
+        },
+      }));
+    }
+  }, [metrics]);
 
   // Zero altitude check
   useEffect(() => {
