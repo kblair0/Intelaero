@@ -122,91 +122,104 @@ const Map = forwardRef<MapRef, MapProps>(
     const endMarkerRef = useRef<mapboxgl.Marker | null>(null);
     const elosGridRef = useRef<ELOSGridAnalysisRef | null>(null);
     const { metrics } = useFlightConfiguration();
-    const [resolvedGeoJSON, setResolvedGeoJSON] = useState<GeoJSON.FeatureCollection | null>(null);
+    const [resolvedGeoJSON, setResolvedGeoJSON] =
+      useState<GeoJSON.FeatureCollection | null>(null);
     const terrainLoadedRef = useRef<boolean>(false);
 
-    const queryTerrainElevation = useCallback(async (
-      coordinates: [number, number],
-      retryCount = 3
-    ): Promise<number> => {
-      if (!mapRef.current) {
-        throw new Error("Map not initialized");
-      }
-    
-      try {
-        const elevation = mapRef.current.queryTerrainElevation(coordinates);
-        if (elevation !== null && elevation !== undefined) {
-          return elevation;
+    const queryTerrainElevation = useCallback(
+      async (
+        coordinates: [number, number],
+        retryCount = 3
+      ): Promise<number> => {
+        if (!mapRef.current) {
+          throw new Error("Map not initialized");
         }
-        throw new Error("Invalid elevation value");
-      } catch (error) {
-        console.warn("Primary terrain query failed, trying fallback:", error);
-        if (retryCount > 0) {
-          try {
-            const fallbackElevation = await fetchTerrainElevation(coordinates[0], coordinates[1]);
-            return fallbackElevation;
-          } catch (fallbackError) {
-            if (retryCount > 1) {
-              console.warn("Fallback failed, retrying:", fallbackError);
-              return queryTerrainElevation(coordinates, retryCount - 1);
-            }
-            throw fallbackError;
+
+        try {
+          const elevation = mapRef.current.queryTerrainElevation(coordinates);
+          if (elevation !== null && elevation !== undefined) {
+            return elevation;
           }
+          throw new Error("Invalid elevation value");
+        } catch (error) {
+          console.warn("Primary terrain query failed, trying fallback:", error);
+          if (retryCount > 0) {
+            try {
+              const fallbackElevation = await fetchTerrainElevation(
+                coordinates[0],
+                coordinates[1]
+              );
+              return fallbackElevation;
+            } catch (fallbackError) {
+              if (retryCount > 1) {
+                console.warn("Fallback failed, retrying:", fallbackError);
+                return queryTerrainElevation(coordinates, retryCount - 1);
+              }
+              throw fallbackError;
+            }
+          }
+          throw error;
         }
-        throw error;
-      }
-    }, [mapRef]);
+      },
+      [mapRef]
+    );
 
     //FlightPlan Processing including logging
     useEffect(() => {
       if (!contextFlightPlan) {
         return;
       }
-    
+
       if (contextFlightPlan.processed) {
         console.log("Flight plan already processed.");
         return;
       }
-    
+
       const processFlightPlan = async () => {
         try {
           if (!mapRef.current) {
             throw new Error("Map not initialized");
           }
-    
+
           // Calculate bounds of flight plan
-          const bounds = contextFlightPlan.features[0].geometry.coordinates.reduce(
-            (acc, coord) => {
-              acc[0] = Math.min(acc[0], coord[0]);  // min lng
-              acc[1] = Math.min(acc[1], coord[1]);  // min lat
-              acc[2] = Math.max(acc[2], coord[0]);  // max lng
-              acc[3] = Math.max(acc[3], coord[1]);  // max lat
-              return acc;
-            },
-            [Infinity, Infinity, -Infinity, -Infinity]
-          );
-    
+          const bounds =
+            contextFlightPlan.features[0].geometry.coordinates.reduce(
+              (acc, coord) => {
+                acc[0] = Math.min(acc[0], coord[0]); // min lng
+                acc[1] = Math.min(acc[1], coord[1]); // min lat
+                acc[2] = Math.max(acc[2], coord[0]); // max lng
+                acc[3] = Math.max(acc[3], coord[1]); // max lat
+                return acc;
+              },
+              [Infinity, Infinity, -Infinity, -Infinity]
+            );
+
           // Move map to flight plan area first
           mapRef.current.fitBounds(bounds as [number, number, number, number], {
             padding: 50,
-            duration: 0
+            duration: 0,
           });
-    
+
           // Wait for tiles to load
           console.log("Waiting for terrain tiles to load...");
-          await new Promise(resolve => setTimeout(resolve, 2000));
-    
-          console.log("Starting Altitude Resolution:", { inputPlan: contextFlightPlan });
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+
+          console.log("Starting Altitude Resolution:", {
+            inputPlan: contextFlightPlan,
+          });
           const newPlan = structuredClone(contextFlightPlan);
-          
+
           // Get and set home position elevation
           const homePosition = newPlan.properties.homePosition;
-          const homeTerrainElev = await queryTerrainElevation([homePosition.longitude, homePosition.latitude]);
+          const homeTerrainElev = await queryTerrainElevation([
+            homePosition.longitude,
+            homePosition.latitude,
+          ]);
           homePosition.altitude = homeTerrainElev;
           if (newPlan.features[0]?.geometry?.coordinates?.[0]) {
             newPlan.features[0].geometry.coordinates[0][2] = homeTerrainElev;
           }
-          
+
           // Process each feature's waypoints...
           for (const feature of newPlan.features) {
             if (feature.geometry.type !== "LineString") continue;
@@ -231,7 +244,10 @@ const Map = forwardRef<MapRef, MapProps>(
                     break;
                   case "relative":
                     if (wp.commandType === 22) {
-                      const takeoffGroundElev = await queryTerrainElevation([lon, lat]);
+                      const takeoffGroundElev = await queryTerrainElevation([
+                        lon,
+                        lat,
+                      ]);
                       coords[i][2] = takeoffGroundElev + originalAlt;
                     } else {
                       coords[i][2] = terrainElev + originalAlt;
@@ -253,56 +269,54 @@ const Map = forwardRef<MapRef, MapProps>(
               }
             }
           }
-          
+
           setResolvedGeoJSON(newPlan);
-    
+
           // Process distances
           const coords2D = newPlan.features[0].geometry.coordinates.map(
             (coord: [number, number, number]) => [coord[0], coord[1]]
           );
           const routeLine = turf.lineString(coords2D);
-    
+
           let cumulativeDistance = 0;
-          const waypointDistances = newPlan.features[0].geometry.coordinates.map(
-            (coord, idx, arr) => {
+          const waypointDistances =
+            newPlan.features[0].geometry.coordinates.map((coord, idx, arr) => {
               if (idx === 0) return 0;
               const segment = turf.lineString([
                 arr[idx - 1].slice(0, 2),
                 coord.slice(0, 2),
               ]);
-              cumulativeDistance += turf.length(segment, { units: "kilometers" });
+              cumulativeDistance += turf.length(segment, {
+                units: "kilometers",
+              });
               return cumulativeDistance;
-            }
-          );
-    
+            });
+
           const totalDistance = turf.length(routeLine, { units: "kilometers" });
           newPlan.processed = true;
-    
+
           const processedFlightPlan = {
             ...newPlan,
             waypointDistances,
             totalDistance,
           };
-    
+
           setContextFlightPlan(processedFlightPlan);
           setDistance(totalDistance);
-    
         } catch (error) {
           console.error("Error processing flight plan:", error);
           setError("Failed to process flight plan. Please try again.");
         }
       };
-    
-      processFlightPlan();
-    }, [contextFlightPlan, queryTerrainElevation, setContextFlightPlan, setDistance, setError]);
-    
 
-    useEffect(() => {
-      if (resolvedGeoJSON && mapRef.current) {
-        console.log("Displaying resolved flight plan:", resolvedGeoJSON);
-        addGeoJSONToMap(resolvedGeoJSON);
-      }
-    }, [resolvedGeoJSON, mapRef]);
+      processFlightPlan();
+    }, [
+      contextFlightPlan,
+      queryTerrainElevation,
+      setContextFlightPlan,
+      setDistance,
+      setError,
+    ]);
 
     const addGeoJSONToMap = useCallback(
       (geojson: GeoJSON.FeatureCollection) => {
@@ -431,6 +445,13 @@ const Map = forwardRef<MapRef, MapProps>(
     );
 
     useEffect(() => {
+      if (resolvedGeoJSON && mapRef.current) {
+        console.log("Displaying resolved flight plan:", resolvedGeoJSON);
+        addGeoJSONToMap(resolvedGeoJSON);
+      }
+    }, [resolvedGeoJSON, mapRef, addGeoJSONToMap]);
+
+    useEffect(() => {
       if (lineRef.current && metrics.maxDistance > 0) {
         // Changed from estimatedFlightDistance
         const line = turf.lineString(
@@ -522,7 +543,6 @@ const Map = forwardRef<MapRef, MapProps>(
           }
         },
         getMap: () => {
-
           // Return the actual map instance instead of the ref
           return mapRef.current;
         },
@@ -538,13 +558,15 @@ const Map = forwardRef<MapRef, MapProps>(
         try {
           const map = new mapboxgl.Map({
             container: mapContainerRef.current,
-            style: "mapbox://styles/mapbox-map-design/ckhqrf2tz0dt119ny6azh975y",
+            style:
+              "mapbox://styles/mapbox-map-design/ckhqrf2tz0dt119ny6azh975y",
             center: [0, 0],
             zoom: 2.5,
             projection: "globe",
           });
-    
-          map.once('style.load', () => {  // Changed from on("load") to once('style.load')
+
+          map.once("style.load", () => {
+            // Changed from on("load") to once('style.load')
             try {
               // Add the DEM source
               map.addSource("mapbox-dem", {
@@ -553,12 +575,12 @@ const Map = forwardRef<MapRef, MapProps>(
                 tileSize: 512,
                 maxzoom: 15,
               });
-    
+
               map.setTerrain({
                 source: "mapbox-dem",
                 exaggeration: 1.5,
               });
-    
+
               // Add the sky layer
               map.addLayer({
                 id: "sky",
@@ -569,39 +591,39 @@ const Map = forwardRef<MapRef, MapProps>(
                   "sky-atmosphere-sun-intensity": 15,
                 },
               });
-    
+
               // Wait for both style and DEM
               Promise.all([
-                new Promise(resolve => map.once('idle', resolve)),
-                waitForDEM(map)
-              ]).then(() => {
-                console.log("✅ Map style and terrain fully loaded");
-                // Set map ref first
-                mapRef.current = map;
-                // Then set terrain loaded
-                terrainLoadedRef.current = true;
-                // Finally set map ready
-                console.log("Map and DEM ready – all refs set");
-              }).catch((error) => {
-                console.error("Error waiting for map and DEM:", error);
-              });
-    
+                new Promise((resolve) => map.once("idle", resolve)),
+                waitForDEM(map),
+              ])
+                .then(() => {
+                  console.log("✅ Map style and terrain fully loaded");
+                  // Set map ref first
+                  mapRef.current = map;
+                  // Then set terrain loaded
+                  terrainLoadedRef.current = true;
+                  // Finally set map ready
+                  console.log("Map and DEM ready – all refs set");
+                })
+                .catch((error) => {
+                  console.error("Error waiting for map and DEM:", error);
+                });
             } catch (error) {
               console.error("❌ Error initializing map layers:", error);
               throw error;
             }
           });
-          
+
           // Listen for any load errors
-          map.on('error', (e) => {
+          map.on("error", (e) => {
             console.error("Mapbox error:", e);
           });
-    
         } catch (error) {
           console.error("❌ Error creating map:", error);
         }
       }
-    
+
       // Cleanup function
       return () => {
         terrainLoadedRef.current = false;
@@ -611,7 +633,6 @@ const Map = forwardRef<MapRef, MapProps>(
         }
       };
     }, []);
-    
 
     const fetchTerrainElevation = async (
       lng: number,
@@ -701,7 +722,7 @@ const Map = forwardRef<MapRef, MapProps>(
         observer: observerLocation,
         repeater: repeaterLocation,
       };
-    
+
       const styles = {
         container: "padding: 8px; min-width: 200px;",
         header:
@@ -709,22 +730,23 @@ const Map = forwardRef<MapRef, MapProps>(
         deleteBtn:
           "background: #e53e3e; color: white; border: none; padding: 2px 4px; border-radius: 4px; cursor: pointer; font-size: 10px;",
         section: "margin-bottom: 8px;",
-        label: "color: #4a5568; font-size: 12px; display: block; margin-bottom: 4px;",
+        label:
+          "color: #4a5568; font-size: 12px; display: block; margin-bottom: 4px;",
         value: "color: #1a202c; font-size: 12px; font-weight: 500;",
         losButton:
           "background: #4a5568; color: white; border: none; padding: 4px 8px; border-radius: 4px; margin: 2px; font-size: 12px; cursor: pointer; width: 100%;",
       };
-    
+
       const markerInfo = {
         gcs: { icon: "📡", title: "GCS", color: "#3182ce" },
         observer: { icon: "🔭", title: "Observer", color: "#38a169" },
         repeater: { icon: "⚡️", title: "Repeater", color: "#e53e3e" },
       };
-    
+
       const { icon, title } = markerInfo[markerType];
       const offset = markerConfigs[markerType].elevationOffset;
       const stationElevation = currentElevation + offset;
-    
+
       popupDiv.innerHTML = `
         <div class="popup-container" style="${styles.container}">
           <!-- Header -->
@@ -740,7 +762,9 @@ const Map = forwardRef<MapRef, MapProps>(
           <!-- Ground Elevation -->
           <div style="margin-bottom: 8px;">
             <label style="${styles.label}">Ground Elevation:</label>
-            <span style="${styles.value}">${currentElevation.toFixed(1)} m ASL</span>
+            <span style="${styles.value}">${currentElevation.toFixed(
+        1
+      )} m ASL</span>
           </div>
     
           <!-- Elevation Offset -->
@@ -752,14 +776,16 @@ const Map = forwardRef<MapRef, MapProps>(
           <!-- Station Elevation -->
           <div style="margin-bottom: 8px;">
             <label style="${styles.label}">Station Elevation:</label>
-            <span style="${styles.value}">${stationElevation.toFixed(1)} m ASL</span>
+            <span style="${styles.value}">${stationElevation.toFixed(
+        1
+      )} m ASL</span>
           </div>
     
           <!-- Container for LOS buttons -->
           <div id="los-buttons"></div>
         </div>
       `;
-    
+
       // Add LOS check buttons for other markers
       const losButtons = popupDiv.querySelector("#los-buttons");
       if (losButtons) {
@@ -768,15 +794,14 @@ const Map = forwardRef<MapRef, MapProps>(
             const button = document.createElement("button");
             button.style.cssText = styles.losButton;
             button.textContent = `Check LOS to ${type.toUpperCase()}`;
-    
+
             button.onclick = async () => {
               try {
                 button.disabled = true;
                 button.textContent = "Checking...";
-    
-                const currentLoc = markerLocations[
-                  markerType as keyof typeof markerLocations
-                ];
+
+                const currentLoc =
+                  markerLocations[markerType as keyof typeof markerLocations];
                 if (currentLoc && location) {
                   const layerId = `los-${markerType}-${type}`;
                   const hasLOS = await checkLineOfSight(
@@ -786,13 +811,13 @@ const Map = forwardRef<MapRef, MapProps>(
                     type as "gcs" | "observer" | "repeater"
                   );
                   visualizeLOSCheck(currentLoc, location, hasLOS, layerId);
-    
+
                   button.style.cssText = `
                     ${styles.losButton};
                     background-color: ${hasLOS ? "#38a169" : "#e53e3e"};
                     transition: background-color 0.3s ease;
                   `;
-    
+
                   button.textContent = `${type.toUpperCase()}: ${
                     hasLOS ? "Visible ✓" : "No LOS ✗"
                   }`;
@@ -804,18 +829,18 @@ const Map = forwardRef<MapRef, MapProps>(
                 button.disabled = false;
               }
             };
-    
+
             losButtons.appendChild(button);
           }
         });
       }
-    
+
       // Add event handlers
       const rangeInput = popupDiv.querySelector(`#${markerType}-range`);
       const rangeValue = popupDiv.querySelector(`#${markerType}-range-value`);
       const offsetInput = popupDiv.querySelector(`#${markerType}-offset`);
       const analyzeButton = popupDiv.querySelector(`#${markerType}-analyze`);
-    
+
       // Range input handler
       if (rangeInput && rangeValue) {
         rangeInput.addEventListener("input", (e) => {
@@ -824,7 +849,7 @@ const Map = forwardRef<MapRef, MapProps>(
           setMarkerConfig(markerType, { gridRange: Number(value) });
         });
       }
-    
+
       // Offset input handler
       if (offsetInput) {
         offsetInput.addEventListener("change", (e) => {
@@ -832,19 +857,19 @@ const Map = forwardRef<MapRef, MapProps>(
           setMarkerConfig(markerType, { elevationOffset: value });
         });
       }
-    
+
       // Analysis button handler
       if (analyzeButton) {
         analyzeButton.addEventListener("click", async () => {
           if (isAnalyzing) return;
-    
+
           const currentLoc =
             markerType === "gcs"
               ? gcsLocation
               : markerType === "observer"
               ? observerLocation
               : repeaterLocation;
-    
+
           if (currentLoc && elosGridRef.current) {
             setIsAnalyzing(true);
             try {
@@ -868,7 +893,7 @@ const Map = forwardRef<MapRef, MapProps>(
           }
         });
       }
-    
+
       // Add delete button handler
       popupDiv
         .querySelector(`#delete-${markerType}-btn`)
@@ -879,16 +904,15 @@ const Map = forwardRef<MapRef, MapProps>(
           }
           onDelete();
         });
-    
+
       return new mapboxgl.Popup({ closeButton: false }).setDOMContent(popupDiv);
     };
-    
 
     //Add Markers //GCS Marker
     // Update addGroundStation
     const addGroundStation = async () => {
       if (!mapRef.current) return;
-    
+
       const center = mapRef.current.getCenter();
       try {
         const elevation = await queryTerrainElevation([center.lng, center.lat]);
@@ -898,31 +922,37 @@ const Map = forwardRef<MapRef, MapProps>(
           elevation: elevation,
         };
         console.log("GCS Initial Location:", initialLocation);
-    
+
         setGcsLocation(initialLocation);
-    
-        const gcsMarker = new mapboxgl.Marker({ color: "blue", draggable: true })
+
+        const gcsMarker = new mapboxgl.Marker({
+          color: "blue",
+          draggable: true,
+        })
           .setLngLat(center)
           .addTo(mapRef.current);
-    
+
         const popup = createMarkerPopup("gcs", elevation, () => {
           gcsMarker.remove();
           setGcsLocation(null);
         });
-    
+
         gcsMarker.setPopup(popup).togglePopup();
-    
+
         gcsMarker.on("dragend", async () => {
           const lngLat = gcsMarker.getLngLat();
           try {
-            const newElevation = await queryTerrainElevation([lngLat.lng, lngLat.lat]);
+            const newElevation = await queryTerrainElevation([
+              lngLat.lng,
+              lngLat.lat,
+            ]);
             const location: LocationData = {
               lng: lngLat.lng,
               lat: lngLat.lat,
               elevation: newElevation,
             };
             setGcsLocation(location);
-    
+
             const popup = createMarkerPopup("gcs", newElevation, () => {
               gcsMarker.remove();
               setGcsLocation(null);
@@ -936,11 +966,11 @@ const Map = forwardRef<MapRef, MapProps>(
         console.error("Error initializing GCS:", error);
       }
     };
-    
+
     // Update addObserver (similar changes)
     const addObserver = async () => {
       if (!mapRef.current) return;
-    
+
       const center = mapRef.current.getCenter();
       try {
         const elevation = await queryTerrainElevation([center.lng, center.lat]);
@@ -950,34 +980,37 @@ const Map = forwardRef<MapRef, MapProps>(
           elevation: elevation,
         };
         console.log("Observer Initial Location:", initialLocation);
-    
+
         setObserverLocation(initialLocation);
-    
+
         const observerMarker = new mapboxgl.Marker({
           color: "green",
           draggable: true,
         })
           .setLngLat(center)
           .addTo(mapRef.current);
-    
+
         const popup = createMarkerPopup("observer", elevation, () => {
           observerMarker.remove();
           setObserverLocation(null);
         });
-    
+
         observerMarker.setPopup(popup).togglePopup();
-    
+
         observerMarker.on("dragend", async () => {
           const lngLat = observerMarker.getLngLat();
           try {
-            const newElevation = await queryTerrainElevation([lngLat.lng, lngLat.lat]);
+            const newElevation = await queryTerrainElevation([
+              lngLat.lng,
+              lngLat.lat,
+            ]);
             const location: LocationData = {
               lng: lngLat.lng,
               lat: lngLat.lat,
               elevation: newElevation,
             };
             setObserverLocation(location);
-    
+
             const popup = createMarkerPopup("observer", newElevation, () => {
               observerMarker.remove();
               setObserverLocation(null);
@@ -991,11 +1024,11 @@ const Map = forwardRef<MapRef, MapProps>(
         console.error("Error initializing Observer:", error);
       }
     };
-    
+
     // Update addRepeater (similar changes)
     const addRepeater = async () => {
       if (!mapRef.current) return;
-    
+
       const center = mapRef.current.getCenter();
       try {
         const elevation = await queryTerrainElevation([center.lng, center.lat]);
@@ -1005,34 +1038,37 @@ const Map = forwardRef<MapRef, MapProps>(
           elevation: elevation,
         };
         console.log("Repeater Initial Location:", initialLocation);
-    
+
         setRepeaterLocation(initialLocation);
-    
+
         const repeaterMarker = new mapboxgl.Marker({
           color: "red",
           draggable: true,
         })
           .setLngLat(center)
           .addTo(mapRef.current);
-    
+
         const popup = createMarkerPopup("repeater", elevation, () => {
           repeaterMarker.remove();
           setRepeaterLocation(null);
         });
-    
+
         repeaterMarker.setPopup(popup).togglePopup();
-    
+
         repeaterMarker.on("dragend", async () => {
           const lngLat = repeaterMarker.getLngLat();
           try {
-            const newElevation = await queryTerrainElevation([lngLat.lng, lngLat.lat]);
+            const newElevation = await queryTerrainElevation([
+              lngLat.lng,
+              lngLat.lat,
+            ]);
             const location: LocationData = {
               lng: lngLat.lng,
               lat: lngLat.lat,
               elevation: newElevation,
             };
             setRepeaterLocation(location);
-    
+
             const popup = createMarkerPopup("repeater", newElevation, () => {
               repeaterMarker.remove();
               setRepeaterLocation(null);
@@ -1048,54 +1084,55 @@ const Map = forwardRef<MapRef, MapProps>(
     };
 
     // Marker LOS Between Check
- const checkLineOfSight = async (
-  point1: LocationData,
-  point2: LocationData,
-  type1: "gcs" | "observer" | "repeater",
-  type2: "gcs" | "observer" | "repeater"
-): Promise<boolean> => {
-  if (!mapRef.current) return false;
+    const checkLineOfSight = async (
+      point1: LocationData,
+      point2: LocationData,
+      type1: "gcs" | "observer" | "repeater",
+      type2: "gcs" | "observer" | "repeater"
+    ): Promise<boolean> => {
+      if (!mapRef.current) return false;
 
-  try {
-    const offset1 = markerConfigs[type1].elevationOffset;
-    const offset2 = markerConfigs[type2].elevationOffset;
+      try {
+        const offset1 = markerConfigs[type1].elevationOffset;
+        const offset2 = markerConfigs[type2].elevationOffset;
 
-    const elevation1 = (point1.elevation || 0) + offset1;
-    const elevation2 = (point2.elevation || 0) + offset2;
+        const elevation1 = (point1.elevation || 0) + offset1;
+        const elevation2 = (point2.elevation || 0) + offset2;
 
-    const distance = turf.distance(
-      turf.point([point1.lng, point1.lat]),
-      turf.point([point2.lng, point2.lat]),
-      { units: "kilometers" }
-    );
+        const distance = turf.distance(
+          turf.point([point1.lng, point1.lat]),
+          turf.point([point2.lng, point2.lat]),
+          { units: "kilometers" }
+        );
 
-    const samples = 50;
-    const line = turf.lineString([
-      [point1.lng, point1.lat],
-      [point2.lng, point2.lat],
-    ]);
+        const samples = 50;
+        const line = turf.lineString([
+          [point1.lng, point1.lat],
+          [point2.lng, point2.lat],
+        ]);
 
-    for (let i = 0; i <= samples; i++) {
-      const along = turf.along(line, (distance * i) / samples, {
-        units: "kilometers",
-      });
-      const [lng, lat] = along.geometry.coordinates;
+        for (let i = 0; i <= samples; i++) {
+          const along = turf.along(line, (distance * i) / samples, {
+            units: "kilometers",
+          });
+          const [lng, lat] = along.geometry.coordinates;
 
-      const pointElevation = await queryTerrainElevation([lng, lat]);
-      const ratio = i / samples;
-      const expectedElevation = elevation1 + ratio * (elevation2 - elevation1);
+          const pointElevation = await queryTerrainElevation([lng, lat]);
+          const ratio = i / samples;
+          const expectedElevation =
+            elevation1 + ratio * (elevation2 - elevation1);
 
-      if (pointElevation > expectedElevation) {
+          if (pointElevation > expectedElevation) {
+            return false;
+          }
+        }
+
+        return true;
+      } catch (error) {
+        console.error("Error checking line of sight:", error);
         return false;
       }
-    }
-
-    return true;
-  } catch (error) {
-    console.error("Error checking line of sight:", error);
-    return false;
-  }
-};
+    };
 
     const visualizeLOSCheck = (
       point1: LocationData,
@@ -1146,14 +1183,13 @@ const Map = forwardRef<MapRef, MapProps>(
     };
 
     const handleTerrainError = (error: any, context: string) => {
-        console.error(`Terrain error in ${context}:`, error);
-        if (error instanceof Error) {
-          setError(error.message);
-        } else {
-          setError(`Failed to get terrain elevation: ${context}`);
-        }
-      };
-
+      console.error(`Terrain error in ${context}:`, error);
+      if (error instanceof Error) {
+        setError(error.message);
+      } else {
+        setError(`Failed to get terrain elevation: ${context}`);
+      }
+    };
 
     return (
       <div>
@@ -1206,16 +1242,16 @@ const Map = forwardRef<MapRef, MapProps>(
           {/* Error UI */}
           {error && (
             <div className="absolute bottom-4 left-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center">
-                <span>⚠️</span>
-                <span className="ml-2">{error}</span>
-                <button
+              <span>⚠️</span>
+              <span className="ml-2">{error}</span>
+              <button
                 onClick={() => setError(null)}
                 className="ml-2 hover:opacity-75"
-                >
+              >
                 ✕
-                </button>
+              </button>
             </div>
-            )}
+          )}
           {/* Legend for Visibility Colors */}
           <div className="map-legend">
             <h4 className="font-semibold mb-2">Legend</h4>
