@@ -131,10 +131,6 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
     }
   }, [mapRef, setIsAnalyzing, setError]);
 
-  useEffect(() => {
-    handleAnalysis();
-  }, [flightPlan, handleAnalysis]);
-
   // Handler for marker configuration updates
   const handleMarkerConfigChange = (
     markerType: "gcs" | "observer" | "repeater",
@@ -229,6 +225,10 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
         >
           {isAnalyzing ? "Analyzing..." : "Run Full Analysis"}
         </button>
+        <p className="text-xs text-gray-500 mt-2">
+        Each square in the grid represents the local visibility of your flight path within the grid range you’ve set. 
+        In other words, for each square, the system calculates the percentage of your flight path—within the specified grid range—that has an unobstructed view to that square.
+        </p>
       </div>
 
       {/* Marker Analysis Section */}
