@@ -44,6 +44,18 @@ const Calculator: React.FC = () => {
                                 placeholder="700"
                             />
                         </div>
+                        <div>
+                            <label className="block text-sm text-gray-600 mb-1">Battery Reserve Required (%)</label>
+                            <input
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                type="number"
+                                value={config.batteryReserveReq}
+                                onChange={handleInputChange('batteryReserveReq')}
+                                placeholder="20"
+                                min="0"
+                                max="100"
+                            />
+                        </div>
                     </div>
                     <div className="flex items-center justify-between p-2 rounded-lg bg-gray-50">
                         <span className="text-sm text-gray-600">Assumed Speed</span>
@@ -72,17 +84,17 @@ const Calculator: React.FC = () => {
                         <span className="mr-2 text-lg">{metrics.isFeasible ? '✓' : '✗'}</span>
                         <p className={`text-sm ${metrics.isFeasible ? 'text-green-700' : 'text-red-700'}`}>
                             {metrics.isFeasible 
-                                ? 'Flight time exceeds requirements'
-                                : 'Flight requirements exceed available time'}
+                                ? 'Flight plan within available battery capacity'
+                                : 'Flight plan exceeds available battery capacity'}
                         </p>
                     </div>
                 </div>
 
                 {/* Battery & Timing Metrics */}
-                <h5 className="text-sm font-medium text-gray-700 mt-4">🔋 Battery &amp; Timing Metrics</h5>
+                <h5 className="text-sm font-medium text-gray-700 mt-4">🔋 Battery & Timing Metrics</h5>
                 <div className="grid grid-cols-2 gap-4">
                     <div className="p-3 bg-blue-50 rounded-lg">
-                        <p className="text-xs text-gray-600 mb-1">Est Flight Time Avail</p>
+                        <p className="text-xs text-gray-600 mb-1">Available Flight Time</p>
                         <p className="font-semibold text-blue-600">{metrics.flightTime}</p>
                     </div>
                     <div className="p-3 bg-indigo-50 rounded-lg">
@@ -90,17 +102,18 @@ const Calculator: React.FC = () => {
                         <p className="font-semibold text-indigo-600">{metrics.flightPlanEstimatedTime}</p>
                     </div>
                     <div className="p-3 bg-green-50 rounded-lg">
-                        <p className="text-xs text-gray-600 mb-1">Battery Reserve Time Avail</p>
-                        <p className="font-semibold text-green-600">{metrics.reserveTime}</p>
+                        <p className="text-xs text-gray-600 mb-1">Endurance Remaining</p>
+                        <p className="font-semibold text-green-600">{metrics.remainingTime}</p>
                     </div>
+
                     <div className="p-3 bg-indigo-50 rounded-lg">
                         <p className="text-xs text-gray-600 mb-1">Expected Battery Consumption</p>
                         <p className="font-semibold text-indigo-600">{metrics.expectedBatteryConsumption} mAh</p>
                     </div>
-                    <div className="p-3 bg-red-50 rounded-lg col-span-2">
-                        <p className="text-xs text-gray-600 mb-1">Battery Reserve %</p>
-                        <p className={`font-semibold ${parseFloat(metrics.batteryReserve) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {metrics.batteryReserve}
+                    <div className="p-3 bg-yellow-50 rounded-lg col-span-2">
+                        <p className="text-xs text-gray-600 mb-1">Battery Reserve Amount</p>
+                        <p className="font-semibold text-yellow-600">
+                            {config.batteryReserveReq}% ({(parseFloat(config.batteryCapacity) * (parseFloat(config.batteryReserveReq) / 100)).toFixed(0)} mAh)
                         </p>
                     </div>
                 </div>

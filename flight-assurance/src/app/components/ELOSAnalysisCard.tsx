@@ -174,17 +174,17 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
             />
           </div>
 
-          {/* Global Grid Size Slider */}
+          {/* Global Grid Size Slider with SRTM Indication*/}
           <div className="flex-1">
             <div className="flex justify-between text-m mb-1">
               <span>Grid Size:</span>
-              <span>{gridSize}m</span>
+              <span>{gridSize === 30 ? '30m: SRTM' : `${gridSize}m`}</span>
             </div>
             <p className="text-xs text-gray-500 mb-2">The lower the number, the higher the fidelity</p>
             <input
               type="range"
-              min="20"
-              max="300"
+              min="1"
+              max="100"
               value={gridSize}
               onChange={(e) => setGridSize(Number(e.target.value))}
               className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
@@ -272,8 +272,8 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
                 </div>
                 <input
                   type="range"
-                  min="20"
-                  max="300"
+                  min="1"
+                  max="100"
                   value={gridSize}
                   onChange={(e) => setGridSize(Number(e.target.value))}
                   className="w-full h-2 bg-blue-100 rounded-lg appearance-none cursor-pointer"
@@ -350,8 +350,8 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
                 </div>
                 <input
                   type="range"
-                  min="20"
-                  max="300"
+                  min="1"
+                  max="100"
                   value={gridSize}
                   onChange={(e) => setGridSize(Number(e.target.value))}
                   className="w-full h-2 bg-green-100 rounded-lg appearance-none cursor-pointer"
@@ -428,8 +428,8 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
                 </div>
                 <input
                   type="range"
-                  min="20"
-                  max="300"
+                  min="1"
+                  max="100"
                   value={gridSize}
                   onChange={(e) => setGridSize(Number(e.target.value))}
                   className="w-full h-2 bg-red-100 rounded-lg appearance-none cursor-pointer"

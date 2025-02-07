@@ -66,8 +66,8 @@ interface LOSAnalysisContextType {
 
 // ======== Default Values ========
 const DEFAULT_MARKER_CONFIG: MarkerConfig = {
-  elevationOffset: 0,
-  gridRange: 1500,
+  elevationOffset: 3,
+  gridRange: 500,
 };
 
 const DEFAULT_MARKER_CONFIGS: MarkerConfigs = {
@@ -82,8 +82,8 @@ const LOSAnalysisContext = createContext<LOSAnalysisContextType | undefined>(und
 // ======== Provider Component ========
 export function LOSAnalysisProvider({ children }: { children: ReactNode }) {
   // Configuration State
-  const [gridSize, setGridSize] = useState<number>(100);
-  const [elosGridRange, setElosGridRange] = useState<number>(2000);
+  const [gridSize, setGridSize] = useState<number>(30);
+  const [elosGridRange, setElosGridRange] = useState<number>(1500);
   const [markerConfigs, setMarkerConfigs] = useState<MarkerConfigs>(DEFAULT_MARKER_CONFIGS);
   
   // Analysis State

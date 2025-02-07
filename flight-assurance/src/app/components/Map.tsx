@@ -159,142 +159,132 @@ const Map = forwardRef<MapRef, MapProps>(
 
     //FlightPlan Processing including logging
     useEffect(() => {
-      if (!contextFlightPlan) {
-        return;
+      if (!contextFlightPlan || contextFlightPlan.processed) {
+          return;
       }
-    
-      if (contextFlightPlan.processed) {
-        console.log("Flight plan already processed.");
-        return;
-      }
-    
+  
       const processFlightPlan = async () => {
-        try {
-          if (!mapRef.current) {
-            throw new Error("Map not initialized");
-          }
-    
-          // Calculate bounds of flight plan
-          const bounds = contextFlightPlan.features[0].geometry.coordinates.reduce(
-            (acc, coord) => {
-              acc[0] = Math.min(acc[0], coord[0]);  // min lng
-              acc[1] = Math.min(acc[1], coord[1]);  // min lat
-              acc[2] = Math.max(acc[2], coord[0]);  // max lng
-              acc[3] = Math.max(acc[3], coord[1]);  // max lat
-              return acc;
-            },
-            [Infinity, Infinity, -Infinity, -Infinity]
-          );
-    
-          // Move map to flight plan area first
-          mapRef.current.fitBounds(bounds as [number, number, number, number], {
-            padding: 50,
-            duration: 0
-          });
-    
-          // Wait for tiles to load
-          console.log("Waiting for terrain tiles to load...");
-          await new Promise(resolve => setTimeout(resolve, 2000));
-    
-          console.log("Starting Altitude Resolution:", { inputPlan: contextFlightPlan });
-          const newPlan = structuredClone(contextFlightPlan);
-          
-          // Get and set home position elevation
-          const homePosition = newPlan.properties.homePosition;
-          const homeTerrainElev = await queryTerrainElevation([homePosition.longitude, homePosition.latitude]);
-          homePosition.altitude = homeTerrainElev;
-          if (newPlan.features[0]?.geometry?.coordinates?.[0]) {
-            newPlan.features[0].geometry.coordinates[0][2] = homeTerrainElev;
-          }
-          
-          // Process each feature's waypoints...
-          for (const feature of newPlan.features) {
-            if (feature.geometry.type !== "LineString") continue;
-            const coords = feature.geometry.coordinates;
-            const waypoints = feature.properties.waypoints || [];
-            for (let i = 0; i < coords.length; i++) {
-              const [lon, lat, originalAlt] = coords[i];
-              const wp = waypoints[i];
-              if (!wp) continue;
-              try {
-                const terrainElev = await queryTerrainElevation([lon, lat]);
-                console.log(`Waypoint ${i} processing:`, {
-                  longitude: lon,
-                  latitude: lat,
-                  originalAltitude: originalAlt,
-                  terrainElevation: terrainElev,
-                  mode: wp.altitudeMode,
-                  beforeResolution: coords[i][2],
-                });
-                switch (wp.altitudeMode) {
-                  case "absolute":
-                    break;
-                  case "relative":
-                    if (wp.commandType === 22) {
-                      const takeoffGroundElev = await queryTerrainElevation([lon, lat]);
-                      coords[i][2] = takeoffGroundElev + originalAlt;
-                    } else {
-                      coords[i][2] = terrainElev + originalAlt;
-                    }
-                    break;
-                  case "terrain":
-                    coords[i][2] = terrainElev + originalAlt;
-                    break;
-                  default:
-                    break;
-                }
-                console.log(`Waypoint ${i} resolved:`, {
-                  finalAltitude: coords[i][2],
-                  heightAGL: coords[i][2] - terrainElev,
-                });
-              } catch (error) {
-                console.error(`Error processing waypoint ${i}:`, error);
-                throw error;
+          try {
+              if (!mapRef.current) {
+                  throw new Error("Map not initialized");
               }
-            }
+  
+              // Calculate bounds of flight plan
+              const bounds = contextFlightPlan.features[0].geometry.coordinates.reduce(
+                  (acc, coord) => {
+                      acc[0] = Math.min(acc[0], coord[0]);  // min lng
+                      acc[1] = Math.min(acc[1], coord[1]);  // min lat
+                      acc[2] = Math.max(acc[2], coord[0]);  // max lng
+                      acc[3] = Math.max(acc[3], coord[1]);  // max lat
+                      return acc;
+                  },
+                  [Infinity, Infinity, -Infinity, -Infinity]
+              );
+  
+              // Move map to flight plan area first
+              mapRef.current.fitBounds(bounds as [number, number, number, number], {
+                  padding: 50,
+                  duration: 0
+              });
+  
+              // Wait for tiles to load
+              console.log("Waiting for terrain tiles to load...");
+              await new Promise(resolve => setTimeout(resolve, 2000));
+  
+              console.log("Starting Altitude Resolution:", { inputPlan: contextFlightPlan });
+              const newPlan = structuredClone(contextFlightPlan);
+              
+              // Get and set home position elevation
+              const homePosition = newPlan.properties.homePosition;
+              const homeTerrainElev = await queryTerrainElevation([homePosition.longitude, homePosition.latitude]);
+              homePosition.altitude = homeTerrainElev;
+              if (newPlan.features[0]?.geometry?.coordinates?.[0]) {
+                  newPlan.features[0].geometry.coordinates[0][2] = homeTerrainElev;
+              }
+              
+              // Process each feature's waypoints...
+              for (const feature of newPlan.features) {
+                  if (feature.geometry.type !== "LineString") continue;
+                  const coords = feature.geometry.coordinates;
+                  const waypoints = feature.properties.waypoints || [];
+                  for (let i = 0; i < coords.length; i++) {
+                      const [lon, lat, originalAlt] = coords[i];
+                      const wp = waypoints[i];
+                      if (!wp) continue;
+                      try {
+                          const terrainElev = await queryTerrainElevation([lon, lat]);
+                          console.log(`Waypoint ${i} processing:`, {
+                              longitude: lon,
+                              latitude: lat,
+                              originalAltitude: originalAlt,
+                              terrainElevation: terrainElev,
+                              mode: wp.altitudeMode,
+                              beforeResolution: coords[i][2],
+                          });
+                          switch (wp.altitudeMode) {
+                              case "absolute":
+                                  break;
+                              case "relative":
+                                  if (wp.commandType === 22) {
+                                      const takeoffGroundElev = await queryTerrainElevation([lon, lat]);
+                                      coords[i][2] = takeoffGroundElev + originalAlt;
+                                  } else {
+                                      coords[i][2] = terrainElev + originalAlt;
+                                  }
+                                  break;
+                              case "terrain":
+                                  coords[i][2] = terrainElev + originalAlt;
+                                  break;
+                              default:
+                                  break;
+                          }
+                      } catch (error) {
+                          console.error(`Error processing waypoint ${i}:`, error);
+                          throw error;
+                      }
+                  }
+              }
+  
+              // Calculate distances
+              const coords2D = newPlan.features[0].geometry.coordinates.map(
+                  (coord: [number, number, number]) => [coord[0], coord[1]]
+              );
+              const routeLine = turf.lineString(coords2D);
+              const totalDistance = turf.length(routeLine, { units: "kilometers" });
+  
+              // Calculate waypoint distances
+              let cumulativeDistance = 0;
+              const waypointDistances = newPlan.features[0].geometry.coordinates.map(
+                  (coord, idx, arr) => {
+                      if (idx === 0) return 0;
+                      const segment = turf.lineString([
+                          arr[idx - 1].slice(0, 2),
+                          coord.slice(0, 2),
+                      ]);
+                      cumulativeDistance += turf.length(segment, { units: "kilometers" });
+                      return cumulativeDistance;
+                  }
+              );
+  
+              const processedFlightPlan = {
+                  ...newPlan,
+                  waypointDistances,
+                  totalDistance,
+                  processed: true
+              };
+  
+              setContextFlightPlan(processedFlightPlan);
+              setDistance(totalDistance);
+              setResolvedGeoJSON(processedFlightPlan);
+  
+          } catch (error) {
+              console.error("Error processing flight plan:", error);
+              setError("Failed to process flight plan. Please try again.");
           }
-          
-          setResolvedGeoJSON(newPlan);
-    
-          // Process distances
-          const coords2D = newPlan.features[0].geometry.coordinates.map(
-            (coord: [number, number, number]) => [coord[0], coord[1]]
-          );
-          const routeLine = turf.lineString(coords2D);
-    
-          let cumulativeDistance = 0;
-          const waypointDistances = newPlan.features[0].geometry.coordinates.map(
-            (coord, idx, arr) => {
-              if (idx === 0) return 0;
-              const segment = turf.lineString([
-                arr[idx - 1].slice(0, 2),
-                coord.slice(0, 2),
-              ]);
-              cumulativeDistance += turf.length(segment, { units: "kilometers" });
-              return cumulativeDistance;
-            }
-          );
-    
-          const totalDistance = turf.length(routeLine, { units: "kilometers" });
-          newPlan.processed = true;
-    
-          const processedFlightPlan = {
-            ...newPlan,
-            waypointDistances,
-            totalDistance,
-          };
-    
-          setContextFlightPlan(processedFlightPlan);
-          setDistance(totalDistance);
-    
-        } catch (error) {
-          console.error("Error processing flight plan:", error);
-          setError("Failed to process flight plan. Please try again.");
-        }
       };
-    
+  
       processFlightPlan();
-    }, [contextFlightPlan, queryTerrainElevation, setContextFlightPlan, setDistance, setError]);
+  }, [contextFlightPlan, queryTerrainElevation, setContextFlightPlan, setDistance, setError]);
     
 
     useEffect(() => {
@@ -431,47 +421,49 @@ const Map = forwardRef<MapRef, MapProps>(
     );
 
     useEffect(() => {
-      if (lineRef.current && metrics.maxDistance > 0) {
-        // Changed from estimatedFlightDistance
-        const line = turf.lineString(
-          (
-            lineRef.current.features[0].geometry as GeoJSON.LineString
-          ).coordinates.map((coord: [number, number]) => [coord[0], coord[1]])
-        );
-        const estimatedPoint = turf.along(line, metrics.maxDistance, {
-          // Changed from estimatedFlightDistance
-          units: "kilometers",
-        });
-
-        if (metrics.maxDistance > totalDistance) {
-          // Changed from estimatedFlightDistance
-          if (markerRef.current) {
-            markerRef.current.remove();
-            markerRef.current = null;
-          }
-        } else {
-          const [lng, lat] = estimatedPoint.geometry.coordinates as [
-            number,
-            number
-          ];
-          if (markerRef.current) {
-            markerRef.current.setLngLat([lng, lat]);
+      if (lineRef.current && metrics.availableBatteryCapacity > 0) {
+          // Calculate available distance based on available battery (excluding reserve)
+          const availableFlightTime = metrics.availableBatteryCapacity / parseFloat(config.dischargeRate);
+          const availableDistance = (availableFlightTime / 60) * parseFloat(config.assumedSpeed);
+          
+          const line = turf.lineString(
+              (
+                  lineRef.current.features[0].geometry as GeoJSON.LineString
+              ).coordinates.map((coord: [number, number]) => [coord[0], coord[1]])
+          );
+          
+          const estimatedPoint = turf.along(line, availableDistance, {
+              units: "kilometers",
+          });
+  
+          if (availableDistance > totalDistance) {
+              // Remove marker if plan is within available range
+              if (markerRef.current) {
+                  markerRef.current.remove();
+                  markerRef.current = null;
+              }
           } else {
-            if (mapRef.current) {
-              markerRef.current = new mapboxgl.Marker({ color: "blue" })
-                .setLngLat([lng, lat])
-                .setPopup(
-                  new mapboxgl.Popup({ closeButton: false }).setHTML(
-                    '<strong style="color: black;">Estimated Finish</strong>'
-                  )
-                )
-                .addTo(mapRef.current!);
-              markerRef.current.togglePopup();
-            }
+              // Show marker at available range point
+              const [lng, lat] = estimatedPoint.geometry.coordinates as [number, number];
+              if (markerRef.current) {
+                  markerRef.current.setLngLat([lng, lat]);
+              } else {
+                  if (mapRef.current) {
+                      markerRef.current = new mapboxgl.Marker({ color: 'blue' })
+                          .setLngLat([lng, lat])
+                          .setPopup(
+                              new mapboxgl.Popup({ closeButton: false }).setHTML(
+                                  '<strong style="color: black;">Available Range Limit</strong>'
+                              )
+                          )
+                          .addTo(mapRef.current!);
+                      markerRef.current.togglePopup();
+                  }
+              }
           }
-        }
       }
-    }, [metrics.maxDistance, totalDistance]);
+  }, [metrics.availableBatteryCapacity, config.dischargeRate, config.assumedSpeed, totalDistance]);
+
 
     const toggleLayerVisibility = (layerId: string) => {
       return layerManager.toggleLayerVisibility(layerId);
