@@ -31,7 +31,7 @@ const DisclaimerModal = () => {
           </div>
 
           <p className="text-gray-700">
-            This application's calculations are based on available terrain data which may have limited accuracy and resolution. 
+            This application&apos;s calculations are based on available terrain data which may have limited accuracy and resolution. 
             Terrain features, obstacles, and vegetation may exist that are not represented in our analysis. Additionally, 
             the line-of-sight and coverage predictions do not account for atmospheric conditions, signal interference, 
             or real-world RF propagation characteristics.
@@ -45,8 +45,8 @@ const DisclaimerModal = () => {
           </p>
 
           <p className="text-gray-700">
-            You acknowledge that operational decisions based on this tool's output are made at your own risk. Always verify 
-            conditions on-site and maintain appropriate safety protocols regardless of this application's analysis results.
+            You acknowledge that operational decisions based on this tool&apos;s output are made at your own risk. Always verify 
+            conditions on-site and maintain appropriate safety protocols regardless of this application&apos;s analysis results.
           </p>
         </div>
 

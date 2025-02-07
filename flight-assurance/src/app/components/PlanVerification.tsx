@@ -8,6 +8,7 @@ import TerrainClearancePopup from "./TerrainClearancePopup";
 import ObstacleAssessment from "./ObstacleAssessment";
 import { MapRef } from "./Map";
 import StatusRow from "./StatusRow";
+import { useFlightConfiguration } from "../context/FlightConfigurationContext";
 
 interface PlanVerificationProps {
   mapRef: React.RefObject<MapRef>;
@@ -15,6 +16,7 @@ interface PlanVerificationProps {
 
 const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef }) => {
   const { flightPlan } = useFlightPlanContext();
+  const { metrics } = useFlightConfiguration();
   const { analysisData, setAnalysisData } = useObstacleAnalysis();
   const [statuses, setStatuses] = useState<{
     [key: string]: {
@@ -48,6 +50,27 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef }) => {
     console.log("- getMap() returns:", map);
     console.log("- Is Analyzing:", isAnalyzing);
   }, [flightPlan, isAnalyzing, mapRef]);
+
+  useEffect(() => {
+    setStatuses((prev) => ({
+      ...prev,
+      "Battery exceeds flight requirements": { status: "loading" },
+    }));
+    if (metrics?.isFeasible) {
+      setStatuses((prev) => ({
+        ...prev,
+        "Battery exceeds flight requirements": { status: "success" },
+      }));
+    } else {
+      setStatuses((prev) => ({
+        ...prev,
+        "Battery exceeds flight requirements": {
+          status: "error",
+          errorMessages: ["Battery capacity is insufficient for the flight"],
+        },
+      }));
+    }
+  }, [metrics]);
 
   // Zero altitude check
   useEffect(() => {
@@ -114,8 +137,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef }) => {
               ? {
                   status: "error",
                   errorMessages: duplicateEntries.map(
-                    (entry) =>
-                      `Duplicate entry found: ${JSON.stringify(entry)}`
+                    (entry) => `Duplicate entry found: ${JSON.stringify(entry)}`
                   ),
                 }
               : { status: "success" },
@@ -138,30 +160,30 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef }) => {
     setFinalStatus(hasError ? "error" : "success");
   }, [statuses]);
 
-  const handleTerrainAnalysis = () => {
-    const map = mapRef.current?.getMap();
-    console.log("Terrain Analysis Handler:", {
-      hasFlightPlan: !!flightPlan,
-      mapRef: mapRef.current,
-      map: map,
-      isAnalyzing,
-    });
-
-    if (!flightPlan || !map) {
-      console.log("Missing required data:", {
+  useEffect(() => {
+    const handleTerrainAnalysis = () => {
+      const map = mapRef.current?.getMap();
+      console.log("Terrain Analysis Handler:", {
         hasFlightPlan: !!flightPlan,
-        hasMap: !!map,
+        mapRef: mapRef.current,
+        map: map,
+        isAnalyzing,
       });
-      return;
-    }
 
-    setIsAnalyzing(true);
-    setShowTerrainPopup(true);
+      if (!flightPlan || !map) {
+        console.log("Missing required data:", {
+          hasFlightPlan: !!flightPlan,
+          hasMap: !!map,
+        });
+        return;
+      }
 
-    // Dispatch event to trigger terrain analysis
-    const event = new CustomEvent("triggerTerrainAnalysis");
-    window.dispatchEvent(event);
-  };
+      // Dispatch event to trigger terrain analysis
+      const event = new CustomEvent("triggerTerrainAnalysis");
+      window.dispatchEvent(event);
+    };
+    handleTerrainAnalysis();
+  }, [flightPlan, isAnalyzing, mapRef]);
 
   return (
     <div
@@ -272,9 +294,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef }) => {
 
       {/* Flight Plan Statistics Section */}
       <section className="w-full max-w-md" aria-label="Flight Plan Statistics">
-        <h3 className="text-md font-semibold mb-2">
-          Flight Plan Statistics
-        </h3>
+        <h3 className="text-md font-semibold mb-2">Flight Plan Statistics</h3>
         <div className="flex justify-between text-sm text-gray-700">
           <span>Minimum Altitude:</span>
           <span>
@@ -311,7 +331,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef }) => {
 
       {/* Terrain Analysis Button */}
       <button
-        onClick={handleTerrainAnalysis}
+        onClick={() => setShowTerrainPopup(true)}
         disabled={!flightPlan || !mapRef.current?.getMap() || isAnalyzing}
         className={`px-3 py-1 bg-blue-500 text-white text-xs rounded hover:opacity-90 focus:outline-none transition-all ${
           !flightPlan || !mapRef.current?.getMap() || isAnalyzing
@@ -319,7 +339,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef }) => {
             : ""
         }`}
       >
-        {isAnalyzing ? "Analyzing..." : "Run Terrain Analysis"}
+        {isAnalyzing ? "Analyzing..." : "See Terrain Analysis"}
       </button>
 
       {/* Terrain Clearance Popup */}
