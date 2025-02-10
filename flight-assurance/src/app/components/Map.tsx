@@ -687,12 +687,6 @@ const Map = forwardRef<MapRef, MapProps>(
     ) => {
       const popupDiv = document.createElement("div");
       const currentElevation = initialElevation;
-
-      const markerLocations = {
-        gcs: gcsLocation,
-        observer: observerLocation,
-        repeater: repeaterLocation,
-      };
     
       const styles = {
         container: "padding: 8px; min-width: 200px;",
@@ -703,9 +697,7 @@ const Map = forwardRef<MapRef, MapProps>(
         section: "margin-bottom: 8px;",
         label: "color: #4a5568; font-size: 12px; display: block; margin-bottom: 4px;",
         value: "color: #1a202c; font-size: 12px; font-weight: 500;",
-        losButton:
-          "background: #4a5568; color: white; border: none; padding: 4px 8px; border-radius: 4px; margin: 2px; font-size: 12px; cursor: pointer; width: 100%;",
-      };
+              };
     
       const markerInfo = {
         gcs: { icon: "📡", title: "GCS", color: "#3182ce" },
@@ -746,62 +738,9 @@ const Map = forwardRef<MapRef, MapProps>(
             <label style="${styles.label}">Station Elevation:</label>
             <span style="${styles.value}">${stationElevation.toFixed(1)} m ASL</span>
           </div>
-    
-          <!-- Container for LOS buttons -->
-          <div id="los-buttons"></div>
         </div>
       `;
-    
-      // Add LOS check buttons for other markers
-      const losButtons = popupDiv.querySelector("#los-buttons");
-      if (losButtons) {
-        Object.entries(markerLocations).forEach(([type, location]) => {
-          if (type !== markerType && location) {
-            const button = document.createElement("button");
-            button.style.cssText = styles.losButton;
-            button.textContent = `Check LOS to ${type.toUpperCase()}`;
-    
-            button.onclick = async () => {
-              try {
-                button.disabled = true;
-                button.textContent = "Checking...";
-    
-                const currentLoc = markerLocations[
-                  markerType as keyof typeof markerLocations
-                ];
-                if (currentLoc && location) {
-                  const layerId = `los-${markerType}-${type}`;
-                  const hasLOS = await checkLineOfSight(
-                    currentLoc,
-                    location,
-                    markerType,
-                    type as "gcs" | "observer" | "repeater"
-                  );
-                  visualizeLOSCheck(currentLoc, location, hasLOS, layerId);
-    
-                  button.style.cssText = `
-                    ${styles.losButton};
-                    background-color: ${hasLOS ? "#38a169" : "#e53e3e"};
-                    transition: background-color 0.3s ease;
-                  `;
-    
-                  button.textContent = `${type.toUpperCase()}: ${
-                    hasLOS ? "Visible ✓" : "No LOS ✗"
-                  }`;
-                }
-              } catch (error) {
-                handleTerrainError(error, "LOS check");
-                button.textContent = "Check failed ⚠️";
-              } finally {
-                button.disabled = false;
-              }
-            };
-    
-            losButtons.appendChild(button);
-          }
-        });
-      }
-    
+
       // Add event handlers
       const rangeInput = popupDiv.querySelector(`#${markerType}-range`);
       const rangeValue = popupDiv.querySelector(`#${markerType}-range-value`);
@@ -1038,114 +977,6 @@ const Map = forwardRef<MapRef, MapProps>(
         console.error("Error initializing Repeater:", error);
       }
     };
-
-    // Marker LOS Between Check
- const checkLineOfSight = async (
-  point1: LocationData,
-  point2: LocationData,
-  type1: "gcs" | "observer" | "repeater",
-  type2: "gcs" | "observer" | "repeater"
-): Promise<boolean> => {
-  if (!mapRef.current) return false;
-
-  try {
-    const offset1 = markerConfigs[type1].elevationOffset;
-    const offset2 = markerConfigs[type2].elevationOffset;
-
-    const elevation1 = (point1.elevation || 0) + offset1;
-    const elevation2 = (point2.elevation || 0) + offset2;
-
-    const distance = turf.distance(
-      turf.point([point1.lng, point1.lat]),
-      turf.point([point2.lng, point2.lat]),
-      { units: "kilometers" }
-    );
-
-    const samples = 50;
-    const line = turf.lineString([
-      [point1.lng, point1.lat],
-      [point2.lng, point2.lat],
-    ]);
-
-    for (let i = 0; i <= samples; i++) {
-      const along = turf.along(line, (distance * i) / samples, {
-        units: "kilometers",
-      });
-      const [lng, lat] = along.geometry.coordinates;
-
-      const pointElevation = await queryTerrainElevation([lng, lat]);
-      const ratio = i / samples;
-      const expectedElevation = elevation1 + ratio * (elevation2 - elevation1);
-
-      if (pointElevation > expectedElevation) {
-        return false;
-      }
-    }
-
-    return true;
-  } catch (error) {
-    console.error("Error checking line of sight:", error);
-    return false;
-  }
-};
-
-    const visualizeLOSCheck = (
-      point1: LocationData,
-      point2: LocationData,
-      hasLOS: boolean,
-      layerId: string
-    ) => {
-      if (!mapRef.current) return;
-
-      // Remove existing layer if present
-      if (mapRef.current.getLayer(layerId)) {
-        mapRef.current.removeLayer(layerId);
-        mapRef.current.removeSource(layerId);
-      }
-
-      // Create line data
-      const lineData: GeoJSON.Feature = {
-        type: "Feature",
-        properties: {},
-        geometry: {
-          type: "LineString",
-          coordinates: [
-            [point1.lng, point1.lat],
-            [point2.lng, point2.lat],
-          ],
-        },
-      };
-
-      // Add source and layer
-      mapRef.current.addSource(layerId, {
-        type: "geojson",
-        data: lineData,
-      });
-
-      mapRef.current.addLayer({
-        id: layerId,
-        type: "line",
-        source: layerId,
-        paint: {
-          "line-color": hasLOS ? "#38a169" : "#e53e3e",
-          "line-width": 2,
-          "line-dasharray": [2, 1],
-        },
-      });
-
-      // Register with layer manager
-      layerManager.registerLayer(layerId, true);
-    };
-
-    const handleTerrainError = (error: any, context: string) => {
-        console.error(`Terrain error in ${context}:`, error);
-        if (error instanceof Error) {
-          setError(error.message);
-        } else {
-          setError(`Failed to get terrain elevation: ${context}`);
-        }
-      };
-
 
     return (
       <div>

@@ -18,11 +18,11 @@ const DisclaimerModal = () => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white rounded-lg p-6 max-w-2xl mx-4 shadow-xl">
-        <h2 className="text-lg font-bold mb-4">Important Notice</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+      <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-xl sm:max-w-2xl overflow-y-auto max-h-full shadow-xl">
+        <h2 className="text-xl sm:text-2xl font-bold mb-4">Important Notice</h2>
         
-        <div className="space-y-4">
+        <div className="space-y-4 text-base sm:text-lg">
           <div className="bg-amber-50 p-4 rounded-md border border-amber-200">
             <p className="font-semibold text-amber-800">
               This application provides approximate terrain and line-of-sight analysis for initial flight planning purposes only. 
@@ -50,7 +50,7 @@ const DisclaimerModal = () => {
           </p>
         </div>
 
-        <div className="mt-6 flex justify-end">
+        <div className="mt-6">
           <button
             onClick={handleAccept}
             className="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors"
