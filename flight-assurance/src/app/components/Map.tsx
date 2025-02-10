@@ -983,7 +983,7 @@ const Map = forwardRef<MapRef, MapProps>(
         {/* Map container with the buttons */}
         <div
           ref={mapContainerRef}
-          style={{ height: "70vh", width: "100%", marginBottom: "100px" }}
+          style={{ height: "100vh", width: "100%", marginBottom: "100px" }}
           className="relative"
         >
           <div className="absolute top-4 right-4 z-10 flex flex-col space-y-2">

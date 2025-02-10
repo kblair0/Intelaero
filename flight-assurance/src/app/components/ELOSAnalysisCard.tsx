@@ -6,6 +6,8 @@ import { LocationData } from "../components/Map";
 import { MapRef } from "./Map";
 import { useFlightPlanContext } from "../context/FlightPlanContext";
 import { layerManager, MAP_LAYERS } from "./LayerManager";
+import mapboxgl from 'mapbox-gl';
+import * as turf from '@turf/turf';
 // Import both the LOS check and the new profile function and types.
 import { 
   checkStationToStationLOS, 
@@ -189,26 +191,26 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
       setError("Map not initialized");
       return;
     }
-  
+    
     const map = mapRef.current.getMap();
     if (!map) {
       setError("Map instance not available");
       return;
     }
-  
+    
     const source = stationLocations[sourceStation];
     const target = stationLocations[targetStation];
-  
+    
     if (!source || !target) {
       setError(
         `Both ${sourceStation.toUpperCase()} and ${targetStation.toUpperCase()} locations must be set.`
       );
       return;
     }
-  
+    
     const sourceOffset = markerConfigs[sourceStation].elevationOffset;
     const targetOffset = markerConfigs[targetStation].elevationOffset;
-  
+    
     const effective1: [number, number, number] = [
       source.lng,
       source.lat,
@@ -219,16 +221,15 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
       target.lat,
       (target.elevation || 0) + targetOffset,
     ];
-  
-    // Log the effective coordinates (essential)
+    
     console.log("[Station LOS] Effective coordinates:", effective1, effective2);
-  
+    
     try {
       const boundTerrainQuery = async (
         coords: [number, number]
       ): Promise<number> => {
         if (!map) return 0;
-  
+    
         if (!map.isSourceLoaded("mapbox-dem")) {
           await new Promise<void>((resolve) => {
             const checkSource = () => {
@@ -241,30 +242,41 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
             checkSource();
           });
         }
-  
+    
         const elevation = map.queryTerrainElevation(coords);
         return elevation ?? 0;
       };
-  
+    
       const result = await checkStationToStationLOS(
         map,
         effective1,
         effective2,
         boundTerrainQuery
       );
-  
-      // Log the analysis result (essential)
+    
       console.log("[Station LOS] Analysis result:", result);
       setStationLOSResult(result);
       setError(null);
+    
+      if (!result.clear) {
+        // Generate the LOS profile for the entire line.
+        const profile = await getLOSProfile(effective1, effective2, boundTerrainQuery);
+        // Update the obstruction segment overlay based on the profile.
+        updateObstructionSegment(map, profile, effective1, effective2, 20);
+      } else {
+        // Remove any existing obstruction segment overlay.
+        removeObstructionSegment(map);
+      }
     } catch (error: any) {
       console.error("[Station LOS] Analysis error:", error);
       setError(error.message || "Station LOS check failed");
       setStationLOSResult(null);
+      removeObstructionSegment(map);
     }
   };
-
-  // New handler for showing the LOS profile graph.
+  
+  
+  //  handler for showing the LOS profile graph.
   const handleShowLOSGraph = async () => {
     if (!mapRef.current) {
       setError("Map not initialized");
@@ -350,7 +362,7 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
     return { emoji: emojis[stationType], name: names[stationType] };
   };
 
-  // Modified station-to-station LOS UI section
+  // Station-to-station LOS UI section
   const renderStationToStationUI = () => {
     if (availableStations.length < 2) {
       return (
@@ -365,15 +377,61 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
         </div>
       );
     }
-
+  
     return (
       <div className="space-y-3">
+        {/* Drop-down selectors for Source and Target Stations */}
+        <div className="flex flex-row gap-4">
+          <div className="flex-1">
+            <label className="block text-xs text-gray-600 mb-1">Source Station</label>
+            <select
+              value={sourceStation}
+              onChange={(e) =>
+                setSourceStation(e.target.value as "gcs" | "observer" | "repeater")
+              }
+              className="w-full p-2 border rounded text-sm"
+            >
+              {availableStations.map((station) => {
+                const { emoji, name } = getStationDisplay(station);
+                return (
+                  <option key={station} value={station}>
+                    {emoji} {name}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+  
+          <div className="flex-1">
+            <label className="block text-xs text-gray-600 mb-1">Target Station</label>
+            <select
+              value={targetStation}
+              onChange={(e) =>
+                setTargetStation(e.target.value as "gcs" | "observer" | "repeater")
+              }
+              className="w-full p-2 border rounded text-sm"
+            >
+              {availableStations
+                .filter((station) => station !== sourceStation)
+                .map((station) => {
+                  const { emoji, name } = getStationDisplay(station);
+                  return (
+                    <option key={station} value={station}>
+                      {emoji} {name}
+                    </option>
+                  );
+                })}
+            </select>
+          </div>
+        </div>
+  
+        {/* Existing buttons for analysis */}
         <div className="flex flex-row gap-4">
           <button
             onClick={handleStationLOSCheck}
             className={`${
               stationLOSResult ? "flex-1" : "w-full"
-            } py-2 bg-purple-500 text-white text-sm rounded hover:bg-purple-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed`}
+            } py-2 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed`}
             disabled={
               !stationLocations[sourceStation] ||
               !stationLocations[targetStation] ||
@@ -382,7 +440,7 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
           >
             Check Station-to-Station LOS
           </button>
-
+  
           {stationLOSResult && (
             <button
               onClick={handleShowLOSGraph}
@@ -392,7 +450,8 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
             </button>
           )}
         </div>
-
+  
+        {/* Results display remains here */}
         {stationLOSResult && (
           <div
             className={`p-3 rounded ${
@@ -421,6 +480,7 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
       </div>
     );
   };
+  
 
   // Prepare chart data if losProfileData exists.
   const chartData = losProfileData
@@ -477,6 +537,103 @@ const chartOptions = {
       },
     },
   },
+};
+
+/**
+ * Scans the LOS profile and returns the first and last indices where the obstruction occurs.
+ * A point is considered obstructed if its terrain elevation exceeds the LOS altitude.
+ */
+// Assuming LOSProfilePoint is defined as in your StationLOSAnalysis module
+const findObstructedSegment = (profile: LOSProfilePoint[]): { startIndex: number; endIndex: number } | null => {
+  let startIndex = -1;
+  let endIndex = -1;
+  for (let i = 0; i < profile.length; i++) {
+    if (profile[i].terrain > profile[i].los) {
+      if (startIndex === -1) {
+        startIndex = i;
+      }
+      endIndex = i;
+    }
+  }
+  if (startIndex === -1 || endIndex === -1) {
+    return null;
+  }
+  // If only one sample is obstructed and there is room to expand,
+  // set the end index to the next sample to create a minimal segment.
+  if (startIndex === endIndex && profile.length > startIndex + 1) {
+    endIndex = startIndex + 1;
+  }
+  return { startIndex, endIndex };
+};
+
+
+/**
+ * Creates or updates a GeoJSON source and fill layer representing the obstructed segment.
+ * It takes the LOS profile, the two effective coordinates, and buffers the line between
+ * the first and last obstructed samples.
+ */
+const updateObstructionSegment = (
+  map: mapboxgl.Map,
+  profile: LOSProfilePoint[],
+  effective1: [number, number, number],
+  effective2: [number, number, number],
+  bufferWidth: number = 20 // buffer in meters; adjust as needed
+): void => {
+  const segment = findObstructedSegment(profile);
+  if (!segment) return; // No obstructed segment found.
+  
+  const totalSamples = profile.length - 1;
+  const fractionStart = segment.startIndex / totalSamples;
+  const fractionEnd = segment.endIndex / totalSamples;
+
+  // Interpolation helper
+  const interpolate = (fraction: number, start: [number, number, number], end: [number, number, number]): [number, number] => {
+    return [
+      start[0] + fraction * (end[0] - start[0]),
+      start[1] + fraction * (end[1] - start[1]),
+    ];
+  };
+
+  const coordStart = interpolate(fractionStart, effective1, effective2);
+  const coordEnd = interpolate(fractionEnd, effective1, effective2);
+
+  // Create a line between the start and end of the obstructed segment.
+  const segmentLine = turf.lineString([coordStart, coordEnd]);
+  // Buffer the line to create a polygon.
+  const segmentPolygon = turf.buffer(segmentLine, bufferWidth, { units: 'meters' });
+
+  const sourceId = 'obstruction-segment-source';
+  const layerId = 'obstruction-segment-layer';
+
+  if (map.getSource(sourceId)) {
+    (map.getSource(sourceId) as mapboxgl.GeoJSONSource).setData(segmentPolygon);
+  } else {
+    map.addSource(sourceId, {
+      type: 'geojson',
+      data: segmentPolygon,
+    });
+    map.addLayer({
+      id: layerId,
+      type: 'fill',
+      source: sourceId,
+      layout: {},
+      paint: {
+        'fill-color': '#ff0000',  // Red fill
+        'fill-opacity': 0.3,      // Semi-transparent
+      },
+    });
+  }
+};
+
+const removeObstructionSegment = (map: mapboxgl.Map): void => {
+  const sourceId = 'obstruction-segment-source';
+  const layerId = 'obstruction-segment-layer';
+  if (map.getLayer(layerId)) {
+    map.removeLayer(layerId);
+  }
+  if (map.getSource(sourceId)) {
+    map.removeSource(sourceId);
+  }
 };
 
 
