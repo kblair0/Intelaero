@@ -23,6 +23,7 @@ export interface AnalysisStats {
 export interface AnalysisResults {
   cells: GridCell[];
   stats: AnalysisStats | null;
+  stationLOSResult?: StationLOSResult;
 }
 
 // Marker Configuration Types

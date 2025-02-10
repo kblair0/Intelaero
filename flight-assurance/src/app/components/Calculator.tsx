@@ -1,53 +1,51 @@
 import React from 'react';
 import { useFlightConfiguration } from "../context/FlightConfigurationContext";
+import { Battery } from 'lucide-react';
 
 const Calculator: React.FC = () => {
     const { config, metrics, updateConfig } = useFlightConfiguration();
 
-    // Handle input changes
     const handleInputChange = (key: keyof typeof config) => (e: React.ChangeEvent<HTMLInputElement>) => {
         updateConfig({ [key]: e.target.value });
     };
 
     return (
-        <div>
+        <div className="space-y-3 p-2">
             {/* Header */}
-            <div>
-                <h3 className="text-xl font-semibold text-gray-800">Flight Calculator</h3>
-                <p className="text-sm text-gray-500 mt-1">Adjust parameters and view flight metrics</p>
+            <div className="mb-4">
+                <div className="flex items-center gap-2 mb-1">
+                    <Battery className="w-4 h-4 text-blue-500" />
+                    <h3 className="text-sm font-semibold text-gray-800">Energy Configuration</h3>
+                </div>
+                <p className="text-xs text-gray-500">Configure battery and speed parameters</p>
             </div>
 
-            {/* Inputs Section */}
-            <div className="space-y-4">
-                <div className="space-y-3">
-                    <h4 className="text-sm font-medium mt-2 text-gray-700 flex items-center">
-                        <span className="mr-2">🚁</span> Flight Parameters
-                    </h4>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm text-gray-600 mb-1">Battery (mAh)</label>
+            {/* Input Parameters */}
+            <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-3">
+                    {/* Battery Capacity */}
+                    <div>
+                        <label className="block text-xs text-gray-600 mb-1">Battery Capacity</label>
+                        <div className="flex items-center">
                             <input
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                className="w-full px-2 py-1 text-sm border border-gray-300 rounded-l"
                                 type="number"
                                 value={config.batteryCapacity}
                                 onChange={handleInputChange('batteryCapacity')}
                                 placeholder="28000"
                             />
+                            <span className="px-2 py-1 text-xs bg-gray-100 border border-l-0 border-gray-300 rounded-r text-gray-600">
+                                mAh
+                            </span>
                         </div>
-                        <div>
-                            <label className="block text-sm text-gray-600 mb-1">Discharge Rate</label>
+                    </div>
+
+                    {/* Battery Reserve */}
+                    <div>
+                        <label className="block text-xs text-gray-600 mb-1">Battery Reserve</label>
+                        <div className="flex items-center">
                             <input
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                                type="number"
-                                value={config.dischargeRate}
-                                onChange={handleInputChange('dischargeRate')}
-                                placeholder="700"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm text-gray-600 mb-1">Battery Reserve Required (%)</label>
-                            <input
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                className="w-full px-2 py-1 text-sm border border-gray-300 rounded-l"
                                 type="number"
                                 value={config.batteryReserveReq}
                                 onChange={handleInputChange('batteryReserveReq')}
@@ -55,86 +53,123 @@ const Calculator: React.FC = () => {
                                 min="0"
                                 max="100"
                             />
+                            <span className="px-2 py-1 text-xs bg-gray-100 border border-l-0 border-gray-300 rounded-r text-gray-600">
+                                %
+                            </span>
                         </div>
                     </div>
-                    <div className="flex items-center justify-between p-2 rounded-lg bg-gray-50">
-                        <span className="text-sm text-gray-600">Assumed Speed</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                    {/* Discharge Rate */}
+                    <div>
+                        <label className="block text-xs text-gray-600 mb-1">Discharge Rate</label>
+                        <div className="flex items-center">
+                            <input
+                                className="w-full px-2 py-1 text-sm border border-gray-300 rounded-l"
+                                type="number"
+                                value={config.dischargeRate}
+                                onChange={handleInputChange('dischargeRate')}
+                                placeholder="700"
+                            />
+                            <span className="px-2 py-1 text-xs bg-gray-100 border border-l-0 border-gray-300 rounded-r text-gray-600">
+                                mA
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Assumed Speed */}
+                    <div>
+                        <label className="block text-xs text-gray-600 mb-1">Cruise Speed</label>
                         <div className="flex items-center">
                             <input
                                 type="number"
-                                className="w-20 px-2 py-1 border border-gray-300 rounded-lg text-sm"
+                                className="w-full px-2 py-1 text-sm border border-gray-300 rounded-l"
                                 value={config.assumedSpeed}
                                 onChange={handleInputChange('assumedSpeed')}
                             />
-                            <span className="text-sm font-medium text-gray-800 ml-2">km/h</span>
+                            <span className="px-2 py-1 text-xs bg-gray-100 border border-l-0 border-gray-300 rounded-r text-gray-600">
+                                km/h
+                            </span>
                         </div>
                     </div>
                 </div>
             </div>
 
-            
-            {/* Results Section */}
-            <div className="space-y-4">
-                <h2 className="text-md font-medium text-gray-700 mt-2 flex items-center">
-                    <span className="mr-2">📊</span> Flight Analysis
-                </h2>
-                {/* Status Indicator */}
-                <div className={`mt-2 p-3 rounded-lg ${metrics.isFeasible ? 'bg-green-100' : 'bg-red-100'}`}>
-                    <div className="flex items-center">
-                        <span className="mr-2 text-lg">{metrics.isFeasible ? '✓' : '✗'}</span>
-                        <p className={`text-sm ${metrics.isFeasible ? 'text-green-700' : 'text-red-700'}`}>
-                            {metrics.isFeasible 
-                                ? 'Flight plan within available battery capacity'
-                                : 'Flight plan exceeds available battery capacity'}
-                        </p>
+            {/* Status Indicator */}
+            <div className={`mt-4 px-3 py-2 rounded ${
+                metrics.isFeasible 
+                    ? 'bg-green-100 border border-green-200' 
+                    : 'bg-red-100 border border-red-200'
+            }`}>
+                <div className="flex items-center">
+                    <span className="text-sm mr-2">{metrics.isFeasible ? '✓' : '⚠️'}</span>
+                    <p className={`text-xs font-medium ${
+                        metrics.isFeasible ? 'text-green-800' : 'text-red-800'
+                    }`}>
+                        {metrics.isFeasible 
+                            ? 'Flight plan within battery capacity'
+                            : 'Flight plan exceeds battery capacity'}
+                    </p>
+                </div>
+            </div>
+
+            {/* Results Grid */}
+            <div className="space-y-3 mt-4">
+                {/* Time Metrics */}
+                <div>
+                    <h5 className="text-xs font-medium text-gray-700 mb-2">Time Analysis</h5>
+                    <div className="grid grid-cols-2 gap-2">
+                        <div className="p-2 bg-blue-50 rounded border border-blue-100">
+                            <p className="text-xs text-blue-600">Available Time</p>
+                            <p className="text-sm font-medium text-blue-700">{metrics.flightTime}</p>
+                        </div>
+                        <div className="p-2 bg-indigo-50 rounded border border-indigo-100">
+                            <p className="text-xs text-indigo-600">Est. Flight Time</p>
+                            <p className="text-sm font-medium text-indigo-700">{metrics.flightPlanEstimatedTime}</p>
+                        </div>
                     </div>
                 </div>
 
-                {/* Battery & Timing Metrics */}
-                <h5 className="text-sm font-medium text-gray-700 mt-4">🔋 Battery & Timing Metrics</h5>
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="p-3 bg-blue-50 rounded-lg">
-                        <p className="text-xs text-gray-600 mb-1">Available Flight Time</p>
-                        <p className="font-semibold text-blue-600">{metrics.flightTime}</p>
-                    </div>
-                    <div className="p-3 bg-indigo-50 rounded-lg">
-                        <p className="text-xs text-gray-600 mb-1">Flight Plan Est. Time</p>
-                        <p className="font-semibold text-indigo-600">{metrics.flightPlanEstimatedTime}</p>
-                    </div>
-                    <div className="p-3 bg-green-50 rounded-lg">
-                        <p className="text-xs text-gray-600 mb-1">Endurance Remaining</p>
-                        <p className="font-semibold text-green-600">{metrics.remainingTime}</p>
-                    </div>
-
-                    <div className="p-3 bg-indigo-50 rounded-lg">
-                        <p className="text-xs text-gray-600 mb-1">Expected Battery Consumption</p>
-                        <p className="font-semibold text-indigo-600">{metrics.expectedBatteryConsumption} mAh</p>
-                    </div>
-                    <div className="p-3 bg-yellow-50 rounded-lg col-span-2">
-                        <p className="text-xs text-gray-600 mb-1">Battery Reserve Amount</p>
-                        <p className="font-semibold text-yellow-600">
-                            {config.batteryReserveReq}% ({(parseFloat(config.batteryCapacity) * (parseFloat(config.batteryReserveReq) / 100)).toFixed(0)} mAh)
-                        </p>
+                {/* Battery Metrics */}
+                <div>
+                    <h5 className="text-xs font-medium text-gray-700 mb-2">Battery Analysis</h5>
+                    <div className="grid grid-cols-2 gap-2">
+                        <div className={`p-2 rounded border ${
+                            metrics.isFeasible 
+                                ? 'bg-green-50 border-green-100' 
+                                : 'bg-red-50 border-red-100'
+                        }`}>
+                            <p className={`text-xs ${
+                                metrics.isFeasible ? 'text-green-600' : 'text-red-600'
+                            }`}>Expected Usage</p>
+                            <p className={`text-sm font-medium ${
+                                metrics.isFeasible ? 'text-green-700' : 'text-red-700'
+                            }`}>{metrics.expectedBatteryConsumption} mAh</p>
+                        </div>
+                        <div className="p-2 bg-yellow-50 rounded border border-yellow-100">
+                            <p className="text-xs text-yellow-600">Reserve Amount</p>
+                            <p className="text-sm font-medium text-yellow-700">
+                                {(parseFloat(config.batteryCapacity) * (parseFloat(config.batteryReserveReq) / 100)).toFixed(0)} mAh
+                            </p>
+                        </div>
                     </div>
                 </div>
 
-                {/* Flight Plan Metrics */}
-                <h5 className="text-sm font-medium text-gray-700 mt-4">🗺️ Flight Plan Metrics</h5>
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="p-3 bg-blue-50 rounded-lg">
-                        <p className="text-xs text-gray-600 mb-1">Est Max Distance Avail</p>
-                        <p className="font-semibold text-blue-600">{metrics.maxDistance.toFixed(2)} km</p>
-                    </div>
-                    <div className="p-3 bg-teal-50 rounded-lg">
-                        <p className="text-xs text-gray-600 mb-1">Number of Waypoints</p>
-                        <p className="font-semibold text-teal-600">{metrics.numberOfWaypoints}</p>
-                    </div>
-                    <div className="p-3 bg-teal-50 rounded-lg col-span-2">
-                        <p className="text-xs text-gray-600 mb-1">Main Segment Altitude Mode</p>
-                        <p className="font-semibold text-teal-600">{metrics.mainAltitudeMode}</p>
+                {/* Flight Metrics */}
+                <div>
+                    <h5 className="text-xs font-medium text-gray-700 mb-2">Flight Details</h5>
+                    <div className="grid grid-cols-2 gap-2">
+                        <div className="p-2 bg-cyan-50 rounded border border-cyan-100">
+                            <p className="text-xs text-cyan-600">Max Range</p>
+                            <p className="text-sm font-medium text-cyan-700">{metrics.maxDistance.toFixed(2)} km</p>
+                        </div>
+                        <div className="p-2 bg-purple-50 rounded border border-purple-100">
+                            <p className="text-xs text-purple-600">Waypoints</p>
+                            <p className="text-sm font-medium text-purple-700">{metrics.numberOfWaypoints}</p>
+                        </div>
                     </div>
                 </div>
-            </div>  
+            </div>
         </div>
     );
 };

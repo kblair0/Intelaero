@@ -6,7 +6,18 @@ import { LocationData } from "../components/Map";
 import { MapRef } from "./Map";
 import { useFlightPlanContext } from "../context/FlightPlanContext";
 import { layerManager, MAP_LAYERS } from "./LayerManager";
-import { checkStationToStationLOS, StationLOSResult } from "./StationLOSAnalysis";
+// Import both the LOS check and the new profile function and types.
+import { 
+  checkStationToStationLOS, 
+  getLOSProfile, 
+  LOSProfilePoint, 
+  StationLOSResult 
+} from "./StationLOSAnalysis";
+
+// Import chart components
+import { Line } from "react-chartjs-2";
+import { Chart, registerables } from "chart.js";
+Chart.register(...registerables);
 
 interface ELOSAnalysisCardProps {
   mapRef: React.RefObject<MapRef>;
@@ -66,6 +77,11 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
     [MAP_LAYERS.OBSERVER_GRID]: true,
     [MAP_LAYERS.REPEATER_GRID]: true,
   });
+
+  // State for the LOS profile data (for the graph)
+  const [losProfileData, setLosProfileData] = useState<LOSProfilePoint[] | null>(null);
+  const [isGraphEnlarged, setIsGraphEnlarged] = useState(false);
+
 
   // Toggle function for layers
   const toggleLayerVisibility = (layerId: string) => {
@@ -152,8 +168,8 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
     repeater: repeaterLocation
   };
 
-    // Get available stations (ones that have been placed on the map)
-    const availableStations = Object.entries(stationLocations)
+  // Get available stations (ones that have been placed on the map)
+  const availableStations = Object.entries(stationLocations)
     .filter(([_, location]) => location !== null)
     .map(([type]) => type as "gcs" | "observer" | "repeater");
 
@@ -247,7 +263,78 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
       setStationLOSResult(null);
     }
   };
+
+  // New handler for showing the LOS profile graph.
+  const handleShowLOSGraph = async () => {
+    if (!mapRef.current) {
+      setError("Map not initialized");
+      return;
+    }
+    const map = mapRef.current.getMap();
+    if (!map) {
+      setError("Map instance not available");
+      return;
+    }
+    const source = stationLocations[sourceStation];
+    const target = stationLocations[targetStation];
   
+    if (!source || !target) {
+      setError(
+        `Both ${sourceStation.toUpperCase()} and ${targetStation.toUpperCase()} locations must be set.`
+      );
+      return;
+    }
+  
+    const sourceOffset = markerConfigs[sourceStation].elevationOffset;
+    const targetOffset = markerConfigs[targetStation].elevationOffset;
+  
+    const effective1: [number, number, number] = [
+      source.lng,
+      source.lat,
+      (source.elevation || 0) + sourceOffset,
+    ];
+    const effective2: [number, number, number] = [
+      target.lng,
+      target.lat,
+      (target.elevation || 0) + targetOffset,
+    ];
+  
+    // Re-use the same boundTerrainQuery function as before.
+    const boundTerrainQuery = async (
+      coords: [number, number]
+    ): Promise<number> => {
+      if (!map) return 0;
+      if (!map.isSourceLoaded("mapbox-dem")) {
+        await new Promise<void>((resolve) => {
+          const checkSource = () => {
+            if (map.isSourceLoaded("mapbox-dem")) {
+              resolve();
+            } else {
+              map.once("sourcedata", checkSource);
+            }
+          };
+          checkSource();
+        });
+      }
+      const elevation = map.queryTerrainElevation(coords);
+      return elevation ?? 0;
+    };
+  
+    try {
+      // Generate the LOS profile data (an array of LOSProfilePoint)
+      const profile = await getLOSProfile(effective1, effective2, boundTerrainQuery);
+      setLosProfileData(profile);
+      setError(null);
+      // **Open the modal by setting the state to true**
+      setIsGraphEnlarged(true);
+    } catch (error: any) {
+      console.error("[LOS Graph] Error generating profile:", error);
+      setError(error.message || "Failed to generate LOS profile");
+      setLosProfileData(null);
+    }
+  };
+  
+
   // Get station emoji and name
   const getStationDisplay = (stationType: "gcs" | "observer" | "repeater") => {
     const emojis = {
@@ -262,7 +349,7 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
     };
     return { emoji: emojis[stationType], name: names[stationType] };
   };
-  
+
   // Modified station-to-station LOS UI section
   const renderStationToStationUI = () => {
     if (availableStations.length < 2) {
@@ -278,65 +365,34 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
         </div>
       );
     }
-  
+
     return (
       <div className="space-y-3">
-        <div className="flex flex-row gap-4 items-center">
-          <div className="flex-1">
-            <label className="block text-xs text-gray-600 mb-1">Source Station</label>
-            <select
-              value={sourceStation}
-              onChange={(e) =>
-                setSourceStation(e.target.value as "gcs" | "observer" | "repeater")
-              }
-              className="w-full p-2 border rounded text-sm"
+        <div className="flex flex-row gap-4">
+          <button
+            onClick={handleStationLOSCheck}
+            className={`${
+              stationLOSResult ? "flex-1" : "w-full"
+            } py-2 bg-purple-500 text-white text-sm rounded hover:bg-purple-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed`}
+            disabled={
+              !stationLocations[sourceStation] ||
+              !stationLocations[targetStation] ||
+              sourceStation === targetStation
+            }
+          >
+            Check Station-to-Station LOS
+          </button>
+
+          {stationLOSResult && (
+            <button
+              onClick={handleShowLOSGraph}
+              className="flex-1 py-2 bg-indigo-500 text-white text-sm rounded hover:bg-indigo-600 transition-colors"
             >
-              {availableStations.map((station) => {
-                const { emoji, name } = getStationDisplay(station);
-                return (
-                  <option key={station} value={station}>
-                    {emoji} {name}
-                  </option>
-                );
-              })}
-            </select>
-          </div>
-  
-          <div className="flex-1">
-            <label className="block text-xs text-gray-600 mb-1">Target Station</label>
-            <select
-              value={targetStation}
-              onChange={(e) =>
-                setTargetStation(e.target.value as "gcs" | "observer" | "repeater")
-              }
-              className="w-full p-2 border rounded text-sm"
-            >
-              {availableStations
-                .filter((station) => station !== sourceStation)
-                .map((station) => {
-                  const { emoji, name } = getStationDisplay(station);
-                  return (
-                    <option key={station} value={station}>
-                      {emoji} {name}
-                    </option>
-                  );
-                })}
-            </select>
-          </div>
+              Show LOS Graph
+            </button>
+          )}
         </div>
-  
-        <button
-          onClick={handleStationLOSCheck}
-          className="w-full py-2 bg-purple-500 text-white text-sm rounded hover:bg-purple-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
-          disabled={
-            !stationLocations[sourceStation] ||
-            !stationLocations[targetStation] ||
-            sourceStation === targetStation
-          }
-        >
-          Check Station-to-Station LOS
-        </button>
-  
+
         {stationLOSResult && (
           <div
             className={`p-3 rounded ${
@@ -365,6 +421,64 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
       </div>
     );
   };
+
+  // Prepare chart data if losProfileData exists.
+  const chartData = losProfileData
+  ? {
+      labels: losProfileData.map((pt) => pt.distance.toFixed(0)),
+      datasets: [
+        {
+          label: "Terrain Elevation",
+          data: losProfileData.map((pt) => pt.terrain),
+          borderColor: "rgba(75,192,192,1)",
+          backgroundColor: "rgba(75,192,192,0.4)",
+          fill: true,
+          borderWidth: 1,
+          tension: 0.1,
+          pointRadius: 0,
+        },
+        {
+          label: "LOS Altitude",
+          data: losProfileData.map((pt) => pt.los),
+          borderColor: "rgba(255,99,132,1)",
+          backgroundColor: "rgba(255,99,132,0.2)",
+          fill: false,
+          borderWidth: 1,
+          tension: 0.1,
+          pointRadius: 0,
+        },
+      ],
+    }
+  : null;
+
+const chartOptions = {
+  responsive: true,
+  plugins: {
+    title: {
+      display: true,
+      text: "Station-to-Station LOS Profile",
+    },
+    tooltip: {
+      mode: "index" as const,
+      intersect: false,
+    },
+  },
+  scales: {
+    x: {
+      title: {
+        display: true,
+        text: "Distance (m)",
+      },
+    },
+    y: {
+      title: {
+        display: true,
+        text: "Altitude (m)",
+      },
+    },
+  },
+};
+
 
   return (
     <>
@@ -760,19 +874,6 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
               >
                 Analyze
               </button>
-
-              <div className="space-y-3 mt-4">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs text-gray-600">
-                    Select Point-Point LOS Target:
-                  </label>
-                  <select className="w-32 px-2 py-1 text-xs border rounded">
-                    <option value="option1">Option 1</option>
-                    <option value="option2">Option 2</option>
-                    <option value="option3">Option 3</option>
-                  </select>
-                </div>
-              </div>
             </div>
           )}
 
@@ -805,12 +906,34 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
         </div>
       </div>
 
+      {/* Station-to-Station LOS Section */}
       <div className="mt-6 p-4 bg-gray-50 rounded">
         <h3 className="text-lg font-semibold mb-4">
           Station-to-Station Line of Sight
         </h3>
         {renderStationToStationUI()}
       </div>
+
+      {/* Modal for the LOS Profile Chart (only shown when user clicks "Show LOS Graph") */}
+      {isGraphEnlarged && losProfileData && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-50"
+          onClick={() => setIsGraphEnlarged(false)} // Close modal when clicking outside
+        >
+          <div
+            className="bg-white p-4 rounded relative max-w-4xl w-full"
+            onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside modal
+          >
+            <button
+              onClick={() => setIsGraphEnlarged(false)}
+              className="absolute top-2 right-2 text-gray-700 font-bold text-xl focus:outline-none"
+            >
+              &times;
+            </button>
+            <Line data={chartData!} options={chartOptions} />
+          </div>
+        </div>
+      )}
     </>
   );
 };

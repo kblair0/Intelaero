@@ -1,4 +1,3 @@
-// StationLOSAnalysis.ts
 import * as turf from '@turf/turf';
 import mapboxgl from 'mapbox-gl';
 
@@ -10,6 +9,13 @@ export interface StationLOSResult {
   clear: boolean;                   
   obstructionFraction?: number;     
   obstructionDistance?: number;     
+}
+
+// New type for LOS profile data
+export interface LOSProfilePoint {
+  distance: number; // meters along the LOS line
+  terrain: number;  // terrain elevation at that point (m)
+  los: number;      // ideal LOS altitude at that point (m)
 }
 
 /**
@@ -66,4 +72,43 @@ export async function checkStationToStationLOS(
 
   console.log("[LOS Check] LOS is clear between the two stations.");
   return { clear: true };
+}
+
+/**
+ * Generates LOS profile data along the line between two stations.
+ *
+ * @param station1 - Effective 3D coordinates [lng, lat, altitude] for the first station.
+ * @param station2 - Effective 3D coordinates [lng, lat, altitude] for the second station.
+ * @param queryTerrainElevation - Function returning a Promise<number> for given [lng, lat].
+ * @param sampleInterval - Distance between samples (default: 10m).
+ *
+ * @returns A promise that resolves with an array of LOSProfilePoint.
+ */
+export async function getLOSProfile(
+  station1: Coordinates3D,
+  station2: Coordinates3D,
+  queryTerrainElevation: (coords: Coordinates2D) => Promise<number>,
+  sampleInterval: number = 10
+): Promise<LOSProfilePoint[]> {
+  const MINIMUM_OFFSET = 3;
+  const point1 = turf.point([station1[0], station1[1]]);
+  const point2 = turf.point([station2[0], station2[1]]);
+  const totalDistance = turf.distance(point1, point2, { units: 'meters' });
+  const sampleCount = Math.ceil(totalDistance / sampleInterval);
+  const profile: LOSProfilePoint[] = [];
+
+  for (let i = 0; i <= sampleCount; i++) {
+    const fraction = i / sampleCount;
+    const lng = station1[0] + fraction * (station2[0] - station1[0]);
+    const lat = station1[1] + fraction * (station2[1] - station1[1]);
+    const losAltitude = station1[2] - ((station1[2] - (station2[2] + MINIMUM_OFFSET)) * fraction);
+    const terrain = await queryTerrainElevation([lng, lat]);
+
+    profile.push({
+      distance: fraction * totalDistance,
+      terrain,
+      los: losAltitude,
+    });
+  }
+  return profile;
 }
