@@ -50,8 +50,19 @@ interface AnalysisOptions {
 }
 
 export interface ELOSGridAnalysisRef {
-  runAnalysis: () => Promise<void>;
+  runAnalysis: (options?: {
+    markerOptions?: MarkerAnalysisOptions;
+  }) => Promise<void>;
+  runMergedAnalysis: (options: MergedAnalysisOptions) => Promise<AnalysisResults>;
   isAnalyzing: boolean;
+}
+
+interface MergedAnalysisOptions {
+  stations: Array<{
+    type: 'gcs' | 'observer' | 'repeater';
+    location: LocationData;
+    config: MarkerConfig;
+  }>;
 }
 
 // Utility function for generating points along a LineString
@@ -614,6 +625,264 @@ const ELOSGridAnalysis = forwardRef<ELOSGridAnalysisRef, Props>((props, ref) => 
     [map, elosGridRange, layerManager]
   );
   
+    //Merged Analysis
+/**
+ * Generates a bounding box that encompasses all station analysis areas
+ */
+const generateCombinedBoundingBox = (
+  stations: Array<{ location: LocationData; range: number }>
+): turf.BBox => {
+  if (!stations.length) {
+    throw new Error('No stations provided for analysis');
+  }
+
+  // For each station, create a buffer (circle) and extract its bbox.
+  const bboxes = stations.map((station) => {
+    const point = turf.point([station.location.lng, station.location.lat]);
+    // Create a circular area using the station’s analysis range.
+    const buffer = turf.buffer(point, station.range, { units: 'meters' });
+    return turf.bbox(buffer); // returns [minLng, minLat, maxLng, maxLat]
+  });
+
+  // Combine the individual bboxes.
+  let combinedBbox: turf.BBox = [180, 90, -180, -90];
+  bboxes.forEach((bbox) => {
+    combinedBbox[0] = Math.min(combinedBbox[0], bbox[0]);
+    combinedBbox[1] = Math.min(combinedBbox[1], bbox[1]);
+    combinedBbox[2] = Math.max(combinedBbox[2], bbox[2]);
+    combinedBbox[3] = Math.max(combinedBbox[3], bbox[3]);
+  });
+
+  // Calculate horizontal distance (east-west) and vertical distance (north-south)
+  const horizontalDistance = turf.distance(
+    [combinedBbox[0], combinedBbox[1]],
+    [combinedBbox[2], combinedBbox[1]],
+    { units: 'meters' }
+  );
+  const verticalDistance = turf.distance(
+    [combinedBbox[0], combinedBbox[1]],
+    [combinedBbox[0], combinedBbox[3]],
+    { units: 'meters' }
+  );
+
+  // Compute the center of the combined bbox.
+  const centerLng = (combinedBbox[0] + combinedBbox[2]) / 2;
+  const centerLat = (combinedBbox[1] + combinedBbox[3]) / 2;
+  const center = [centerLng, centerLat];
+
+  // If the horizontal distance is greater than 5000 m, clamp it.
+  if (horizontalDistance > 5000) {
+    // 2500 m to the west and 2500 m to the east from the center.
+    const westPoint = turf.destination(center, 2500, 270, { units: 'meters' });
+    const eastPoint = turf.destination(center, 2500, 90, { units: 'meters' });
+    combinedBbox[0] = westPoint.geometry.coordinates[0];
+    combinedBbox[2] = eastPoint.geometry.coordinates[0];
+  }
+
+  // If the vertical distance is greater than 5000 m, clamp it.
+  if (verticalDistance > 5000) {
+    // 2500 m to the south and 2500 m to the north from the center.
+    const southPoint = turf.destination(center, 2500, 180, { units: 'meters' });
+    const northPoint = turf.destination(center, 2500, 0, { units: 'meters' });
+    combinedBbox[1] = southPoint.geometry.coordinates[1];
+    combinedBbox[3] = northPoint.geometry.coordinates[1];
+  }
+
+  return combinedBbox;
+};
+
+/**
+ * Computes visibility for each cell from all stations
+ */
+const computeMergedVisibility = async (
+  cells: GridCell[],
+  stations: Array<{
+    location: LocationData;
+    elevation: number;
+    range: number;
+  }>,
+  abortSignal?: AbortSignal
+): Promise<GridCell[]> => {
+  const chunkSize = 50; // Process cells in chunks for better performance
+  const results: GridCell[] = [];
+
+  for (let i = 0; i < cells.length; i += chunkSize) {
+    if (abortSignal?.aborted) {
+      throw new Error('Analysis aborted');
+    }
+
+    const chunk = cells.slice(i, i + chunkSize);
+    const processedChunk = await Promise.all(
+      chunk.map(async (cell) => {
+        try {
+          const center = turf.center(cell.geometry);
+          const stationVisibilities = await Promise.all(
+            stations.map(async station => {
+              // Check if cell is within station range
+              const distance = turf.distance(
+                [station.location.lng, station.location.lat],
+                center.geometry.coordinates,
+                { units: 'meters' }
+              );
+
+              if (distance > station.range) return 0;
+
+              const visible = await checkLineOfSight(
+                [station.location.lng, station.location.lat, station.elevation],
+                [...center.geometry.coordinates, cell.properties.elevation ?? 0] as [number, number, number]
+              );
+
+              return visible ? 100 : 0;
+            })
+          );
+
+          // Use maximum visibility from any station
+          const maxVisibility = Math.max(...stationVisibilities);
+
+          return {
+            ...cell,
+            properties: {
+              ...cell.properties,
+              visibility: maxVisibility,
+              fullyVisible: maxVisibility === 100
+            }
+          };
+        } catch (error) {
+          console.error('Error processing cell visibility:', error);
+          throw error;
+        }
+      })
+    );
+
+    results.push(...processedChunk);
+  }
+
+  return results;
+};
+
+/**
+ * Generates a unified grid for merged analysis.
+ * It computes a combined bounding box from the given stations (each with a location and analysis range)
+ * and then creates a point grid (with circular cells) over that box.
+ *
+ * @param gridSize The spacing (in meters) for the grid.
+ * @param stations An array of station objects containing a location and a range.
+ * @returns A promise that resolves to an array of GridCell objects.
+ */
+const generateUnifiedGrid = async (
+  gridSize: number,
+  stations: Array<{ location: LocationData; range: number }>
+): Promise<GridCell[]> => {
+  // Compute the combined bounding box using our helper:
+  const combinedBbox = generateCombinedBoundingBox(stations);
+  console.log('Combined bounding box:', combinedBbox);
+
+  // Generate grid points over the combined bounding box.
+  const grid = turf.pointGrid(combinedBbox, gridSize, { units: 'meters' });
+  console.log('Generated grid features:', grid.features.length);
+
+  // Process each grid point into a circular cell with elevation data.
+  const cells: GridCell[] = await Promise.all(
+    grid.features.map(async (point, index) => {
+      try {
+        // Create a circular cell (polygon) centered at the grid point.
+        const cellPolygon = turf.circle(point.geometry.coordinates, gridSize / 2, {
+          units: 'meters',
+          steps: 4,
+        });
+
+        // Retrieve elevation for the grid point.
+        const elevation = await getTerrainElevation(point.geometry.coordinates as Coordinates2D)
+          .catch(e => {
+            console.warn('Elevation fetch error:', e);
+            return 0;
+          });
+
+        return {
+          id: `merged-cell-${index}`,
+          geometry: cellPolygon.geometry as GeoJSON.Polygon,
+          properties: {
+            visibility: 0,
+            fullyVisible: false,
+            elevation,
+            lastAnalyzed: Date.now(),
+          },
+        } as GridCell;
+      } catch (error) {
+        console.error('Error processing grid cell:', error);
+        throw error;
+      }
+    })
+  );
+
+  return cells;
+};
+
+
+  /**
+ * Main merged analysis function
+ */
+/**
+ * Main merged analysis function.
+ * Combines the analysis for all stations by generating a unified grid over the combined bounding box
+ * and then computing the visibility for each cell.
+ */
+const runMergedAnalysis = useCallback(async (
+  options: MergedAnalysisOptions
+): Promise<AnalysisResults> => {
+  const startTime = performance.now();
+
+  try {
+    // Validate input.
+    if (options.stations.length < 2) {
+      throw new Error('At least two stations are required for merged analysis');
+    }
+
+    // Instead of generating bounds externally, call generateUnifiedGrid directly.
+    const grid = await generateUnifiedGrid(
+      gridSize,
+      options.stations.map(s => ({
+        location: s.location,
+        range: elosGridRange
+      }))
+    );
+
+    // Compute merged visibility on the grid.
+    const mergedCells = await computeMergedVisibility(
+      grid,
+      options.stations.map(s => ({
+        location: s.location,
+        elevation: (s.location.elevation ?? 0) + s.config.elevationOffset,
+        range: elosGridRange
+      })),
+      abortControllerRef.current?.signal
+    );
+
+    // Calculate statistics.
+    const visibleCells = mergedCells.filter(cell => cell.properties.fullyVisible).length;
+    const totalVisibility = mergedCells.reduce((sum, cell) => sum + cell.properties.visibility, 0);
+
+    const results = {
+      cells: mergedCells,
+      stats: {
+        totalCells: mergedCells.length,
+        visibleCells,
+        averageVisibility: totalVisibility / mergedCells.length,
+        analysisTime: performance.now() - startTime
+      }
+    };
+
+    // Visualize results.
+    await visualizeGrid(results, MAP_LAYERS.MERGED_VISIBILITY);
+
+    return results;
+
+  } catch (error) {
+    console.error('Error in merged analysis:', error);
+    throw error;
+  }
+}, [gridSize, computeMergedVisibility, visualizeGrid]);
+
   
   
   
@@ -673,9 +942,6 @@ const ELOSGridAnalysis = forwardRef<ELOSGridAnalysisRef, Props>((props, ref) => 
       },
     };
   }, [checkLineOfSight, markerConfigs]);
-
-  
-  
 
   // Main analysis function
   const runAnalysis = useCallback(async (options?: AnalysisOptions) => {
@@ -795,15 +1061,33 @@ const ELOSGridAnalysis = forwardRef<ELOSGridAnalysisRef, Props>((props, ref) => 
     onSuccess,
     onError
 ]);
-  
 
   // Expose run analysis method
   useImperativeHandle(ref, () => ({
     runAnalysis,
     isAnalyzing
   }), [runAnalysis, isAnalyzing]);
+  
+  // This needs to be SEPARATE from runMergedAnalysis, at the same level as other hooks
+  useImperativeHandle(ref, () => ({
+    runAnalysis,
+    runMergedAnalysis,
+    isAnalyzing
+  }), [
+    runAnalysis,
+    runMergedAnalysis,
+    isAnalyzing,
+    generateGrid,
+    analyzeVisibility,
+    visualizeGrid,
+    setResults,
+    setError,
+    setIsAnalyzing,
+    onSuccess,
+    onError
+  ]);
 
-  // Cleanup
+  // Cleanup effect should be separate as well
   useEffect(() => {
     return () => {
       if (workerRef.current) {

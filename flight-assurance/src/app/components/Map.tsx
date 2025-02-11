@@ -16,7 +16,7 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import * as turf from "@turf/turf";
 import FlightLogUploader from "./ULGLogUploader";
 import ELOSGridAnalysis from "./ELOSGridAnalysis";
-import { layerManager } from "./LayerManager";
+import { layerManager, MAP_LAYERS } from "./LayerManager";
 
 // Contexts
 import { useLocation } from "../context/LocationContext";
@@ -34,8 +34,8 @@ export interface LocationData {
 
 export interface MapRef {
   addGeoJSONToMap: (geojson: GeoJSON.FeatureCollection) => void;
-  runElosAnalysis: (options?: MarkerAnalysisOptions) => Promise<void>;
-  getMap: () => mapboxgl.Map | null; // To expose the underlying map
+  runElosAnalysis: (options?: MarkerAnalysisOptions | MergedAnalysisOptions) => Promise<void>;
+  getMap: () => mapboxgl.Map | null;
   toggleLayerVisibility: (layerId: string) => void;
 }
 
@@ -51,6 +51,8 @@ interface ELOSGridAnalysisRef {
   runAnalysis: (options?: {
     markerOptions?: MarkerAnalysisOptions;
   }) => Promise<void>;
+  runMergedAnalysis: (options: MergedAnalysisOptions) => Promise<AnalysisResults>;
+  isAnalyzing: boolean;
 }
 
 // Interface for Marker LOS Analysis
@@ -72,6 +74,21 @@ const waitForDEM = (map: mapboxgl.Map): Promise<void> => {
     checkDEM();
   });
 };
+
+interface MarkerAnalysisOptions {
+  markerType: "gcs" | "observer" | "repeater";
+  location: LocationData;
+  range: number;
+}
+
+interface MergedAnalysisOptions {
+  mergedAnalysis: true;
+  stations: Array<{
+    type: 'gcs' | 'observer' | 'repeater';
+    location: LocationData;
+    config: MarkerConfig;
+  }>;
+}
 
 const Map = forwardRef<MapRef, MapProps>(
   (
@@ -468,29 +485,50 @@ const Map = forwardRef<MapRef, MapProps>(
       return layerManager.toggleLayerVisibility(layerId);
     };
 
-    useImperativeHandle(
-      ref,
-      () => ({
-        addGeoJSONToMap,
-        runElosAnalysis: async (options?: MarkerAnalysisOptions) => {
-          // Log map initialization check
-          console.log("Checking map initialization...");
-          if (!mapRef.current) {
-            console.error("Error: Map is not initialized");
-            throw new Error("Map is not initialized");
-          }
-          console.log("Map initialized:", mapRef.current);
-
-          if (elosGridRef.current) {
-            console.log("elosGridRef initialized:", elosGridRef.current);
-
-            if (options) {
-              console.log(
-                "Running marker-based analysis with options:",
-                options
-              );
-
-              // Marker-based analysis
+    useImperativeHandle(ref, () => ({
+      addGeoJSONToMap,
+      runElosAnalysis: async (options?: MarkerAnalysisOptions | MergedAnalysisOptions) => {
+        // Log map initialization check
+        console.log("Checking map initialization...");
+        if (!mapRef.current) {
+          console.error("Error: Map is not initialized");
+          throw new Error("Map is not initialized");
+        }
+        console.log("Map initialized:", mapRef.current);
+    
+        if (elosGridRef.current) {
+          console.log("elosGridRef initialized:", elosGridRef.current);
+          try {
+            if (options && 'mergedAnalysis' in options) {
+              // Merged analysis
+              console.log("Running merged analysis with stations:", options.stations);
+              
+              // Clean up existing merged visibility layer if it exists
+              if (mapRef.current.getLayer(MAP_LAYERS.MERGED_VISIBILITY)) {
+                mapRef.current.removeLayer(MAP_LAYERS.MERGED_VISIBILITY);
+                mapRef.current.removeSource(MAP_LAYERS.MERGED_VISIBILITY);
+              }
+    
+              // Run the merged analysis using the elosGridRef
+              const results = await elosGridRef.current.runMergedAnalysis({
+                stations: options.stations
+              });
+    
+              console.log("Merged analysis complete");
+              return results;
+    
+            } else if (options) {
+              // Single marker analysis
+              console.log("Running marker-based analysis with options:", options);
+              
+              const layerId = `${options.markerType}-grid-layer`;
+              // Clean up existing layer if it exists
+              if (mapRef.current.getLayer(layerId)) {
+                mapRef.current.removeLayer(layerId);
+                mapRef.current.removeSource(layerId);
+              }
+    
+              // Run the analysis
               await elosGridRef.current.runAnalysis({
                 markerOptions: {
                   markerType: options.markerType,
@@ -498,29 +536,35 @@ const Map = forwardRef<MapRef, MapProps>(
                   range: options.range,
                 },
               });
-
+    
               console.log("Marker-based analysis completed");
+    
             } else {
-              console.log("Running flight path analysis (no options)");
-
               // Flight path analysis
+              console.log("Running flight path analysis (no options)");
+              
+              // Clean up existing ELOS grid layer if it exists
+              if (mapRef.current.getLayer(MAP_LAYERS.ELOS_GRID)) {
+                mapRef.current.removeLayer(MAP_LAYERS.ELOS_GRID);
+                mapRef.current.removeSource(MAP_LAYERS.ELOS_GRID);
+              }
+    
               await elosGridRef.current.runAnalysis();
-
               console.log("Flight path analysis completed");
             }
-          } else {
-            console.error("Error: Input elosGridRef is not initialized");
+    
+          } catch (error) {
+            console.error("Analysis error:", error);
+            throw error;
           }
-        },
-        getMap: () => {
-
-          // Return the actual map instance instead of the ref
-          return mapRef.current;
-        },
-        toggleLayerVisibility,
-      }),
-      [addGeoJSONToMap]
-    );
+        } else {
+          console.error("Error: ElosGridRef is not initialized");
+          throw new Error("Analysis component not initialized");
+        }
+      },
+      getMap: () => mapRef.current,
+      toggleLayerVisibility
+    }), [addGeoJSONToMap, toggleLayerVisibility]);
 
     // Map initialization
 
@@ -983,7 +1027,7 @@ const Map = forwardRef<MapRef, MapProps>(
         {/* Map container with the buttons */}
         <div
           ref={mapContainerRef}
-          style={{ height: "100vh", width: "100%", marginBottom: "100px" }}
+          style={{ height: "100vh", width: "100%" }}
           className="relative"
         >
           <div className="absolute top-4 right-4 z-10 flex flex-col space-y-2">

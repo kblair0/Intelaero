@@ -1,3 +1,5 @@
+"use client";
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useCallback, useEffect, useState } from "react";
 import { useLocation } from "../context/LocationContext";
@@ -6,6 +8,7 @@ import { LocationData } from "../components/Map";
 import { MapRef } from "./Map";
 import { useFlightPlanContext } from "../context/FlightPlanContext";
 import { layerManager, MAP_LAYERS } from "./LayerManager";
+import StationCard from "./StationCard";
 import mapboxgl from 'mapbox-gl';
 import * as turf from '@turf/turf';
 // Import both the LOS check and the new profile function and types.
@@ -50,8 +53,8 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
   // Get location data from LocationContext
   const { gcsLocation, observerLocation, repeaterLocation } = useLocation();
   const { flightPlan } = useFlightPlanContext();
-  const isFlightPlanLoaded =
-    flightPlan !== null && Object.keys(flightPlan).length > 0;
+  const isFlightPlanLoaded = flightPlan !== null && Object.keys(flightPlan).length > 0;
+  const [mergedResults, setMergedResults] = useState<AnalysisResults | null>(null);   
 
   // Get analysis state and actions from LOSAnalysisContext
   const {
@@ -78,6 +81,7 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
     [MAP_LAYERS.GCS_GRID]: true,
     [MAP_LAYERS.OBSERVER_GRID]: true,
     [MAP_LAYERS.REPEATER_GRID]: true,
+    [MAP_LAYERS.MERGED_VISIBILITY]: true,
   });
 
   // State for the LOS profile data (for the graph)
@@ -272,6 +276,39 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
       setError(error.message || "Station LOS check failed");
       setStationLOSResult(null);
       removeObstructionSegment(map);
+    }
+  };
+// Merged Analysis
+  const handleMergedAnalysis = async () => {
+    if (!mapRef.current) {
+      setError("Map not initialized");
+      return;
+    }
+  
+    try {
+      setIsAnalyzing(true);
+      setError(null);
+  
+      // Get available stations with their configurations
+      const stations = [
+        { type: 'gcs' as const, location: gcsLocation, config: markerConfigs.gcs },
+        { type: 'observer' as const, location: observerLocation, config: markerConfigs.observer },
+        { type: 'repeater' as const, location: repeaterLocation, config: markerConfigs.repeater }
+      ].filter(s => s.location !== null);
+  
+      // Run merged analysis
+      const results = await mapRef.current.runElosAnalysis({
+        mergedAnalysis: true,
+        stations
+      });
+  
+      setMergedResults(results);
+  
+    } catch (error) {
+      console.error('Merged analysis error:', error);
+      setError(error instanceof Error ? error.message : 'Analysis failed');
+    } finally {
+      setIsAnalyzing(false);
     }
   };
   
@@ -636,6 +673,131 @@ const removeObstructionSegment = (map: mapboxgl.Map): void => {
   }
 };
 
+const renderMergedAnalysisSection = () => {
+  const availableStations = [
+    gcsLocation && 'gcs',
+    observerLocation && 'observer',
+    repeaterLocation && 'repeater'
+  ].filter(Boolean) as Array<'gcs' | 'observer' | 'repeater'>;
+
+  return (
+    <div className="mt-6 p-4 bg-gray-50 rounded">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold">Merged Visibility Analysis</h3>
+        <div className="flex items-center gap-2">
+          <span className="text-xs">Show/Hide</span>
+          <label className="toggle-switch">
+            <input
+              type="checkbox"
+              checked={layerVisibility[MAP_LAYERS.MERGED_VISIBILITY]}
+              onChange={() => toggleLayerVisibility(MAP_LAYERS.MERGED_VISIBILITY)}
+            />
+            <span className="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+
+      {availableStations.length < 2 ? (
+        <div className="p-3 bg-yellow-100 border border-yellow-400 text-sm text-yellow-700 rounded">
+          ⚠️ Place at least two stations on the map to perform merged visibility analysis.
+          {availableStations.length === 1 && (
+            <div className="mt-2">
+              Currently placed: {getStationDisplay(availableStations[0]).emoji}{" "}
+              {getStationDisplay(availableStations[0]).name}
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
+          <div className="mb-4">
+            <p className="text-sm text-gray-600 mb-2">
+              Analyse combined visibility from all placed stations, showing areas visible
+              to at least one station.
+            </p>
+            
+            {/* Grid Range/Size Control */}
+            <div className="flex flex-row gap-4 mt-4">
+              {/* Analysis Range Slider */}
+              <div className="flex-1">
+                <div className="flex justify-between text-sm mb-1">
+                  <span>Analysis Range:</span>
+                  <span>{elosGridRange}m</span>
+                </div>
+                <input
+                  type="range"
+                  min="500"
+                  max="2500"
+                  step="50"
+                  value={elosGridRange}
+                  onChange={(e) => setElosGridRange(Number(e.target.value))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  disabled={isAnalyzing}
+                />
+              </div>
+
+              {/* Grid Size Slider */}
+              <div className="flex-1">
+                <div className="flex justify-between text-sm mb-1">
+                  <span>Grid Size:</span>
+                  <span>{gridSize === 30 ? '30m: SRTM' : `${gridSize}m`}</span>
+                </div>
+                <input
+                  type="range"
+                  min="1"
+                  max="100"
+                  value={gridSize}
+                  onChange={(e) => setGridSize(Number(e.target.value))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                />
+              </div>
+            </div>
+          </div>
+
+
+          {/* Analysis Button */}
+          <button
+            onClick={handleMergedAnalysis}
+            disabled={isAnalyzing}
+            className={`w-full py-2 rounded-lg font-medium transition-colors ${
+              isAnalyzing
+                ? "bg-gray-300 cursor-not-allowed"
+                : "bg-blue-500 hover:bg-blue-600 text-white"
+            }`}
+          >
+            {isAnalyzing ? "Analyzing..." : "Run Merged Analysis"}
+          </button>
+
+          {/* Results Display */}
+          {mergedResults?.stats && (
+            <div className="mt-4 p-4 bg-white rounded shadow-sm">
+              <h4 className="text-sm font-semibold mb-3">Analysis Results</h4>
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <p className="text-xs text-gray-600">Visible Areas</p>
+                  <p className="text-lg font-medium">
+                    {mergedResults.stats.visibleCells}/{mergedResults.stats.totalCells}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600">Average Visibility</p>
+                  <p className="text-lg font-medium">
+                    {mergedResults.stats.averageVisibility.toFixed(1)}%
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600">Analysis Time</p>
+                  <p className="text-lg font-medium">
+                    {(mergedResults.stats.analysisTime / 1000).toFixed(1)}s
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+};
 
   return (
     <>
@@ -666,11 +828,11 @@ const removeObstructionSegment = (map: mapboxgl.Map): void => {
           </div>
 
           {/* Global configuration sliders arranged side by side */}
-          <div className="flex flex-row gap-4">
+          <div className="flex flex-row gap-4 mt-4">
             {/* Grid Range Slider */}
             <div className="flex-1">
               <div className="flex justify-between text-m mb-1">
-                <span>Grid Range:</span>
+                <span>Analysis Range:</span>
                 <span>{elosGridRange}m</span>
               </div>
               <p className="text-xs text-gray-500 mb-2">
@@ -706,6 +868,7 @@ const removeObstructionSegment = (map: mapboxgl.Map): void => {
             </div>
           </div>
 
+
           {!isFlightPlanLoaded && (
             <div className="p-2 bg-yellow-100 text-yellow-700 text-xs rounded mt-2">
               ⚠️ Please load a flight plan before running the analysis.
@@ -729,310 +892,6 @@ const removeObstructionSegment = (map: mapboxgl.Map): void => {
           </p>
         </div>
 
-        {/* Marker Analysis Section */}
-        <div className="space-y-4 mt-6">
-          <h3 className="text-lg font-semibold text-gray-700 border-b mt-2 border-gray-300 pb-2">
-            Station Based Line of Sight Analysis
-          </h3>
-
-          {!gcsLocation && !observerLocation && !repeaterLocation && (
-            <div className="p-3 mb-3 bg-yellow-100 border border-yellow-400 text-sm text-yellow-700 rounded">
-              ⚠️ To unlock 📡GCS Station/🔭Observer Station/⚡️Repeater Station
-              Line of Sight analysis, drop markers on the map.
-            </div>
-          )}
-
-          {/* GCS Section */}
-          {gcsLocation && (
-            <div className="bg-gray-50 p-4 rounded">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-1">
-                  <span>📡</span>
-                  <h4 className="text-sm font-semibold text-blue-600">
-                    GCS Station
-                  </h4>
-                </div>
-                {/* Toggle for GCS Analysis Grid */}
-                <div className="flex flex-row items-center gap-2">
-                  <span className="text-xs">Show/Hide</span>
-                  <label className="toggle-switch">
-                    <input
-                      type="checkbox"
-                      checked={layerVisibility[MAP_LAYERS.GCS_GRID]}
-                      onChange={() => toggleLayerVisibility(MAP_LAYERS.GCS_GRID)}
-                    />
-                    <span className="toggle-slider"></span>
-                  </label>
-                </div>
-              </div>
-
-              <LocationDisplay title="GCS Location" location={gcsLocation} />
-
-              {/* Marker-specific sliders arranged side by side */}
-              <div className="flex flex-row gap-4 mb-4">
-                {/* Marker Grid Range */}
-                <div className="flex-1">
-                  <div className="flex justify-between text-xs mb-1">
-                    <span>Analysis Range:</span>
-                    <span>{markerConfigs.gcs.gridRange}m</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="500"
-                    max="5000"
-                    value={markerConfigs.gcs.gridRange}
-                    onChange={(e) =>
-                      handleMarkerConfigChange(
-                        "gcs",
-                        "gridRange",
-                        Number(e.target.value)
-                      )
-                    }
-                    className="w-full h-2 bg-blue-100 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
-                {/* Marker Grid Size */}
-                <div className="flex-1">
-                  <div className="flex justify-between text-xs mb-1">
-                    <span>Grid Size:</span>
-                    <span>{gridSize}m</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="1"
-                    max="100"
-                    value={gridSize}
-                    onChange={(e) => setGridSize(Number(e.target.value))}
-                    className="w-full h-2 bg-blue-100 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
-              </div>
-
-              {/* Elevation Offset */}
-              <div className="flex items-center justify-between mb-3">
-                <label className="text-xs text-gray-600">
-                  Elevation Offset (m):
-                </label>
-                <input
-                  type="number"
-                  value={markerConfigs.gcs.elevationOffset}
-                  onChange={(e) =>
-                    handleMarkerConfigChange(
-                      "gcs",
-                      "elevationOffset",
-                      Number(e.target.value)
-                    )
-                  }
-                  className="w-20 px-2 py-1 text-xs border rounded"
-                />
-              </div>
-
-              <button
-                onClick={() => handleAnalyzeMarker("gcs")}
-                className="px-3 py-1 bg-blue-500 text-white text-xs rounded hover:opacity-90"
-              >
-                Analyze
-              </button>
-            </div>
-          )}
-
-          {/* Observer Section */}
-          {observerLocation && (
-            <div className="bg-gray-50 p-4 rounded">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-1">
-                  <span>🔭</span>
-                  <h4 className="text-sm font-semibold text-green-600">
-                    Observer Station
-                  </h4>
-                </div>
-                {/* Toggle for Observer Analysis Grid */}
-                <div className="flex flex-row items-center gap-2">
-                  <span className="text-xs">Show/Hide</span>
-                  <label className="toggle-switch">
-                    <input
-                      type="checkbox"
-                      checked={layerVisibility[MAP_LAYERS.OBSERVER_GRID]}
-                      onChange={() =>
-                        toggleLayerVisibility(MAP_LAYERS.OBSERVER_GRID)
-                      }
-                    />
-                    <span className="toggle-slider"></span>
-                  </label>
-                </div>
-              </div>
-
-              <LocationDisplay
-                title="Observer Location"
-                location={observerLocation}
-              />
-
-              {/* Marker-specific sliders arranged side by side */}
-              <div className="flex flex-row gap-4 mb-4">
-                {/* Marker Grid Range */}
-                <div className="flex-1">
-                  <div className="flex justify-between text-xs mb-1">
-                    <span>Analysis Range:</span>
-                    <span>{markerConfigs.observer.gridRange}m</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="500"
-                    max="5000"
-                    value={markerConfigs.observer.gridRange}
-                    onChange={(e) =>
-                      handleMarkerConfigChange(
-                        "observer",
-                        "gridRange",
-                        Number(e.target.value)
-                      )
-                    }
-                    className="w-full h-2 bg-green-100 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
-                {/* Marker Grid Size */}
-                <div className="flex-1">
-                  <div className="flex justify-between text-xs mb-1">
-                    <span>Grid Size:</span>
-                    <span>{gridSize}m</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="1"
-                    max="100"
-                    value={gridSize}
-                    onChange={(e) => setGridSize(Number(e.target.value))}
-                    className="w-full h-2 bg-green-100 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
-              </div>
-
-              {/* Elevation Offset */}
-              <div className="flex items-center justify-between mb-3">
-                <label className="text-xs text-gray-600">
-                  Elevation Offset (m):
-                </label>
-                <input
-                  type="number"
-                  value={markerConfigs.observer.elevationOffset}
-                  onChange={(e) =>
-                    handleMarkerConfigChange(
-                      "observer",
-                      "elevationOffset",
-                      Number(e.target.value)
-                    )
-                  }
-                  className="w-20 px-2 py-1 text-xs border rounded"
-                />
-              </div>
-
-              <button
-                onClick={() => handleAnalyzeMarker("observer")}
-                className="px-3 py-1 bg-green-500 text-white text-xs rounded hover:opacity-90"
-              >
-                Analyze
-              </button>
-            </div>
-          )}
-
-          {/* Repeater Section */}
-          {repeaterLocation && (
-            <div className="bg-gray-50 p-4 rounded">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-1">
-                  <span>⚡️</span>
-                  <h4 className="text-sm font-semibold text-red-600">
-                    Repeater Station
-                  </h4>
-                </div>
-                {/* Toggle for Repeater Analysis Grid */}
-                <div className="flex flex-row items-center gap-2">
-                  <span className="text-xs">Show/Hide</span>
-                  <label className="toggle-switch">
-                    <input
-                      type="checkbox"
-                      checked={layerVisibility[MAP_LAYERS.REPEATER_GRID]}
-                      onChange={() =>
-                        toggleLayerVisibility(MAP_LAYERS.REPEATER_GRID)
-                      }
-                    />
-                    <span className="toggle-slider"></span>
-                  </label>
-                </div>
-              </div>
-
-              <LocationDisplay
-                title="Repeater Location"
-                location={repeaterLocation}
-              />
-
-              {/* Marker-specific sliders arranged side by side */}
-              <div className="flex flex-row gap-4 mb-4">
-                {/* Marker Grid Range */}
-                <div className="flex-1">
-                  <div className="flex justify-between text-xs mb-1">
-                    <span>Analysis Range:</span>
-                    <span>{markerConfigs.repeater.gridRange}m</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="500"
-                    max="5000"
-                    value={markerConfigs.repeater.gridRange}
-                    onChange={(e) =>
-                      handleMarkerConfigChange(
-                        "repeater",
-                        "gridRange",
-                        Number(e.target.value)
-                      )
-                    }
-                    className="w-full h-2 bg-red-100 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
-                {/* Marker Grid Size */}
-                <div className="flex-1">
-                  <div className="flex justify-between text-xs mb-1">
-                    <span>Grid Size:</span>
-                    <span>{gridSize}m</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="1"
-                    max="100"
-                    value={gridSize}
-                    onChange={(e) => setGridSize(Number(e.target.value))}
-                    className="w-full h-2 bg-red-100 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
-              </div>
-
-              {/* Elevation Offset */}
-              <div className="flex items-center justify-between mb-3">
-                <label className="text-xs text-gray-600">
-                  Elevation Offset (m):
-                </label>
-                <input
-                  type="number"
-                  value={markerConfigs.repeater.elevationOffset}
-                  onChange={(e) =>
-                    handleMarkerConfigChange(
-                      "repeater",
-                      "elevationOffset",
-                      Number(e.target.value)
-                    )
-                  }
-                  className="w-20 px-2 py-1 text-xs border rounded"
-                />
-              </div>
-
-              <button
-                onClick={() => handleAnalyzeMarker("repeater")}
-                className="px-3 py-1 bg-red-500 text-white text-xs rounded hover:opacity-90"
-              >
-                Analyze
-              </button>
-            </div>
-          )}
 
           {/* Results Display */}
           {results && results.stats && (
@@ -1060,8 +919,55 @@ const removeObstructionSegment = (map: mapboxgl.Map): void => {
               </div>
             </div>
           )}
+
+        {/* Marker Analysis Section */}
+        <div className="mt-6">
+        <h3 className="text-lg font-semibold mb-4">Station Based LOS Analysis</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {gcsLocation && (
+            <StationCard
+              stationType="gcs"
+              location={gcsLocation}
+              markerConfig={markerConfigs.gcs}
+              onChangeConfig={(field, value) =>
+                setMarkerConfig("gcs", { [field]: value })
+              }
+              onAnalyze={() => handleAnalyzeMarker("gcs")}
+              layerVisibility={layerVisibility[MAP_LAYERS.GCS_GRID]}
+              toggleLayerVisibility={() => toggleLayerVisibility(MAP_LAYERS.GCS_GRID)}
+            />
+          )}
+          {observerLocation && (
+            <StationCard
+              stationType="observer"
+              location={observerLocation}
+              markerConfig={markerConfigs.observer}
+              onChangeConfig={(field, value) =>
+                setMarkerConfig("observer", { [field]: value })
+              }
+              onAnalyze={() => handleAnalyzeMarker("observer")}
+              layerVisibility={layerVisibility[MAP_LAYERS.OBSERVER_GRID]}
+              toggleLayerVisibility={() => toggleLayerVisibility(MAP_LAYERS.OBSERVER_GRID)}
+            />
+          )}
+          {repeaterLocation && (
+            <StationCard
+              stationType="repeater"
+              location={repeaterLocation}
+              markerConfig={markerConfigs.repeater}
+              onChangeConfig={(field, value) =>
+                setMarkerConfig("repeater", { [field]: value })
+              }
+              onAnalyze={() => handleAnalyzeMarker("repeater")}
+              layerVisibility={layerVisibility[MAP_LAYERS.REPEATER_GRID]}
+              toggleLayerVisibility={() => toggleLayerVisibility(MAP_LAYERS.REPEATER_GRID)}
+            />
+          )}
         </div>
       </div>
+
+      {/* Merged Analysis Section */}
+      {renderMergedAnalysisSection()}
 
       {/* Station-to-Station LOS Section */}
       <div className="mt-6 p-4 bg-gray-50 rounded">
@@ -1071,7 +977,7 @@ const removeObstructionSegment = (map: mapboxgl.Map): void => {
         {renderStationToStationUI()}
       </div>
 
-      {/* Modal for the LOS Profile Chart (only shown when user clicks "Show LOS Graph") */}
+      {/* LOS Profile Chart Modal (only shown when active) */}
       {isGraphEnlarged && losProfileData && (
         <div
           className="fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-50"
@@ -1091,6 +997,7 @@ const removeObstructionSegment = (map: mapboxgl.Map): void => {
           </div>
         </div>
       )}
+    </div>
     </>
   );
 };

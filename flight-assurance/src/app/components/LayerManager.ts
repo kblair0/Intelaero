@@ -7,7 +7,8 @@ export const MAP_LAYERS = {
   TERRAIN: 'terrain-layer',
   GCS_GRID: 'gcs-grid-layer',
   OBSERVER_GRID: 'observer-grid-layer',
-  REPEATER_GRID: 'repeater-grid-layer'
+  REPEATER_GRID: 'repeater-grid-layer',
+  MERGED_VISIBILITY: 'merged-visibility-layer'
 } as const;
 
 class LayerManager {

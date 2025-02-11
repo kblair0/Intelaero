@@ -18,10 +18,11 @@ import { ObstacleAnalysisProvider } from "./context/ObstacleAnalysisContext";
 import MapSidePanel from "./components/MapSidePanel";
 import { Battery, Radio } from "lucide-react";
 
-// Create an inner component that uses the context
 const HomeContent = () => {
   const mapRef = useRef<MapRef>(null);
   const [activePanel, setActivePanel] = useState<"energy" | "los" | null>(null);
+  // New state for showing the flight plan uploader overlay.
+  const [showUploader, setShowUploader] = useState(false);
   const { flightPlan } = useFlightPlanContext();
 
   const togglePanel = (panel: "energy" | "los") => {
@@ -63,50 +64,73 @@ const HomeContent = () => {
       {/* Main Content Area */}
       <div className="flex-1 mx-auto w-full max-w-[2000px] px-4 h-screen">
         <div className="flex flex-row gap-4 h-full">
-          {/* Map Section with Overlay */}
+          {/* Map Section with Overlays */}
           <div className="flex-grow relative h-full">
             <Card className="h-full">
               <div className="relative h-full">
                 <Map ref={mapRef} />
 
-                {/* Upload Overlay - Only shown when no flight plan */}
-                {!flightPlan && (
-                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                {/* Uploader Overlay:
+                    - If no flight plan exists, show uploader automatically.
+                    - If a flight plan exists, the uploader is hidden by default;
+                      it is shown only when 'showUploader' is true.
+                */}
+                {(!flightPlan || showUploader) && (
+                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20">
                     <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                        Flight Plan Upload
-                      </h3>
-                      <FlightPlanUploader />
+                      <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-semibold text-gray-900">
+                          Flight Plan Upload
+                        </h3>
+                        <button
+                          onClick={() => setShowUploader(false)}
+                          className="text-gray-500 hover:text-gray-700"
+                        >
+                          X
+                        </button>
+                      </div>
+                      {/* 
+                        Pass an onClose prop if your FlightPlanUploader supports it.
+                        Otherwise, rely on the close button above.
+                      */}
+                      <FlightPlanUploader onClose={() => setShowUploader(false)} />
                     </div>
                   </div>
                 )}
 
                 {/* Analysis Control Buttons */}
-                <div className="absolute top-4 left-4 z-10">
-                  <div className="flex flex-row gap-2 mb-4">
+                <div className="absolute top-4 left-4 z-10 flex flex-row gap-2 mb-4">
+                  <button
+                    onClick={() => togglePanel("energy")}
+                    className={`map-button flex items-center gap-2 transition-colors ${
+                      activePanel === "energy"
+                        ? "bg-blue-100 border-blue-300 shadow-md"
+                        : "hover:bg-gray-300/80"
+                    }`}
+                  >
+                    <Battery className="w-4 h-4" />
+                    Energy Analysis
+                  </button>
+                  <button
+                    onClick={() => togglePanel("los")}
+                    className={`map-button flex items-center gap-2 transition-colors ${
+                      activePanel === "los"
+                        ? "bg-blue-100 border-blue-300 shadow-md"
+                        : "hover:bg-gray-300/80"
+                    }`}
+                  >
+                    <Radio className="w-4 h-4" />
+                    LOS Analysis
+                  </button>
+                  {/* Show the uploader button only when a flight plan is loaded */}
+                  {flightPlan && (
                     <button
-                      onClick={() => togglePanel("energy")}
-                      className={`map-button flex items-center gap-2 transition-colors ${
-                        activePanel === "energy"
-                          ? "bg-blue-100 border-blue-300 shadow-md"
-                          : "hover:bg-gray-300/80"
-                      }`}
+                      onClick={() => setShowUploader(true)}
+                      className="map-button flex items-center gap-2 transition-colors hover:bg-gray-300/80"
                     >
-                      <Battery className="w-4 h-4" />
-                      Energy Analysis
+                      Upload Flight Plan
                     </button>
-                    <button
-                      onClick={() => togglePanel("los")}
-                      className={`map-button flex items-center gap-2 transition-colors ${
-                        activePanel === "los"
-                          ? "bg-blue-100 border-blue-300 shadow-md"
-                          : "hover:bg-gray-300/80"
-                      }`}
-                    >
-                      <Radio className="w-4 h-4" />
-                      LOS Analysis
-                    </button>
-                  </div>
+                  )}
                 </div>
 
                 {/* Analysis Panels */}
@@ -115,7 +139,7 @@ const HomeContent = () => {
                   icon={<Battery className="w-5 h-5" />}
                   isExpanded={activePanel === "energy"}
                   onToggle={() => togglePanel("energy")}
-                  className="top-4 h-[calc(100%-2rem)]"
+                  className="top-0 h-full"
                 >
                   <Calculator />
                 </MapSidePanel>
@@ -150,7 +174,6 @@ const HomeContent = () => {
   );
 };
 
-// Main component that provides the context
 export default function Home() {
   return (
     <FlightPlanProvider>

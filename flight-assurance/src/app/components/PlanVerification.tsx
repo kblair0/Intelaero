@@ -188,8 +188,8 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
     if (!flightPlan) {
       return {
         id: "terrain",
-        title: "Terrain Analysis",
-        description: "Check flight path against terrain",
+        title: "Obstruction Analysis",
+        description: "Check flight path against terrain and obstructions",
         status: "pending"
       };
     }
@@ -197,8 +197,8 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
     if (!analysisData) {
       return {
         id: "terrain",
-        title: "Terrain Analysis",
-        description: "Analyzing terrain clearance...",
+        title: "Obstruction Analysis",
+        description: "Analyzing obstructions clearance...",
         status: "loading"
       };
     }
@@ -206,8 +206,8 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
     const isSafe = analysisData.minimumClearanceHeight >= 0;
     return {
       id: "terrain",
-      title: "Terrain Analysis",
-      description: "Terrain clearance verification",
+      title: "Obstruction Analysis",
+      description: "Obstruction clearance verification",
       status: isSafe ? "success" : "error",
       subSections: [
         {
@@ -223,7 +223,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
                 <div>{getMinClearanceDistance()?.toFixed(2)} km along route</div>
                 <div>Highest Terrain:</div>
                 <div>{analysisData.highestObstacle.toFixed(1)}m</div>
-                <div>Flight Altitude Range:</div>
+                <div>Flight Plan Altitude Range:</div>
                 <div>
                   {Math.min(...analysisData.flightAltitudes).toFixed(1)}m - 
                   {Math.max(...analysisData.flightAltitudes).toFixed(1)}m
