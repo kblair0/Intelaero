@@ -24,6 +24,13 @@ export interface AnalysisResults {
   cells: GridCell[];
   stats: AnalysisStats | null;
   stationLOSResult?: StationLOSResult;
+  flightPathVisibility?: FlightPathVisibilityResults;
+}
+
+export interface FlightPathVisibilityResults {
+  visibleLength: number;
+  totalLength: number;
+  coveragePercentage: number;
 }
 
 // Marker Configuration Types

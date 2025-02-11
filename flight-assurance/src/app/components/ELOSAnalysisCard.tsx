@@ -1,3 +1,6 @@
+// ELOSAnalysisCard.tsx
+
+
 "use client";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -11,6 +14,7 @@ import { layerManager, MAP_LAYERS } from "./LayerManager";
 import StationCard from "./StationCard";
 import mapboxgl from 'mapbox-gl';
 import * as turf from '@turf/turf';
+import { analyzeFlightPathVisibility, addVisibilityLayer } from './flightPathVisibilityAnalysis';
 // Import both the LOS check and the new profile function and types.
 import { 
   checkStationToStationLOS, 
@@ -73,6 +77,7 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
     // Analysis Actions
     setIsAnalyzing,
     setError,
+    setResults,
   } = useLOSAnalysis();
 
   // Global layer visibility state
@@ -576,6 +581,76 @@ const chartOptions = {
   },
 };
 
+
+  const handleFlightPathVisibility = async () => {
+    if (!mapRef.current || !flightPlan) {
+      setError("Map or flight plan not initialized");
+      return;
+    }
+
+    // Get all station locations from context
+    const stationLocations = {
+      gcs: gcsLocation,
+      observer: observerLocation,
+      repeater: repeaterLocation
+    };
+
+    // Check if at least one station is placed
+    const hasStations = Object.values(stationLocations).some(location => location !== null);
+    if (!hasStations) {
+      setError("Please place at least one station on the map");
+      return;
+    }
+
+    try {
+      setIsAnalyzing(true);
+
+      // Run the visibility analysis
+      const result = await analyzeFlightPathVisibility(
+        mapRef.current.getMap()!,
+        flightPlan,
+        stationLocations,
+        markerConfigs
+      );
+
+      // Add the visibility layer to the map
+      addVisibilityLayer(mapRef.current.getMap()!, result.segments);
+
+      // Store the results in state
+      const visibleCells = Math.round(result.stats.visibleLength);
+      const totalCells = Math.round(result.stats.totalLength);
+      
+      setResults({
+        cells: [], // Keep existing cells if any
+        stats: {
+          visibleCells: Math.round(result.stats.visibleLength),
+          totalCells: Math.round(result.stats.totalLength),
+          averageVisibility: result.stats.coveragePercentage,
+          analysisTime: result.stats.analysisTime
+        },
+        flightPathVisibility: {
+          visibleLength: result.stats.visibleLength,
+          totalLength: result.stats.totalLength,
+          coveragePercentage: result.stats.coveragePercentage
+        }
+      });
+
+      // Log the coverage statistics
+      console.log("Flight Path Visibility Analysis Results:", {
+        totalLength: `${(result.stats.totalLength / 1000).toFixed(2)} km`,
+        visibleLength: `${(result.stats.visibleLength / 1000).toFixed(2)} km`,
+        coveragePercentage: `${result.stats.coveragePercentage.toFixed(1)}%`,
+        analysisTime: `${(result.stats.analysisTime / 1000).toFixed(2)} seconds`
+      });
+
+    } catch (error) {
+      console.error("Flight path visibility analysis failed:", error);
+      setError(error instanceof Error ? error.message : "Analysis failed");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
 /**
  * Scans the LOS profile and returns the first and last indices where the obstruction occurs.
  * A point is considered obstructed if its terrain elevation exceeds the LOS altitude.
@@ -923,6 +998,12 @@ const renderMergedAnalysisSection = () => {
         {/* Marker Analysis Section */}
         <div className="mt-6">
         <h3 className="text-lg font-semibold mb-4">Station Based LOS Analysis</h3>
+        {!gcsLocation && !observerLocation && !repeaterLocation && (
+          <div className="p-3 mb-3 bg-yellow-100 border border-yellow-400 text-sm text-yellow-700 rounded">
+            ⚠️ To unlock 📡GCS Station/🔭Observer Station/⚡️Repeater Station
+            Line of Sight analysis, drop markers on the map.
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {gcsLocation && (
             <StationCard
@@ -968,6 +1049,54 @@ const renderMergedAnalysisSection = () => {
 
       {/* Merged Analysis Section */}
       {renderMergedAnalysisSection()}
+
+      {/* Flight Path Visibility Analysis Section */}
+      <div className="mt-6 p-4 bg-gray-50 rounded">
+        <h3 className="text-lg font-semibold mb-4">
+          Flight Path Visibility Analysis
+        </h3>
+        <button
+          onClick={handleFlightPathVisibility}
+          disabled={!isFlightPlanLoaded || isAnalyzing}
+          className={`w-full py-2 rounded-lg font-medium transition-colors ${
+            (!isFlightPlanLoaded || isAnalyzing)
+              ? "bg-gray-300 cursor-not-allowed"
+              : "bg-green-500 hover:bg-green-600 text-white"
+          }`}
+        >
+          {isAnalyzing
+            ? "Analyzing..."
+            : "Check Flight Path Visibility from All Stations"}
+        </button>
+
+        {results?.stats && (
+          <div className="mt-4 p-4 bg-white rounded shadow-sm">
+            <h4 className="text-sm font-semibold mb-3">Flight Path Visibility Results</h4>
+            <div className="grid grid-cols-3 gap-4 text-center">
+              <div>
+                <p className="text-xs text-gray-600">Coverage</p>
+                <p className="text-lg font-medium">
+                  {(results.stats.averageVisibility).toFixed(1)}%
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-600">Visible Length</p>
+                <p className="text-lg font-medium">
+                  {(results.stats.visibleCells / 1000).toFixed(2)} km
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-600">Analysis Time</p>
+                <p className="text-lg font-medium">
+                  {(results.stats.analysisTime / 1000).toFixed(1)}s
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+
 
       {/* Station-to-Station LOS Section */}
       <div className="mt-6 p-4 bg-gray-50 rounded">
