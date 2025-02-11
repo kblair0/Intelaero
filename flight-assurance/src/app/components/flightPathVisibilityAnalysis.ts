@@ -69,15 +69,43 @@ export async function analyzeFlightPathVisibility(
 ): Promise<FlightPathVisibilityResult> {
   const startTime = performance.now();
   
+  console.log('Starting Flight Path Visibility Analysis:', {
+    flightPlanFeatures: flightPlan.features.length,
+    availableStations: Object.entries(stations).filter(([_, loc]) => loc !== null).length,
+    sampleInterval
+  });
+
   const flightPath = flightPlan.features[0];
   if (!flightPath?.geometry?.coordinates) {
+    console.error('Invalid flight plan data:', flightPath);
     throw new Error("Invalid flight plan data");
   }
 
-  // Create a line from the 2D coordinates for distance calculation
+  console.log('Flight path coordinates:', {
+    count: flightPath.geometry.coordinates.length,
+    firstCoord: flightPath.geometry.coordinates[0],
+    lastCoord: flightPath.geometry.coordinates[flightPath.geometry.coordinates.length - 1]
+  });
+
+  // Create 2D line for distance calculation
   const line = turf.lineString(flightPath.geometry.coordinates.map(coord => [coord[0], coord[1]]));
   const length = turf.length(line, { units: 'meters' });
   
+  console.log('Path analysis setup:', {
+    pathLengthMeters: length,
+    expectedSamples: Math.ceil(length / sampleInterval)
+  });
+
+    // Retrieve waypointDistances and initialize the pointer 
+    const waypointDistances: number[] = flightPlan.waypointDistances;
+    if (!waypointDistances || waypointDistances.length === 0) {
+      console.error("Flight plan is missing waypoint distances.");
+      throw new Error("Missing waypointDistances in flight plan");
+    }
+    const coords = flightPath.geometry.coordinates;
+    // Initialize the pointer that tracks the current waypoint segment.
+    let waypointIndex = 0;
+
   const samples: Array<{
     point: [number, number, number];
     isVisible: boolean;
@@ -94,57 +122,121 @@ export async function analyzeFlightPathVisibility(
       config: markerConfigs[type as keyof MarkerConfigs]
     }));
 
-  // Sample points along the flight path every 10m
+  console.log('Available stations for analysis:', {
+    count: availableStations.length,
+    stations: availableStations.map(s => ({
+      type: s.type,
+      location: {
+        lat: s.location.lat,
+        lng: s.location.lng,
+        elevation: s.location.elevation
+      },
+      offset: s.config.elevationOffset
+    }))
+  });
+
+  const heightAnalysis = availableStations.map(station => ({
+    stationType: station.type,
+    samples: [] as {
+      sampleIndex: number;
+      distance: number;
+      flightplanHeight: number;
+      stationHeight: number;
+      terrainHeight: number;
+      deltaHeight: number;
+    }[]
+  }));
+
+  // Sample points along the flight path
+  let sampleCount = 0;
   for (let distance = 0; distance <= length; distance += sampleInterval) {
-    // Get the 2D point along the path
-    const point = turf.along(line, distance / 1000, { units: 'kilometers' });
-    const [lng, lat] = point.geometry.coordinates;
-    
-    // Find the current waypoint segment
-    let currentWaypointIndex = 0;
-    const coords = flightPath.geometry.coordinates;
-    
-    for (let i = 0; i < coords.length - 1; i++) {
-      const segmentStart = turf.point([coords[i][0], coords[i][1]]);
-      const segmentEnd = turf.point([coords[i + 1][0], coords[i + 1][1]]);
-      const segment = turf.lineString([[coords[i][0], coords[i][1]], [coords[i + 1][0], coords[i + 1][1]]]);
-      
-      if (turf.booleanPointOnLine(point, segment)) {
-        currentWaypointIndex = i;
-        break;
+    try {
+      const point = turf.along(line, distance / 1000, { units: 'kilometers' });
+      const [lng, lat] = point.geometry.coordinates;
+      // If the sample's distance is greater than or equal to the next waypoint distance, advance the pointer.
+      while (
+        waypointIndex < waypointDistances.length - 1 &&
+        distance >= waypointDistances[waypointIndex + 1] * 1000
+      ) {
+        waypointIndex++;
       }
-    }
+      // Use the altitude from the current waypoint. (Drone holds this altitude until next waypoint.)
+      const currentAltitude = coords[waypointIndex][2];
+      // Create the sample point with the correct altitude.
+      const samplePoint: [number, number, number] = [lng, lat, currentAltitude];
 
-    // Use the current waypoint's altitude (no interpolation)
-    const currentAltitude = coords[currentWaypointIndex][2];
-    
-    const samplePoint: [number, number, number] = [lng, lat, currentAltitude];
-
-    // Check visibility from any station
-    let isVisibleFromAnyStation = false;
-    
-    for (const { location, config } of availableStations) {
-      const stationPoint: [number, number, number] = [
-        location.lng,
-        location.lat,
-        (location.elevation || 0) + config.elevationOffset
-      ];
-
-      if (await checkLineOfSight(map, stationPoint, samplePoint)) {
-        isVisibleFromAnyStation = true;
-        break;
+      // Log heights every 10th sample
+      if (sampleCount % 10 === 0) {
+        const terrainHeight = map.queryTerrainElevation([lng, lat]) || 0;
+        
+        // Log heights for each station
+        for (const { type, location, config } of availableStations) {
+          const stationHeight = (location.elevation || 0) + config.elevationOffset;
+          const heightAnalysisPoint = {
+            sampleIndex: sampleCount,
+            distance: distance,
+            flightplanHeight: currentAltitude,
+            stationHeight: stationHeight,
+            terrainHeight: terrainHeight,
+            deltaHeight: currentAltitude - stationHeight
+          };
+          
+          const stationAnalysis = heightAnalysis.find(a => a.stationType === type);
+          if (stationAnalysis) {
+            stationAnalysis.samples.push(heightAnalysisPoint);
+          }
+        }
       }
-    }
 
-    samples.push({
-      point: samplePoint,
-      isVisible: isVisibleFromAnyStation
-    });
+      if (sampleCount % 100 === 0) {
+        console.log(`Processing sample ${sampleCount}:`, {
+          distance,
+          point: samplePoint,
+          waypointIndex, 
+          altitude: currentAltitude
+        });
+      }
+
+
+      // Check visibility from any station
+      let isVisibleFromAnyStation = false;
+      for (const { location, config } of availableStations) {
+        const stationPoint: [number, number, number] = [
+          location.lng,
+          location.lat,
+          (location.elevation || 0) + config.elevationOffset
+        ];
+
+        if (await checkLineOfSight(map, stationPoint, samplePoint)) {
+          isVisibleFromAnyStation = true;
+          break;
+        }
+      }
+
+      samples.push({
+        point: samplePoint,
+        isVisible: isVisibleFromAnyStation
+      });
+      sampleCount++;
+    } catch (error) {
+      console.error('Error processing sample point:', {
+        distance,
+        error: error instanceof Error ? error.message : error
+      });
+    }
   }
+
+  console.log('Sample collection complete:', {
+    totalSamples: samples.length,
+    expectedSamples: Math.ceil(length / sampleInterval)
+  });
+
+
 
   // Create segments
   const segments: VisibilitySegment[] = [];
   let currentSegment: VisibilitySegment | null = null;
+  let segmentCount = 0;
 
   for (let i = 0; i < samples.length; i++) {
     const sample = samples[i];
@@ -157,31 +249,76 @@ export async function analyzeFlightPathVisibility(
       continue;
     }
 
-    if (currentSegment.isVisible !== sample.isVisible) {
-      segments.push(currentSegment);
-      currentSegment = {
-        coordinates: [samples[i-1].point, sample.point],
-        isVisible: sample.isVisible
-      };
+  if (currentSegment.isVisible !== sample.isVisible) {
+    if (currentSegment.coordinates.length < 2) {
+      console.warn('Invalid segment detected:', {
+        segmentIndex: segmentCount,
+        coordinateCount: currentSegment.coordinates.length,
+        isVisible: currentSegment.isVisible,
+        coordinates: currentSegment.coordinates
+      });
+      // Don't push invalid segments
     } else {
-      currentSegment.coordinates.push(sample.point);
+      segments.push(currentSegment);
+      segmentCount++;
     }
+    
+    currentSegment = {
+      coordinates: [samples[i-1].point, sample.point],
+      isVisible: sample.isVisible
+    };
+  } else {
+    currentSegment.coordinates.push(sample.point);
   }
+}
 
-  if (currentSegment) {
+// Handle final segment
+if (currentSegment) {
+  if (currentSegment.coordinates.length < 2) {
+    console.warn('Final segment invalid:', {
+      coordinateCount: currentSegment.coordinates.length,
+      isVisible: currentSegment.isVisible,
+      coordinates: currentSegment.coordinates
+    });
+    // Don't push invalid final segment
+  } else {
     segments.push(currentSegment);
+    segmentCount++;
   }
+}
+
+console.log('Segment creation complete:', {
+  totalSegments: segments.length,
+  segmentDetails: segments.map((seg, idx) => ({
+    index: idx,
+    coordinateCount: seg.coordinates.length,
+    isVisible: seg.isVisible
+  }))
+});
 
   // Calculate visible length
   let visibleLength = 0;
-  segments.forEach(segment => {
+  segments.forEach((segment, idx) => {
     if (segment.isVisible) {
-      const segmentLine = turf.lineString(segment.coordinates.map(coord => [coord[0], coord[1]]));
-      visibleLength += turf.length(segmentLine, { units: 'meters' });
+      try {
+        if (segment.coordinates.length < 2) {
+          console.warn(`Skipping length calculation for invalid segment ${idx}`);
+          return;
+        }
+        const segmentLine = turf.lineString(segment.coordinates.map(coord => [coord[0], coord[1]]));
+        const segmentLength = turf.length(segmentLine, { units: 'meters' });
+        visibleLength += segmentLength;
+      } catch (error) {
+        console.error('Error calculating segment length:', {
+          segmentIndex: idx,
+          coordinateCount: segment.coordinates.length,
+          error: error instanceof Error ? error.message : error
+        });
+      }
     }
   });
 
-  return {
+  const result = {
     segments,
     stats: {
       totalLength: length,
@@ -190,6 +327,16 @@ export async function analyzeFlightPathVisibility(
       analysisTime: performance.now() - startTime
     }
   };
+
+  console.log('Analysis complete:', {
+    totalSegments: segments.length,
+    stats: result.stats,
+    processingTimeMs: result.stats.analysisTime
+  });
+
+  console.log('Height Analysis:', heightAnalysis);
+
+  return result;
 }
 
 export function addVisibilityLayer(
@@ -205,17 +352,19 @@ export function addVisibilityLayer(
     map.removeSource(layerId);
   }
 
-  // Create features
-  const features: GeoJSON.Feature[] = segments.map(segment => ({
-    type: 'Feature',
-    properties: {
-      isVisible: segment.isVisible
-    },
-    geometry: {
-      type: 'LineString',
-      coordinates: segment.coordinates
-    }
-  }));
+  // Create features with 2D coordinates
+  const features: GeoJSON.Feature[] = segments
+    .filter(segment => segment.coordinates.length >= 2)
+    .map(segment => ({
+      type: 'Feature',
+      properties: {
+        isVisible: segment.isVisible
+      },
+      geometry: {
+        type: 'LineString',
+        coordinates: segment.coordinates.map(coord => [coord[0], coord[1]])
+      }
+    }));
 
   // Add source and layer
   map.addSource(layerId, {
