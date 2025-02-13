@@ -23,6 +23,8 @@ import { useLocation } from "../context/LocationContext";
 import { useFlightPlanContext } from "../context/FlightPlanContext";
 import { useFlightConfiguration } from "../context/FlightConfigurationContext";
 import { useLOSAnalysis } from "../context/LOSAnalysisContext";
+import { Cloud } from "lucide-react";
+import { trackEventWithForm as trackEvent } from "./tracking/tracking";
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || "";
 
@@ -1083,6 +1085,7 @@ const Map = forwardRef<MapRef, MapProps>(
                 </button>
             </div>
             )}
+
           {/* Legend for Visibility Colors */}
           <div className="map-legend">
             <h4 className="font-semibold mb-2">Legend</h4>

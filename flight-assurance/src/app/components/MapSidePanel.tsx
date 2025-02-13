@@ -28,7 +28,7 @@ const MapSidePanel: React.FC<MapSidePanelProps> = ({
       <div className="flex h-full">
         {/* Content Container */}
         <div className="relative bg-white/95 backdrop-blur-sm shadow-xl 
-          w-[90vw] sm:w-[450px] lg:w-[500px] max-w-[500px]
+          w-[90vw] sm:w-[350px] lg:w-[400px] max-w-[400px]
           flex flex-col rounded-r-lg border border-gray-200 overflow-hidden">
           
           {/* Header with improved visual hierarchy */}

@@ -1,6 +1,4 @@
 // ELOSAnalysisCard.tsx
-
-
 "use client";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -756,14 +754,15 @@ const renderMergedAnalysisSection = () => {
   ].filter(Boolean) as Array<'gcs' | 'observer' | 'repeater'>;
 
   return (
-    <div className="mt-6 p-4 bg-gray-50 rounded">
+<div className="mt-4 ml-2 p-4 bg-gray-50 rounded border-l-2 border-accentGold shadow-sm">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold">Merged Visibility Analysis</h3>
+        <h3 className="text-m font-semibold">Merged Visibility Analysis</h3>
         <div className="flex items-center gap-2">
           <span className="text-xs">Show/Hide</span>
           <label className="toggle-switch">
             <input
               type="checkbox"
+              style={{ height: "6px" }}
               checked={layerVisibility[MAP_LAYERS.MERGED_VISIBILITY]}
               onChange={() => toggleLayerVisibility(MAP_LAYERS.MERGED_VISIBILITY)}
             />
@@ -785,7 +784,7 @@ const renderMergedAnalysisSection = () => {
       ) : (
         <>
           <div className="mb-4">
-            <p className="text-sm text-gray-600 mb-2">
+            <p className="text-xs text-gray-600 mb-2">
               Analyse combined visibility from all placed stations, showing areas visible
               to at least one station.
             </p>
@@ -800,6 +799,7 @@ const renderMergedAnalysisSection = () => {
                 </div>
                 <input
                   type="range"
+                  style={{ height: "6px" }}
                   min="500"
                   max="2500"
                   step="50"
@@ -818,6 +818,7 @@ const renderMergedAnalysisSection = () => {
                 </div>
                 <input
                   type="range"
+                  style={{ height: "6px" }}
                   min="1"
                   max="100"
                   value={gridSize}
@@ -833,7 +834,7 @@ const renderMergedAnalysisSection = () => {
           <button
             onClick={handleMergedAnalysis}
             disabled={isAnalyzing}
-            className={`w-full py-2 rounded-lg font-medium transition-colors ${
+            className={`w-full py-2 rounded-lg text-sm font-medium transition-colors ${
               isAnalyzing
                 ? "bg-gray-300 cursor-not-allowed"
                 : "bg-blue-500 hover:bg-blue-600 text-white"
@@ -845,7 +846,7 @@ const renderMergedAnalysisSection = () => {
           {/* Results Display */}
           {mergedResults?.stats && (
             <div className="mt-4 p-4 bg-white rounded shadow-sm">
-              <h4 className="text-sm font-semibold mb-3">Analysis Results</h4>
+              <h4 className="text-m font-semibold mb-3">Merged Visibility Analysis Results</h4>
               <div className="grid grid-cols-3 gap-4 text-center">
                 <div>
                   <p className="text-xs text-gray-600">Visible Areas</p>
@@ -878,35 +879,37 @@ const renderMergedAnalysisSection = () => {
     <>
       <div>
         {/* Main Analysis Section */}
-        <div className="space-y-4">
-          <div className="flex flex-col space-y-2">
-            <h2 className="text-xl font-semibold flex items-center gap-2">
-              <span className="text-blue-500">✈️</span>
-              <span className="flex-grow">Drone LOS Analysis</span>
-              {/* Toggle for Full Analysis Grid */}
-              <div className="flex flex-row items-center gap-2">
-                <span className="text-xs">Show/Hide</span>
-                <label className="toggle-switch">
-                  <input
-                    type="checkbox"
-                    checked={layerVisibility[MAP_LAYERS.ELOS_GRID]}
-                    onChange={() => toggleLayerVisibility(MAP_LAYERS.ELOS_GRID)}
-                  />
-                  <span className="toggle-slider"></span>
-                </label>
-              </div>
-            </h2>
-            <span className="text-xs text-gray-500">
-              Determine which points along the flight path the drone can see
-              within the selected grid range.
-            </span>
-          </div>
+        <div className="space-y-4 border-l-2 p-2 border-accentGold shadow-sm">
+
+        <div className="flex flex-col space-y-2">
+          <h2 className="text-base font-semibold flex items-center gap-2">
+            <span className="text-blue-500 text-base">✈️</span>
+            <span className="flex-grow">Drone LOS Analysis</span>
+            {/* Toggle for Full Analysis Grid */}
+            <div className="flex flex-row items-center gap-2">
+              <span className="text-xs">Show/Hide</span>
+              <label className="toggle-switch">
+                <input
+                  type="checkbox"
+                  style={{ height: "6px" }}
+                  checked={layerVisibility[MAP_LAYERS.ELOS_GRID]}
+                  onChange={() => toggleLayerVisibility(MAP_LAYERS.ELOS_GRID)}
+                />
+                <span className="toggle-slider"></span>
+              </label>
+            </div>
+          </h2>
+          <span className="text-xs text-gray-500">
+            Determine which points along the flight path the drone can see within the selected grid range.
+          </span>
+        </div>
+
 
           {/* Global configuration sliders arranged side by side */}
           <div className="flex flex-row gap-4 mt-4">
             {/* Grid Range Slider */}
             <div className="flex-1">
-              <div className="flex justify-between text-m mb-1">
+              <div className="flex justify-between text-xs mb-1">
                 <span>Analysis Range:</span>
                 <span>{elosGridRange}m</span>
               </div>
@@ -915,6 +918,7 @@ const renderMergedAnalysisSection = () => {
               </p>
               <input
                 type="range"
+                style={{ height: "6px" }}
                 min="500"
                 max="5000"
                 value={elosGridRange}
@@ -923,9 +927,9 @@ const renderMergedAnalysisSection = () => {
               />
             </div>
 
-            {/* Global Grid Size Slider with SRTM Indication */}
+            {/* Global Grid Size Slider */}
             <div className="flex-1">
-              <div className="flex justify-between text-m mb-1">
+              <div className="flex justify-between text-xs mb-1">
                 <span>Grid Size:</span>
                 <span>{gridSize === 30 ? '30m: SRTM' : `${gridSize}m`}</span>
               </div>
@@ -934,6 +938,7 @@ const renderMergedAnalysisSection = () => {
               </p>
               <input
                 type="range"
+                style={{ height: "6px" }}
                 min="1"
                 max="100"
                 value={gridSize}
@@ -942,7 +947,6 @@ const renderMergedAnalysisSection = () => {
               />
             </div>
           </div>
-
 
           {!isFlightPlanLoaded && (
             <div className="p-2 bg-yellow-100 text-yellow-700 text-xs rounded mt-2">
@@ -953,7 +957,7 @@ const renderMergedAnalysisSection = () => {
           <button
             onClick={handleAnalysis}
             disabled={!isFlightPlanLoaded || isAnalyzing}
-            className={`w-full py-2 rounded-lg font-medium transition-colors ${
+            className={`w-full py-2 rounded-lg text-m font-medium transition-colors ${
               !isFlightPlanLoaded || isAnalyzing
                 ? "bg-gray-300 cursor-not-allowed"
                 : "bg-blue-500 hover:bg-blue-600 text-white"
@@ -965,167 +969,162 @@ const renderMergedAnalysisSection = () => {
             Each square in the grid represents the local visibility of your flight path within the grid range you’ve set.
             In other words, for each square, the system calculates the percentage of your flight path—within the specified grid range—that has an unobstructed view to that square.
           </p>
-        </div>
+
 
 
           {/* Results Display */}
           {results && results.stats && (
             <div className="mt-4 p-4 bg-gray-50 rounded">
-              <h3 className="text-lg font-semibold mb-3">Results</h3>
+              <h3 className="text-m font-semibold mb-3">Drone LOS Analysis Results</h3>
               <div className="grid grid-cols-3 gap-4 text-center">
                 <div>
                   <p className="text-xs text-gray-600">Visibility</p>
-                  <p className="text-lg font-medium">
+                  <p className="text-m font-medium">
                     {results.stats.visibleCells}/{results.stats.totalCells}
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-600">Average</p>
-                  <p className="text-lg font-medium">
+                  <p className="text-m font-medium">
                     {results.stats.averageVisibility.toFixed(1)}%
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-600">Time</p>
-                  <p className="text-lg font-medium">
+                  <p className="text-m font-medium">
                     {(results.stats.analysisTime / 1000).toFixed(1)}s
                   </p>
                 </div>
               </div>
             </div>
           )}
-
-        {/* Marker Analysis Section */}
-        <div className="mt-6">
-        <h3 className="text-lg font-semibold mb-4">Station Based LOS Analysis</h3>
-        {!gcsLocation && !observerLocation && !repeaterLocation && (
-          <div className="p-3 mb-3 bg-yellow-100 border border-yellow-400 text-sm text-yellow-700 rounded">
-            ⚠️ To unlock 📡GCS Station/🔭Observer Station/⚡️Repeater Station
-            Line of Sight analysis, drop markers on the map.
-          </div>
-        )}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {gcsLocation && (
-            <StationCard
-              stationType="gcs"
-              location={gcsLocation}
-              markerConfig={markerConfigs.gcs}
-              onChangeConfig={(field, value) =>
-                setMarkerConfig("gcs", { [field]: value })
-              }
-              onAnalyze={() => handleAnalyzeMarker("gcs")}
-              layerVisibility={layerVisibility[MAP_LAYERS.GCS_GRID]}
-              toggleLayerVisibility={() => toggleLayerVisibility(MAP_LAYERS.GCS_GRID)}
-            />
-          )}
-          {observerLocation && (
-            <StationCard
-              stationType="observer"
-              location={observerLocation}
-              markerConfig={markerConfigs.observer}
-              onChangeConfig={(field, value) =>
-                setMarkerConfig("observer", { [field]: value })
-              }
-              onAnalyze={() => handleAnalyzeMarker("observer")}
-              layerVisibility={layerVisibility[MAP_LAYERS.OBSERVER_GRID]}
-              toggleLayerVisibility={() => toggleLayerVisibility(MAP_LAYERS.OBSERVER_GRID)}
-            />
-          )}
-          {repeaterLocation && (
-            <StationCard
-              stationType="repeater"
-              location={repeaterLocation}
-              markerConfig={markerConfigs.repeater}
-              onChangeConfig={(field, value) =>
-                setMarkerConfig("repeater", { [field]: value })
-              }
-              onAnalyze={() => handleAnalyzeMarker("repeater")}
-              layerVisibility={layerVisibility[MAP_LAYERS.REPEATER_GRID]}
-              toggleLayerVisibility={() => toggleLayerVisibility(MAP_LAYERS.REPEATER_GRID)}
-            />
-          )}
-        </div>
       </div>
 
-      {/* Merged Analysis Section */}
-      {renderMergedAnalysisSection()}
+      {/* Station Marker LOS Sections */}
+      <div className="mt-6 bg-gray-50 rounded border-l-2 border-accentGold shadow-sm">
 
-      {/* Flight Path Visibility Analysis Section */}
-      <div className="mt-6 p-4 bg-gray-50 rounded">
-        <h3 className="text-lg font-semibold mb-4">
-          Flight Path Visibility Analysis
-        </h3>
-        <button
-          onClick={handleFlightPathVisibility}
-          disabled={!isFlightPlanLoaded || isAnalyzing}
-          className={`w-full py-2 rounded-lg font-medium transition-colors ${
-            (!isFlightPlanLoaded || isAnalyzing)
-              ? "bg-gray-300 cursor-not-allowed"
-              : "bg-green-500 hover:bg-green-600 text-white"
-          }`}
-        >
-          {isAnalyzing
-            ? "Analyzing..."
-            : "Check Flight Path Visibility from All Stations"}
-        </button>
+        <div>
+          {/* Parent Header for the Entire Marker/Station Card Analysis Section */}
+          <h3 className="text-base ml-2 font-semibold mb-2">
+            Station Based LOS Analysis
+          </h3>
+          <p className="text-xs ml-2 text-gray-500">
+            Determine the LOS of your stations to the surrounding area. Don't forget to include their elevation. </p>
 
-        {results?.stats && (
-          <div className="mt-4 p-4 bg-white rounded shadow-sm">
-            <h4 className="text-sm font-semibold mb-3">Flight Path Visibility Results</h4>
-            <div className="grid grid-cols-3 gap-4 text-center">
-              <div>
-                <p className="text-xs text-gray-600">Coverage</p>
-                <p className="text-lg font-medium">
-                  {(results.stats.averageVisibility).toFixed(1)}%
-                </p>
+          {/* --- Station Based LOS Analysis Sub-section --- */}
+          <div className="mt-4 ml-2 p-4 bg-gray-50 rounded border-l-2 border-accentGold shadow-sm">
+          
+            {!gcsLocation && !observerLocation && !repeaterLocation && (
+              <div className="p-3 mb-3 bg-yellow-100 border border-yellow-400 text-sm text-yellow-700 rounded">
+                ⚠️ To unlock 📡GCS Station/🔭Observer Station/⚡️Repeater Station Line of Sight analysis, drop markers on the map.
               </div>
-              <div>
-                <p className="text-xs text-gray-600">Visible Length</p>
-                <p className="text-lg font-medium">
-                  {(results.stats.visibleCells / 1000).toFixed(2)} km
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-600">Analysis Time</p>
-                <p className="text-lg font-medium">
-                  {(results.stats.analysisTime / 1000).toFixed(1)}s
-                </p>
-              </div>
+            )}
+            <div className="flex flex-col gap-4 w-full">
+              {gcsLocation && (
+                <StationCard
+                  stationType="gcs"
+                  location={gcsLocation}
+                  markerConfig={markerConfigs.gcs}
+                  onChangeConfig={(field, value) =>
+                    setMarkerConfig("gcs", { [field]: value })
+                  }
+                  onAnalyze={() => handleAnalyzeMarker("gcs")}
+                  layerVisibility={layerVisibility[MAP_LAYERS.GCS_GRID]}
+                  toggleLayerVisibility={() => toggleLayerVisibility(MAP_LAYERS.GCS_GRID)}
+                />
+              )}
+              {observerLocation && (
+                <StationCard
+                  stationType="observer"
+                  location={observerLocation}
+                  markerConfig={markerConfigs.observer}
+                  onChangeConfig={(field, value) =>
+                    setMarkerConfig("observer", { [field]: value })
+                  }
+                  onAnalyze={() => handleAnalyzeMarker("observer")}
+                  layerVisibility={layerVisibility[MAP_LAYERS.OBSERVER_GRID]}
+                  toggleLayerVisibility={() => toggleLayerVisibility(MAP_LAYERS.OBSERVER_GRID)}
+                />
+              )}
+              {repeaterLocation && (
+                <StationCard
+                  stationType="repeater"
+                  location={repeaterLocation}
+                  markerConfig={markerConfigs.repeater}
+                  onChangeConfig={(field, value) =>
+                    setMarkerConfig("repeater", { [field]: value })
+                  }
+                  onAnalyze={() => handleAnalyzeMarker("repeater")}
+                  layerVisibility={layerVisibility[MAP_LAYERS.REPEATER_GRID]}
+                  toggleLayerVisibility={() => toggleLayerVisibility(MAP_LAYERS.REPEATER_GRID)}
+                />
+              )}
             </div>
           </div>
-        )}
-      </div>
 
+          {/* --- Merged Analysis Sub-section --- */}
+          <div className="mb-6">
+            {renderMergedAnalysisSection()}
+          </div>
 
-
-      {/* Station-to-Station LOS Section */}
-      <div className="mt-6 p-4 bg-gray-50 rounded">
-        <h3 className="text-lg font-semibold mb-4">
-          Station-to-Station Line of Sight
-        </h3>
-        {renderStationToStationUI()}
-      </div>
-
-      {/* LOS Profile Chart Modal (only shown when active) */}
-      {isGraphEnlarged && losProfileData && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-50"
-          onClick={() => setIsGraphEnlarged(false)} // Close modal when clicking outside
-        >
-          <div
-            className="bg-white p-4 rounded relative max-w-4xl w-full"
-            onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside modal
-          >
+          {/* --- Flight Path Visibility Analysis Sub-section --- */}
+          <div className="mt-4 ml-2 p-4 bg-gray-50 rounded border-l-2 border-accentGold shadow-sm">
+            <h4 className="text-m font-semibold mb-2">
+              Flight Path Visibility Analysis
+            </h4>
             <button
-              onClick={() => setIsGraphEnlarged(false)}
-              className="absolute top-2 right-2 text-gray-700 font-bold text-xl focus:outline-none"
+              onClick={handleFlightPathVisibility}
+              disabled={!isFlightPlanLoaded || isAnalyzing}
+              className={`w-full py-2 rounded-lg text-sm font-medium transition-colors ${
+                (!isFlightPlanLoaded || isAnalyzing)
+                  ? "bg-gray-300 cursor-not-allowed"
+                  : "bg-green-500 hover:bg-green-600 text-white"
+              }`}
             >
-              &times;
+              {isAnalyzing
+                ? "Analyzing..."
+                : "Check Visibility from All Stations"}
             </button>
-            <Line data={chartData!} options={chartOptions} />
+            {results?.stats && (
+              <div className="mt-4 p-4 bg-white rounded shadow-sm">
+                <h4 className="text-sm font-semibold mb-3">
+                  Flight Path Visibility Results
+                </h4>
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div>
+                    <p className="text-xs text-gray-600">Coverage</p>
+                    <p className="text-m font-medium">
+                      {(results.stats.averageVisibility).toFixed(1)}%
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-600">Visible Length</p>
+                    <p className="text-m font-medium">
+                      {(results.stats.visibleCells / 1000).toFixed(2)} km
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-600">Analysis Time</p>
+                    <p className="text-m font-medium">
+                      {(results.stats.analysisTime / 1000).toFixed(1)}s
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* --- Station-to-Station LOS Sub-section --- */}
+          <div className="mt-4 ml-2 p-4 bg-gray-50 rounded border-l-2 border-accentGold shadow-sm">
+          <h4 className="text-m font-semibold mb-2">
+              Station-to-Station Line of Sight
+            </h4>
+            {renderStationToStationUI()}
           </div>
         </div>
-      )}
+      </div>
+
+
     </div>
     </>
   );

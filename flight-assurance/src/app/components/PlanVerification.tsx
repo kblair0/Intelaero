@@ -7,6 +7,7 @@ import { useLOSAnalysis } from "../context/LOSAnalysisContext";
 import TerrainClearancePopup from "./TerrainClearancePopup";
 import ObstacleAssessment from "./ObstacleAssessment";
 import { MapRef } from "./Map";
+import { trackEventWithForm as trackEvent } from "./tracking/tracking";
 
 interface PlanVerificationProps {
   mapRef: React.RefObject<MapRef>;
@@ -91,15 +92,51 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
         status: "pending"
       };
     }
-
+  
     const hasZeroAltitudes = zeroAltitudePoints.length > 0;
     const hasDuplicates = duplicateWaypoints.length > 0;
-
+  
+    // 120m height check: compute maximum clearance if analysisData is available
+    let heightCheckStatus: "success" | "error" | "loading" = "loading";
+    let heightCheckContent: React.ReactNode = (
+      <div className="text-sm text-gray-500">Terrain analysis pending</div>
+    );
+    
+    if (analysisData) {
+      const clearances = analysisData.flightAltitudes.map(
+        (alt, idx) => alt - analysisData.terrainElevations[idx]
+      );
+      const maxClearance = Math.max(...clearances);
+      if (maxClearance <= 120) {
+        heightCheckStatus = "success";
+        heightCheckContent = (
+          <div className="text-sm text-green-600">
+            ✓ Maximum altitude above ground: {maxClearance.toFixed(1)}m (within limit)
+          </div>
+        );
+      } else {
+        heightCheckStatus = "error";
+        heightCheckContent = (
+          <div className="text-sm text-red-600">
+            Found waypoint with altitude above ground: {maxClearance.toFixed(1)}m (exceeds 120m limit)
+          </div>
+        );
+      }
+    }
+  
+    // Overall status is error if any check fails or pending if terrain analysis isn't complete
+    const overallStatus: VerificationSection["status"] =
+      hasZeroAltitudes || hasDuplicates || (analysisData && heightCheckStatus === "error")
+        ? "error"
+        : analysisData
+        ? "success"
+        : "pending";
+  
     return {
       id: "basic",
       title: "Basic Flight Plan Checks",
       description: "Essential flight plan validation",
-      status: (hasZeroAltitudes || hasDuplicates) ? "error" : "success",
+      status: overallStatus,
       subSections: [
         {
           title: "Zero Altitude Check",
@@ -108,13 +145,20 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
               Found {zeroAltitudePoints.length} zero altitude points:
               {zeroAltitudePoints.map((point, idx) => (
                 <div key={idx} className="ml-2">
-                  • Waypoint {point.index + 1}: ({point.coord.map((v: number) => v.toFixed(2)).join(', ')})
+                  • Waypoint {point.index + 1}: (
+                  {point.coord.map((v) => v.toFixed(2)).join(", ")})
                 </div>
               ))}
             </div>
           ) : (
-            <div className="text-sm text-green-600">✓ All waypoints have valid altitudes</div>
+            <div className="text-sm text-green-600">
+              ✓ All waypoints have valid altitudes
+            </div>
           )
+        },
+        {
+          title: "120m Height Check",
+          content: heightCheckContent
         },
         {
           title: "Duplicate Waypoints Check",
@@ -123,18 +167,45 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
               Found {duplicateWaypoints.length} duplicate waypoints:
               {duplicateWaypoints.map((point, idx) => (
                 <div key={idx} className="ml-2">
-                  • Waypoint {point.index + 1}: ({point.coord.map((v: number) => v.toFixed(2)).join(', ')})
+                  • Waypoint {point.index + 1}: (
+                  {point.coord.map((v) => v.toFixed(2)).join(", ")})
                 </div>
               ))}
             </div>
           ) : (
-            <div className="text-sm text-green-600">✓ No duplicate waypoints found</div>
+            <div className="text-sm text-green-600">
+              ✓ No duplicate waypoints found
+            </div>
           )
         }
-      ]
+      ],
+      actions: (
+        <div className="flex flex-col gap-2 mt-3">
+          <button
+            onClick={() => {
+              trackEvent("airspace_request_click", { panel: "basic" });
+              window.alert("Coming Soon!");
+            }}
+            className="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 transition-colors"
+          >
+            Add Airspace Overlay
+          </button>
+          <button
+            onClick={() => {
+              trackEvent("insert_weather_click", { panel: "weather" });
+              window.alert("Coming Soon!");
+            }}
+            className="px-3 py-1 bg-green-500 text-white text-sm rounded hover:bg-green-600 transition-colors"
+          >
+            Insert Weather
+          </button>
+        </div>
+      )
     };
   };
-
+  
+  
+    
   // Energy analysis section
   const getEnergyAnalysis = (): VerificationSection => {
     if (!flightPlan) {
@@ -165,7 +236,6 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
                 <div>{metrics.flightTime}</div>
                 <div>Reserve Required:</div>
                 <div>{metrics.batteryReserve} mAh</div>
-                {/* Added status row */}
                 <div>Status:</div>
                 <div className={metrics.isFeasible ? "text-green-600" : "text-red-600"}>
                   {metrics.isFeasible 
@@ -182,7 +252,6 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
     };
   };
   
-
   // Terrain analysis section
   const getTerrainAnalysis = (): VerificationSection => {
     if (!flightPlan) {
@@ -238,6 +307,57 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
     };
   };
 
+  // Regulatory Check section: verifies that the drone does not exceed 120m above ground level
+  const getRegulatoryCheck = (): VerificationSection => {
+    if (!flightPlan) {
+      return {
+        id: "regulatory",
+        title: "Regulatory Check",
+        description: "Upload a flight plan to begin regulatory verification",
+        status: "pending"
+      };
+    }
+
+    if (!analysisData) {
+      return {
+        id: "regulatory",
+        title: "Regulatory Check",
+        description: "Analyzing flight altitudes for regulatory compliance...",
+        status: "loading"
+      };
+    }
+
+    // Calculate clearance at each waypoint (flight altitude minus terrain elevation)
+    const clearances = analysisData.flightAltitudes.map(
+      (alt, idx) => alt - analysisData.terrainElevations[idx]
+    );
+    const maxClearance = Math.max(...clearances);
+    const isWithinRegulatoryLimit = maxClearance <= 120;
+
+    return {
+      id: "regulatory",
+      title: "Regulatory Check",
+      description: "Ensure flight altitude does not exceed 120m above ground level",
+      status: isWithinRegulatoryLimit ? "success" : "error",
+      subSections: [
+        {
+          title: "Maximum Altitude Above Ground",
+          content: (
+            <div className={isWithinRegulatoryLimit ? "text-green-600" : "text-red-600"}>
+              {maxClearance.toFixed(1)}m {isWithinRegulatoryLimit ? "within limit" : "exceeds 120m limit"}
+            </div>
+          )
+        }
+      ],
+      action: () => {
+        if (!isWithinRegulatoryLimit) {
+          window.alert("Your flight plan exceeds the 120m AGL regulatory limit. Please adjust your waypoints.");
+        }
+      },
+      actionLabel: isWithinRegulatoryLimit ? "OK" : "Review Flight Plan"
+    };
+  };
+
   const getLOSAnalysis = (): VerificationSection => {
     if (!flightPlan) {
       return {
@@ -260,9 +380,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
     }
   
     const coverage = losResults.stats?.averageVisibility || 0;
-    // Here, we assume that your LOS results include a property called stationLOSResult
-    // of type StationLOSResult (from StationLOSAnalysis.ts)
-    const stationLOSResult = losResults.stationLOSResult as StationLOSResult | undefined;
+    const stationLOSResult = losResults.stationLOSResult;
   
     return {
       id: "los",
@@ -285,7 +403,6 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
                 <div>{((losResults.stats?.analysisTime || 0) / 1000).toFixed(1)}s</div>
               </div>
   
-              {/* Station-to-Station LOS Result */}
               {losResults?.stationLOSResult && (
                 <div className="mt-3">
                   {losResults.stationLOSResult.clear ? (
@@ -307,7 +424,6 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
                   )}
                 </div>
               )}
-
             </div>
           )
         }
@@ -316,13 +432,14 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
       actionLabel: "Adjust LOS Settings"
     };
   };
-  
 
+  // Combine all sections, including the new Regulatory Check section
   const sections = [
     getBasicChecks(),
     getEnergyAnalysis(),
     getTerrainAnalysis(),
-    getLOSAnalysis()
+    getLOSAnalysis(),
+    getRegulatoryCheck()
   ];
 
   // Hidden ObstacleAssessment Component for background processing
@@ -370,9 +487,11 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
           className="border rounded-lg bg-white shadow-sm overflow-hidden"
         >
           <button
-            onClick={() => setExpandedSection(
-              expandedSection === section.id ? null : section.id
-            )}
+            onClick={() =>
+              setExpandedSection(
+                expandedSection === section.id ? null : section.id
+              )
+            }
             className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50"
           >
             <div className="flex items-center gap-3">
@@ -393,20 +512,39 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
             <div className="px-4 py-3 bg-gray-50 border-t space-y-4">
               {section.subSections?.map((subSection, index) => (
                 <div key={index} className="space-y-2">
-                  <h4 className="font-medium text-gray-700">{subSection.title}</h4>
+                  <h4 className="font-medium text-gray-700">
+                    {subSection.title}
+                  </h4>
                   {subSection.content}
                 </div>
               ))}
-              {section.action && (
-                <button
-                  onClick={section.action}
-                  className="mt-3 flex items-center gap-2 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors"
-                >
-                  {section.id === 'energy' && <Battery className="w-4 h-4" />}
-                  {section.id === 'los' && <Radio className="w-4 h-4" />}
-                  {section.id === 'terrain' && <Mountain className="w-4 h-4" />}
-                  {section.actionLabel}
-                </button>
+              {section.actions ? (
+                <div className="mt-3">{section.actions}</div>
+              ) : section.action && (
+                <>
+                  <button
+                    onClick={section.action}
+                    className="mt-3 flex items-center gap-2 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors"
+                  >
+                    {section.id === "energy" && <Battery className="w-4 h-4" />}
+                    {section.id === "los" && <Radio className="w-4 h-4" />}
+                    {section.id === "terrain" && <Mountain className="w-4 h-4" />}
+                    {section.actionLabel}
+                  </button>
+                  {section.id === "terrain" && (
+                    <button
+                      onClick={() => {
+                        trackEvent("powerlines_request_click", {
+                          panel: "terrain"
+                        });
+                        window.alert("Coming Soon!");
+                      }}
+                      className="mt-2 flex items-center gap-2 px-3 py-1.5 bg-green-500 text-white text-sm rounded-md hover:bg-green-600 transition-colors"
+                    >
+                      ⚡ Add Powerlines
+                    </button>
+                  )}
+                </>
               )}
             </div>
           )}

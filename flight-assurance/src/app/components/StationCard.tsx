@@ -44,90 +44,93 @@ const StationCard: React.FC<StationCardProps> = ({
     observer: "green",
     repeater: "red",
   };
-
   return (
-    <div className="bg-white p-2 rounded shadow flex flex-col gap-2 max-w-xs">
-      {/* Header */}
-      <div className="flex flex-col">
+    <article className="bg-white p-2 rounded shadow flex flex-col gap-2 w-full text-xs">
+      {/* Header Section */}
+      <header className="flex items-center justify-between">
         <div className="flex items-center gap-1">
-          <span className="text-lg">{icons[stationType]}</span>
-          <span className={`text-sm font-semibold text-${colors[stationType]}-600`}>
-            {titles[stationType]}
+          <span className="text-base" aria-hidden="true">
+            {icons[stationType]}
           </span>
+          <h2 className={`font-semibold text-${colors[stationType]}-600`}>
+            {titles[stationType]}
+          </h2>
         </div>
-        <div className="mt-1 flex items-center gap-1">
-          <span className="text-xs text-gray-500">Show/Hide</span>
-          {/* Updated Toggle Markup */}
-          <label className="toggle-switch">
+        <div className="flex items-center gap-1">
+          <span className="hidden sm:inline">Show</span>
+          <label className="toggle-switch" aria-label="Toggle layer visibility">
             <input
               type="checkbox"
               checked={layerVisibility}
               onChange={toggleLayerVisibility}
+              className="h-3 w-3"
             />
-            <span className="toggle-slider"></span>
+            <span className="toggle-slider" />
           </label>
         </div>
-      </div>
-
-      {/* Location Display */}
-      <div className="text-xs">
+      </header>
+  
+      {/* Location Info */}
+      <div className="flex items-center">
+        <strong className="mr-1">Loc:</strong>
         {location ? (
-          <div className="flex flex-col gap-1 text-gray-700">
-            <span>Lat: {location.lat.toFixed(5)}</span>
-            <span>Lng: {location.lng.toFixed(5)}</span>
-            <span>Elev: {location.elevation?.toFixed(1)}m</span>
-          </div>
+          <span>
+            {location.lat.toFixed(3)}, {location.lng.toFixed(3)} | {location.elevation?.toFixed(0)}m
+          </span>
         ) : (
           <span className="text-gray-400">Not set</span>
         )}
       </div>
-
+  
       {/* Controls */}
-      <div className="flex flex-col gap-2">
-        {/* Grid Range */}
-        <div>
-          <div className="flex justify-between text-xs">
+      <div className="flex items-center gap-2">
+        {/* Range Control */}
+        <div className="flex-1">
+          <label htmlFor={`range-${stationType}`} className="flex justify-between">
             <span>Range:</span>
             <span>{markerConfig.gridRange}m</span>
-          </div>
+          </label>
           <input
+            id={`range-${stationType}`}
             type="range"
             min="500"
             max="5000"
             step="50"
             value={markerConfig.gridRange}
-            onChange={(e) =>
-              onChangeConfig("gridRange", Number(e.target.value))
-            }
-            className="w-full h-2 bg-gray-200 rounded cursor-pointer"
+            onChange={(e) => onChangeConfig("gridRange", Number(e.target.value))}
+            className="w-full h-1 bg-gray-200 rounded"
           />
         </div>
-
-        {/* Elevation Offset */}
-        <div>
-          <div className="flex justify-between text-xs">
-            <span>Elev Offset:</span>
-          </div>
+  
+        {/* Elevation Offset Control */}
+        <div className="w-20">
+          <label htmlFor={`elev-${stationType}`} className="flex justify-between">
+            <span>Elev:</span>
+            <span>{markerConfig.elevationOffset}m</span>
+          </label>
           <input
+            id={`elev-${stationType}`}
             type="number"
             value={markerConfig.elevationOffset}
-            onChange={(e) =>
-              onChangeConfig("elevationOffset", Number(e.target.value))
-            }
-            className="w-full border rounded px-1 py-0.5 text-xs"
+            onChange={(e) => onChangeConfig("elevationOffset", Number(e.target.value))}
+            className="w-full border rounded h-5 p-0 !text-[12px] leading-tight"
           />
         </div>
+  
+        {/* Analyze Button */}
+        <button
+          onClick={onAnalyze}
+          aria-label="Run analysis"
+          className={`h-5 px-2 py-0 rounded text-white bg-${colors[stationType]}-500 hover:bg-${colors[stationType]}-600 flex-shrink-0 flex items-center justify-center`}
+        >
+          Analyze
+        </button>
       </div>
-
-      {/* Analyze Button */}
-      <button
-        onClick={onAnalyze}
-        className={`py-1 rounded text-xs text-white bg-${colors[stationType]}-500 hover:bg-${colors[stationType]}-600`}
-      >
-        Analyze
-      </button>
-    </div>
+    </article>
   );
+  
+  
+  
 };
 
 export default StationCard;

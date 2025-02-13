@@ -16,7 +16,8 @@ import Card from "./components/Card";
 import ELOSAnalysisCard from "./components/ELOSAnalysisCard";
 import { ObstacleAnalysisProvider } from "./context/ObstacleAnalysisContext";
 import MapSidePanel from "./components/MapSidePanel";
-import { Battery, Radio } from "lucide-react";
+import { Battery, Radio, GripVertical, Mountain } from "lucide-react";
+import { trackEventWithForm as trackEvent } from "./components/tracking/tracking";
 
 const HomeContent = () => {
   const mapRef = useRef<MapRef>(null);
@@ -122,7 +123,6 @@ const HomeContent = () => {
                     <Radio className="w-4 h-4" />
                     LOS Analysis
                   </button>
-                  {/* Show the uploader button only when a flight plan is loaded */}
                   {flightPlan && (
                     <button
                       onClick={() => setShowUploader(true)}
@@ -131,6 +131,17 @@ const HomeContent = () => {
                       Upload Flight Plan
                     </button>
                   )}
+                  {/* New DEM Data Button */}
+                  <button
+                    onClick={() => {
+                      trackEvent("own_dem_data_request", { panel: "dem" });
+                      window.alert("Coming Soon!");
+                    }}
+                    className="map-button flex items-center gap-2 transition-colors hover:bg-gray-300/80"
+                  >
+                    <GripVertical className="w-4 h-4" />
+                    Add Your Own DEM Data
+                  </button>
                 </div>
 
                 {/* Analysis Panels */}
