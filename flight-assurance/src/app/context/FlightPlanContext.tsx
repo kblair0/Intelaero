@@ -79,7 +79,14 @@ export const FlightPlanProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [distance, setDistance] = useState<number | null>(null);
 
   const updateFlightPlan = (data: FlightPlanData) => {
-    setFlightPlanState(data);
+    setFlightPlanState((prev) => {
+      // Merge previous state if it exists (preserve resolved altitudes)
+      return {
+        ...prev,
+        ...data,
+        processed: data.processed ?? prev?.processed ?? false, // Ensure processed flag is set properly
+      };
+    });
   };
 
   return (

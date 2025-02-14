@@ -2,20 +2,10 @@
 import React, { useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useFlightPlanContext } from "../context/FlightPlanContext";
-
-// For converting KML → GeoJSON
 import toGeoJSON from "@mapbox/togeojson";
 
-// DOMParser is used to parse the KML text into an XML DOM.
 const parser = typeof window !== "undefined" ? new DOMParser() : null;
 
-/**
- * Convert the QGC `frame` integer into a string altitude mode.
- * Adjust these mappings if your QGC uses different frames:
- *   0  -> "absolute"
- *   3  -> "relative"
- *   10 -> "terrain"
- */
 function frameToAltitudeMode(frame: number): "absolute" | "relative" | "terrain" {
   switch (frame) {
     case 3:
@@ -28,64 +18,34 @@ function frameToAltitudeMode(frame: number): "absolute" | "relative" | "terrain"
   }
 }
 
-/**
- * Parse QGC WPL 110 format:
- *   index, current, frame, command, param1, param2, param3, param4, lat, lon, alt, autocontinue
- */
-function parseQGCFile(
-  content: string
-): import("../context/FlightPlanContext").FlightPlanData {
+function parseQGCFile(content: string): import("../context/FlightPlanContext").FlightPlanData {
   const lines = content.trim().split("\n");
 
-  // Basic validation
   if (!lines[0].includes("QGC WPL 110")) {
     throw new Error("Invalid .waypoints file. Missing QGC WPL 110 header.");
   }
 
-  let homePosition = {
-    latitude: 0,
-    longitude: 0,
-    altitude: 0,
-  };
-
-  const waypoints: {
-    index: number;
-    altitudeMode: "relative" | "terrain" | "absolute";
-    originalAltitude: number;
-    commandType: number;
-    frame: number;
-    params: number[];
-  }[] = [];
-
-  const coordinates: [number, number, number][] = [];
+  let homePosition = { latitude: 0, longitude: 0, altitude: 0 };
+  const waypoints = [];
+  const coordinates = [];
 
   for (let i = 1; i < lines.length; i++) {
     const parts = lines[i].split("\t");
-    if (parts.length < 12) {
-      continue; // skip incomplete lines
-    }
+    if (parts.length < 12) continue;
 
     const index = parseInt(parts[0], 10);
     const current = parseInt(parts[1], 10);
     const frame = parseInt(parts[2], 10);
     const command = parseInt(parts[3], 10);
-    const param1 = parseFloat(parts[4]);
-    const param2 = parseFloat(parts[5]);
-    const param3 = parseFloat(parts[6]);
-    const param4 = parseFloat(parts[7]);
+    const params = parts.slice(4, 8).map(parseFloat);
     const lat = parseFloat(parts[8]);
     const lon = parseFloat(parts[9]);
     const alt = parseFloat(parts[10]);
 
     const altitudeMode = frameToAltitudeMode(frame);
 
-    // If this is the "home" line
     if (index === 0 && current === 1) {
-      homePosition = {
-        latitude: lat,
-        longitude: lon,
-        altitude: alt,
-      };
+      homePosition = { latitude: lat, longitude: lon, altitude: alt };
     }
 
     waypoints.push({
@@ -94,7 +54,7 @@ function parseQGCFile(
       originalAltitude: alt,
       commandType: command,
       frame,
-      params: [param1, param2, param3, param4],
+      params,
     });
 
     if (!isNaN(lat) && !isNaN(lon) && lat !== 0 && lon !== 0) {
@@ -102,32 +62,13 @@ function parseQGCFile(
     }
   }
 
-  if (coordinates.length === 0) {
-    throw new Error("No valid waypoints with lat/lon found in the .waypoints file.");
-  }
-
-  console.log("Flight Plan Parse Details:", {
-    waypoints: waypoints.map((wp, idx) => ({
-      waypointNumber: idx,
-      rawAltitude: wp.originalAltitude,
-      altitudeMode: wp.altitudeMode,
-      frame: wp.frame,
-    })),
-    homeAltitude: homePosition.altitude,
-  });
-
   return {
     type: "FeatureCollection",
-    properties: {
-      homePosition,
-    },
+    properties: { homePosition },
     features: [
       {
         type: "Feature",
-        geometry: {
-          type: "LineString",
-          coordinates,
-        },
+        geometry: { type: "LineString", coordinates },
         properties: {
           name: "Drone Flight Path",
           originalAltitudes: coordinates.map((c) => c[2]),
@@ -140,111 +81,82 @@ function parseQGCFile(
   };
 }
 
-/**
- * Parse a KML file using @mapbox/togeojson, then produce a minimal FlightPlanData.
- * This example simply extracts the **first** LineString in the KML.
- * Infer home position is the first waypoint.
- */
-function inferHomePosition(coordinates: [number, number, number][]): {
-  latitude: number;
-  longitude: number;
-  altitude: number;
-} | null {
-  if (coordinates.length === 0) return null;
-
-  // Use first coordinate as default home position
-  const firstPoint = coordinates[0];
-  return {
-    latitude: firstPoint[1], // Lat
-    longitude: firstPoint[0], // Lon
-    altitude: firstPoint[2] ?? 0, // Alt, default to 0 if missing
-  };
-}
-
 function parseKMLFile(kmlText: string): import("../context/FlightPlanContext").FlightPlanData {
   const kmlDom = parser?.parseFromString(kmlText, "application/xml");
   const geojsonResult = toGeoJSON.kml(kmlDom) as GeoJSON.FeatureCollection;
 
-  let lineStringCoords: [number, number, number][] = [];
+  let lineStringCoords = [];
   let name = "KML Flight Path";
 
   for (const feature of geojsonResult.features) {
     if (feature.geometry?.type === "LineString") {
-      lineStringCoords = feature.geometry.coordinates.map(([lon, lat, alt]: [number, number, number]) => [
+      lineStringCoords = feature.geometry.coordinates.map(([lon, lat, alt]) => [
         lon,
         lat,
         alt ?? 0,
       ]);
-
-      if (feature.properties?.name) {
-        name = feature.properties.name;
-      }
+      name = feature.properties?.name || name;
       break;
     }
   }
 
-  if (!lineStringCoords.length) {
-    throw new Error("No LineString geometry found in KML");
-  }
-
-  // 🛠️ Infer home position if not provided
-  const homePosition = inferHomePosition(lineStringCoords);
-
-  const waypoints = lineStringCoords.map((coord, i) => ({
-    index: i,
-    altitudeMode: "absolute" as const,
-    originalAltitude: coord[2],
-    commandType: 16,
-    frame: 0,
-    params: [0, 0, 0, 0],
-  }));
+  if (!lineStringCoords.length) throw new Error("No LineString geometry found in KML");
 
   return {
     type: "FeatureCollection",
-    properties: {
-      homePosition, // 👈 Now inferred when missing
-    },
+    properties: { homePosition: inferHomePosition(lineStringCoords) },
     features: [
       {
         type: "Feature",
-        geometry: {
-          type: "LineString",
-          coordinates: lineStringCoords,
-        },
+        geometry: { type: "LineString", coordinates: lineStringCoords },
         properties: {
           name,
           originalAltitudes: lineStringCoords.map((c) => c[2]),
-          altitudeModes: waypoints.map((w) => w.altitudeMode),
-          rawCommands: waypoints.map((w) => w.commandType),
-          waypoints,
+          altitudeModes: Array(lineStringCoords.length).fill("absolute"),
+          rawCommands: Array(lineStringCoords.length).fill(16),
         },
       },
     ],
   };
 }
 
+function parseGeoJSONFile(geojsonText: string): import("../context/FlightPlanContext").FlightPlanData {
+  const geojsonResult = JSON.parse(geojsonText) as GeoJSON.FeatureCollection;
+
+  if (!geojsonResult.features || geojsonResult.features.length === 0)
+    throw new Error("Invalid GeoJSON: No features found.");
+
+  const flightFeature = geojsonResult.features.find((f) => f.geometry?.type === "LineString");
+  if (!flightFeature) throw new Error("No valid flight path found in GeoJSON.");
+
+  return {
+    type: "FeatureCollection",
+    properties: { homePosition: inferHomePosition(flightFeature.geometry.coordinates) },
+    features: [flightFeature],
+  };
+}
+
+function inferHomePosition(coordinates: [number, number, number][]) {
+  if (!coordinates.length) return null;
+  const [lon, lat, alt] = coordinates[0];
+  return { latitude: lat, longitude: lon, altitude: alt ?? 0 };
+}
+
 interface FlightPlanUploaderProps {
-  onPlanUploaded?: (
-    flightData: import("../context/FlightPlanContext").FlightPlanData
-  ) => void;
+  onPlanUploaded?: (flightData: import("../context/FlightPlanContext").FlightPlanData) => void;
 }
 
 const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded }) => {
-  const [fileUploadStatus, setFileUploadStatus] = useState<
-    "idle" | "uploading" | "processed" | "error"
-  >("idle");
+  const [fileUploadStatus, setFileUploadStatus] = useState<"idle" | "uploading" | "processed" | "error">("idle");
   const [fileName, setFileName] = useState<string | null>(null);
-
   const { setFlightPlan } = useFlightPlanContext();
-
-
 
   const onDrop = (acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
     const fileExtension = file.name.split(".").pop()?.toLowerCase() || "";
     setFileName(file.name);
     setFileUploadStatus("uploading");
-  
+
     const reader = new FileReader();
     reader.onload = () => {
       try {
@@ -257,13 +169,7 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded 
           } else if (fileExtension === "kml") {
             flightData = parseKMLFile(reader.result as string);
           }
-  
-          // Remove processed flag if it exists
-          if (flightData.processed) {
-            delete flightData.processed;
-          }
-  
-          // Just set the new flight plan directly without clearing first
+
           setFlightPlan(flightData);
           setFileUploadStatus("processed");
         }
@@ -276,72 +182,17 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded 
   };
 
   const { getRootProps, getInputProps } = useDropzone({
-    accept: {
-      "application/vnd.google-earth.kml+xml": [".kml"],
-      "application/geo+json": [".geojson"],
-      "application/waypoints": [".waypoints"],
-    },
+    accept: { "application/vnd.google-earth.kml+xml": [".kml"], "application/geo+json": [".geojson"], "application/waypoints": [".waypoints"] },
     onDrop,
   });
-
-  function parseGeoJSONFile(
-    geojsonText: string
-  ): import("../context/FlightPlanContext").FlightPlanData {
-    const geojsonResult = JSON.parse(geojsonText) as GeoJSON.FeatureCollection;
-
-    if (!geojsonResult.features || geojsonResult.features.length === 0) {
-      throw new Error("Invalid GeoJSON: No features found.");
-    }
-
-    const flightFeature = geojsonResult.features.find(
-      (f) => f.geometry?.type === "LineString"
-    );
-
-    if (!flightFeature) {
-      throw new Error("No valid flight path found in GeoJSON.");
-    }
-
-    const lineStringCoords = (flightFeature.geometry as GeoJSON.LineString)
-      .coordinates as [number, number, number][];
-
-    // 🛠️ Infer home position if missing
-    const homePosition =
-      geojsonResult.properties?.homePosition || inferHomePosition(lineStringCoords);
-
-    return {
-      type: "FeatureCollection",
-      properties: {
-        homePosition,
-      },
-      features: [flightFeature],
-    };
-  }
-
-  function inferHomePosition(coordinates: [number, number, number][]): {
-    latitude: number;
-    longitude: number;
-    altitude: number;
-  } | null {
-    if (coordinates.length === 0) return null;
-
-    // Use first coordinate as default home position
-    const firstPoint = coordinates[0];
-    return {
-      latitude: firstPoint[1],
-      longitude: firstPoint[0],
-      altitude: firstPoint[2] ?? 0,
-    };
-  }
 
   const loadExampleGeoJSON = async () => {
     try {
       const response = await fetch("/example.geojson");
       const rawData = await response.json();
 
-      // Process the data through our parsing function
       const processedData = parseGeoJSONFile(JSON.stringify(rawData));
-
-      setFlightPlan(processedData); // ✅ Now homePosition is guaranteed!
+      setFlightPlan(processedData);
 
       if (onPlanUploaded) {
         onPlanUploaded(processedData);
@@ -361,37 +212,13 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded 
         <strong>.kml</strong> file to analyze your drone&apos;s flight path.
       </p>
 
-      <div
-        {...getRootProps()}
-        className="mt-4 border-2 border-dashed border-gray-300 p-6 rounded-lg flex flex-col items-center justify-center cursor-pointer"
-      >
+      <div {...getRootProps()} className="mt-4 border-2 border-dashed border-gray-300 p-6 rounded-lg flex flex-col items-center justify-center cursor-pointer">
         <input {...getInputProps()} />
-        {fileUploadStatus === "idle" && (
-          <>
-            <p className="text-gray-500">Drag &amp; Drop your file here</p>
-            <p className="text-sm text-gray-400">or click to upload</p>
-          </>
-        )}
-        {fileUploadStatus === "uploading" && (
-          <p className="text-blue-600">Processing your file...</p>
-        )}
-        {fileUploadStatus === "processed" && (
-          <p className="text-green-600">
-            Upload complete! File: <strong>{fileName}</strong>
-          </p>
-        )}
-        {fileUploadStatus === "error" && (
-          <p className="text-red-600">
-            Error processing file. Please try again.
-          </p>
-        )}
+        <p className="text-gray-500">Drag &amp; Drop your file here or click to upload</p>
       </div>
 
       <div className="flex justify-center gap-2 mt-6">
-        <button
-          onClick={loadExampleGeoJSON}
-          className="bg-blue-500 text-white px-4 py-2 rounded shadow hover:bg-blue-600 text-sm"
-        >
+        <button onClick={loadExampleGeoJSON} className="bg-blue-500 text-white px-4 py-2 rounded shadow hover:bg-blue-600 text-sm">
           Show Me an Example
         </button>
       </div>

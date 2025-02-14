@@ -109,35 +109,35 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
     const hasZeroAltitudes = zeroAltitudePoints.length > 0;
     const hasDuplicates = duplicateWaypoints.length > 0;
   
-    // 120m height check: compute maximum clearance if analysisData is available
     let heightCheckStatus: "success" | "error" | "loading" = "loading";
     let heightCheckContent: React.ReactNode = (
       <div className="text-sm text-gray-500">Terrain analysis pending</div>
     );
-    
+  
     if (analysisData) {
       const clearances = analysisData.flightAltitudes.map(
         (alt, idx) => alt - analysisData.terrainElevations[idx]
       );
       const maxClearance = Math.max(...clearances);
-      if (maxClearance <= 120) {
-        heightCheckStatus = "success";
-        heightCheckContent = (
-          <div className="text-sm text-green-600">
-            ✓ Maximum altitude above ground: {maxClearance.toFixed(1)}m (within limit)
-          </div>
-        );
-      } else {
+      const hasExceededRegulatoryLimit = maxClearance > 120;
+  
+      if (hasExceededRegulatoryLimit) {
         heightCheckStatus = "error";
         heightCheckContent = (
           <div className="text-sm text-red-600">
-            Found waypoint with altitude above ground: {maxClearance.toFixed(1)}m (exceeds 120m limit)
+            Flight altitude exceeds 120m regulatory limit: {maxClearance.toFixed(1)}m
+          </div>
+        );
+      } else {
+        heightCheckStatus = "success";
+        heightCheckContent = (
+          <div className="text-sm text-green-600">
+            ✓ Maximum altitude: {maxClearance.toFixed(1)}m (within limit)
           </div>
         );
       }
     }
   
-    // Overall status is error if any check fails or pending if terrain analysis isn't complete
     const overallStatus: VerificationSection["status"] =
       hasZeroAltitudes || hasDuplicates || (analysisData && heightCheckStatus === "error")
         ? "error"
@@ -192,6 +192,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
           )
         }
       ],
+  
       actions: (
         <div className="flex flex-col gap-2 mt-3">
           <button
@@ -317,57 +318,6 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
       ],
       action: () => setShowTerrainPopup(true),
       actionLabel: "View Detailed Analysis"
-    };
-  };
-
-  // Regulatory Check section: verifies that the drone does not exceed 120m above ground level
-  const getRegulatoryCheck = (): VerificationSection => {
-    if (!flightPlan) {
-      return {
-        id: "regulatory",
-        title: "Regulatory Check",
-        description: "Upload a flight plan to begin regulatory verification",
-        status: "pending"
-      };
-    }
-
-    if (!analysisData) {
-      return {
-        id: "regulatory",
-        title: "Regulatory Check",
-        description: "Analyzing flight altitudes for regulatory compliance...",
-        status: "loading"
-      };
-    }
-
-    // Calculate clearance at each waypoint (flight altitude minus terrain elevation)
-    const clearances = analysisData.flightAltitudes.map(
-      (alt, idx) => alt - analysisData.terrainElevations[idx]
-    );
-    const maxClearance = Math.max(...clearances);
-    const isWithinRegulatoryLimit = maxClearance <= 120;
-
-    return {
-      id: "regulatory",
-      title: "Regulatory Check",
-      description: "Ensure flight altitude does not exceed 120m above ground level",
-      status: isWithinRegulatoryLimit ? "success" : "error",
-      subSections: [
-        {
-          title: "Maximum Altitude Above Ground",
-          content: (
-            <div className={isWithinRegulatoryLimit ? "text-green-600" : "text-red-600"}>
-              {maxClearance.toFixed(1)}m {isWithinRegulatoryLimit ? "within limit" : "exceeds 120m limit"}
-            </div>
-          )
-        }
-      ],
-      action: () => {
-        if (!isWithinRegulatoryLimit) {
-          window.alert("Your flight plan exceeds the 120m AGL regulatory limit. Please adjust your waypoints.");
-        }
-      },
-      actionLabel: isWithinRegulatoryLimit ? "OK" : "Review Flight Plan"
     };
   };
 
