@@ -71,7 +71,7 @@ export async function analyzeFlightPathVisibility(
   
   console.log('Starting Flight Path Visibility Analysis:', {
     flightPlanFeatures: flightPlan.features.length,
-    availableStations: Object.entries(stations).filter(([_, loc]) => loc !== null).length,
+    availableStations: Object.entries(stations).filter(([, loc]) => loc !== null).length,
     sampleInterval
   });
 
@@ -113,7 +113,7 @@ export async function analyzeFlightPathVisibility(
 
   // Get available stations
   const availableStations = Object.entries(stations)
-    .filter(([_, location]): location is [string, NonNullable<LocationData>] => 
+    .filter(([, location]): location is [string, NonNullable<LocationData>] => 
       location !== null
     )
     .map(([type, location]) => ({

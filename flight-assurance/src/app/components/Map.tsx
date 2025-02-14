@@ -305,13 +305,6 @@ const Map = forwardRef<MapRef, MapProps>(
         processFlightPlan();
     }, [contextFlightPlan, queryTerrainElevation, setContextFlightPlan, setDistance, setError]);
 
-    useEffect(() => {
-      if (resolvedGeoJSON && mapRef.current) {
-        console.log("Displaying resolved flight plan:", resolvedGeoJSON);
-        addGeoJSONToMap(resolvedGeoJSON);
-      }
-    }, [resolvedGeoJSON, mapRef]);
-
     const addGeoJSONToMap = useCallback(
       (geojson: GeoJSON.FeatureCollection) => {
         if (mapRef?.current && geojson.type === "FeatureCollection") {
@@ -439,6 +432,13 @@ const Map = forwardRef<MapRef, MapProps>(
     );
 
     useEffect(() => {
+      if (resolvedGeoJSON && mapRef.current) {
+        console.log("Displaying resolved flight plan:", resolvedGeoJSON);
+        addGeoJSONToMap(resolvedGeoJSON);
+      }
+    }, [resolvedGeoJSON, mapRef, addGeoJSONToMap]);
+
+    useEffect(() => {
       if (lineRef.current && metrics.availableBatteryCapacity > 0) {
           // Get flight time available (excluding reserve)
           const availableFlightTime = metrics.availableBatteryCapacity / parseFloat(config.dischargeRate);
@@ -483,9 +483,9 @@ const Map = forwardRef<MapRef, MapProps>(
       }
   }, [metrics.availableBatteryCapacity, config.dischargeRate, config.assumedSpeed, totalDistance]);
 
-    const toggleLayerVisibility = (layerId: string) => {
-      return layerManager.toggleLayerVisibility(layerId);
-    };
+  const toggleLayerVisibility = useCallback((layerId: string) => {
+    return layerManager.toggleLayerVisibility(layerId);
+  }, []);
 
     useImperativeHandle(ref, () => ({
       addGeoJSONToMap,
@@ -651,79 +651,77 @@ const Map = forwardRef<MapRef, MapProps>(
     }, []);
     
 
-    const fetchTerrainElevation = async (
-      lng: number,
-      lat: number
-    ): Promise<number> => {
-      try {
-        const tileSize = 512;
-        const zoom = 15;
-        const scale = Math.pow(2, zoom);
+async function fetchTerrainElevation(lng: number, lat: number): Promise<number> {
+  try {
+    const tileSize = 512;
+    const zoom = 15;
+    const scale = Math.pow(2, zoom);
 
-        const latRad = (lat * Math.PI) / 180;
-        const tileX = Math.floor(((lng + 180) / 360) * scale);
-        const tileY = Math.floor(
-          ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) /
-            2) *
-            scale
-        );
+    const latRad = (lat * Math.PI) / 180;
+    const tileX = Math.floor(((lng + 180) / 360) * scale);
+    const tileY = Math.floor(
+      ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) /
+        2) *
+        scale
+    );
 
-        const pixelX = Math.floor(
-          (((lng + 180) / 360) * scale - tileX) * tileSize
-        );
-        const pixelY = Math.floor(
-          (((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) /
-            2) *
-            scale -
-            tileY) *
-            tileSize
-        );
+    const pixelX = Math.floor(
+      (((lng + 180) / 360) * scale - tileX) * tileSize
+    );
+    const pixelY = Math.floor(
+      (((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) /
+        2) *
+        scale -
+        tileY) *
+        tileSize
+    );
 
-        const tileURL = `https://api.mapbox.com/v4/mapbox.terrain-rgb/${zoom}/${tileX}/${tileY}@2x.pngraw?access_token=${process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}`;
-        const response = await fetch(tileURL);
-        const blob = await response.blob();
-        const imageBitmap = await createImageBitmap(blob);
+    const tileURL = `https://api.mapbox.com/v4/mapbox.terrain-rgb/${zoom}/${tileX}/${tileY}@2x.pngraw?access_token=${process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}`;
+    const response = await fetch(tileURL);
+    const blob = await response.blob();
+    const imageBitmap = await createImageBitmap(blob);
 
-        const canvas = document.createElement("canvas");
-        canvas.width = tileSize;
-        canvas.height = tileSize;
-        const context = canvas.getContext("2d");
-        if (!context) throw new Error("Failed to create canvas context");
+    const canvas = document.createElement("canvas");
+    canvas.width = tileSize;
+    canvas.height = tileSize;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Failed to create canvas context");
 
-        context.drawImage(imageBitmap, 0, 0);
-        const imageData = context.getImageData(0, 0, tileSize, tileSize);
+    context.drawImage(imageBitmap, 0, 0);
+    const imageData = context.getImageData(0, 0, tileSize, tileSize);
 
-        const idx = (pixelY * tileSize + pixelX) * 4;
-        const [r, g, b] = [
-          imageData.data[idx],
-          imageData.data[idx + 1],
-          imageData.data[idx + 2],
-        ];
+    const idx = (pixelY * tileSize + pixelX) * 4;
+    const [r, g, b] = [
+      imageData.data[idx],
+      imageData.data[idx + 1],
+      imageData.data[idx + 2],
+    ];
 
-        return -10000 + (r * 256 * 256 + g * 256 + b) * 0.1;
-      } catch (error) {
-        console.error("RGB elevation error:", error);
-        return 0;
-      }
-    };
+    return -10000 + (r * 256 * 256 + g * 256 + b) * 0.1;
+  } catch (error) {
+    console.error("RGB elevation error:", error);
+    return 0;
+  }
+}
 
-    const handleFileProcessing = (data: any) => {
-      if (Array.isArray(data)) {
-        const totalDraw = data.reduce(
-          (sum, phase) => sum + (phase["Total Draw(mAh)"] || 0),
-          0
-        );
-        const totalTime = data.reduce(
-          (sum, phase) => sum + (phase["TotalTime(s)"] || 0),
-          0
-        );
-        const averageDraw = totalTime > 0 ? totalDraw / totalTime : 0;
+const handleFileProcessing = (data: any) => {
+  if (Array.isArray(data)) {
+    const totalDraw = data.reduce(
+      (sum, phase) => sum + (phase["Total Draw(mAh)"] || 0),
+      0
+    );
+    const totalTime = data.reduce(
+      (sum, phase) => sum + (phase["TotalTime(s)"] || 0),
+      0
+    );
+    const averageDraw = totalTime > 0 ? totalDraw / totalTime : 0;
 
-        if (onDataProcessed) {
-          onDataProcessed({ averageDraw, phaseData: data });
-        }
-      }
-    };
+    if (onDataProcessed) {
+      onDataProcessed({ averageDraw, phaseData: data });
+    }
+  }
+};
+
 
     // Map Marker Popup Implementation
     const createMarkerPopup = (
@@ -1114,20 +1112,22 @@ const Map = forwardRef<MapRef, MapProps>(
           </div>
         </div>
 
-        <ELOSGridAnalysis
-          ref={elosGridRef}
-          map={mapRef.current!}
-          flightPath={resolvedGeoJSON}
-          elosGridRange={contextGridRange}
-          onError={(error) => {
-            console.error("ELOS Analysis error:", error);
-            setError(error.message);
-          }}
-          onSuccess={(result) => {
-            console.log("ELOS Analysis completed:", result);
-            setResults(result);
-          }}
-        />
+        {mapRef.current && (
+          <ELOSGridAnalysis
+            ref={elosGridRef}
+            map={mapRef.current}
+            flightPath={resolvedGeoJSON}
+            elosGridRange={contextGridRange}
+            onError={(error) => {
+              console.error("ELOS Analysis error:", error);
+              setError(error.message);
+            }}
+            onSuccess={(result) => {
+              console.log("ELOS Analysis completed:", result);
+              setResults(result);
+            }}
+          />
+        )}
       </div>
     );
   }

@@ -645,7 +645,7 @@ const generateCombinedBoundingBox = (
   });
 
   // Combine the individual bboxes.
-  let combinedBbox: turf.BBox = [180, 90, -180, -90];
+  const combinedBbox: turf.BBox = [180, 90, -180, -90];
   bboxes.forEach((bbox) => {
     combinedBbox[0] = Math.min(combinedBbox[0], bbox[0]);
     combinedBbox[1] = Math.min(combinedBbox[1], bbox[1]);

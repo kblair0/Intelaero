@@ -5,7 +5,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useLocation } from "../context/LocationContext";
 import { useLOSAnalysis } from "../context/LOSAnalysisContext";
-import { LocationData } from "../components/Map";
 import { MapRef } from "./Map";
 import { useFlightPlanContext } from "../context/FlightPlanContext";
 import { layerManager, MAP_LAYERS } from "./LayerManager";
@@ -30,26 +29,32 @@ interface ELOSAnalysisCardProps {
   mapRef: React.RefObject<MapRef>;
 }
 
-const LocationDisplay = ({
-  title,
-  location,
-}: {
-  title: string;
-  location?: LocationData | null;
-}) => (
-  <div className="mb-3 p-2 bg-gray-50 rounded">
-    <h4 className="text-xs font-semibold text-gray-600">{title}</h4>
-    {location ? (
-      <div className="text-xs mt-1 flex flex-row gap-4 items-center">
-        <p>Lat: {location.lat.toFixed(5)}</p>
-        <p>Lng: {location.lng.toFixed(5)}</p>
-        <p>Elev: {location.elevation?.toFixed(1)}m</p>
-      </div>
-    ) : (
-      <p className="text-xs text-gray-400 mt-1">Not set</p>
-    )}
-  </div>
-);
+interface LocationData {
+  lat: number;
+  lng: number;
+  elevation: number | null;
+}
+
+interface MarkerConfig {
+  gridRange: number;
+  elevationOffset: number;
+  [key: string]: any;
+}
+
+interface AnalysisResults {
+  cells: any[];
+  stats: {
+    visibleCells: number;
+    totalCells: number;
+    averageVisibility: number;
+    analysisTime: number;
+  };
+  flightPathVisibility?: {
+    visibleLength: number;
+    totalLength: number;
+    coveragePercentage: number;
+  };
+}
 
 const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
   // Get location data from LocationContext
@@ -155,15 +160,6 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
     }
   }, [mapRef, setIsAnalyzing, setError]);
 
-  // Handler for marker configuration updates
-  const handleMarkerConfigChange = (
-    markerType: "gcs" | "observer" | "repeater",
-    field: "elevationOffset" | "gridRange",
-    value: number
-  ) => {
-    setMarkerConfig(markerType, { [field]: value });
-  };
-
   // Station to Station LOS Analysis
   // State variables to hold the selected source and target for station-to-station LOS.
   const [sourceStation, setSourceStation] = useState<"gcs" | "observer" | "repeater">("gcs");
@@ -190,7 +186,8 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
     } else if (availableStations.length === 1) {
       setSourceStation(availableStations[0]);
     }
-  }, [availableStations.length]);
+  }, [availableStations]);
+  
 
   // Handler for station-to-station LOS check.
   const handleStationLOSCheck = async () => {
@@ -297,7 +294,13 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
         { type: 'gcs' as const, location: gcsLocation, config: markerConfigs.gcs },
         { type: 'observer' as const, location: observerLocation, config: markerConfigs.observer },
         { type: 'repeater' as const, location: repeaterLocation, config: markerConfigs.repeater }
-      ].filter(s => s.location !== null);
+      ].filter((s): s is (
+        | { type: "gcs"; location: LocationData; config: MarkerConfig }
+        | { type: "observer"; location: LocationData; config: MarkerConfig }
+        | { type: "repeater"; location: LocationData; config: MarkerConfig }
+      ) => s.location !== null);
+      
+      
   
       // Run merged analysis
       const results = await mapRef.current.runElosAnalysis({
@@ -466,7 +469,7 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
         </div>
   
         {/* Existing buttons for analysis */}
-        <div className="flex flex-row gap-4">
+        <div className="flex flex-col gap-2">
           <button
             onClick={handleStationLOSCheck}
             className={`${
@@ -493,30 +496,31 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
   
         {/* Results display remains here */}
         {stationLOSResult && (
-          <div
-            className={`p-3 rounded ${
-              stationLOSResult.clear ? "bg-green-100" : "bg-red-100"
-            }`}
-          >
-            {stationLOSResult.clear ? (
-              <div className="text-green-700 flex items-center gap-2">
-                <span>✓</span>
-                <span>Clear line of sight between stations</span>
-              </div>
-            ) : (
-              <div className="text-red-700">
-                <div className="flex items-center gap-2">
-                  <span>✗</span>
-                  <span>Line of sight obstructed</span>
-                </div>
-                <div className="text-sm mt-1">
-                  Obstruction at {stationLOSResult.obstructionDistance?.toFixed(1)}m (
-                  {(stationLOSResult.obstructionFraction! * 100).toFixed(1)}% along path)
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+  <div
+    className={`p-3 rounded ${
+      stationLOSResult.clear ? "bg-green-100" : "bg-red-100"
+    }`}
+  >
+    {stationLOSResult.clear ? (
+      <div className="text-green-700 text-sm flex items-center gap-2">
+        <span>✓</span>
+        <span>Clear line of sight between stations</span>
+      </div>
+    ) : (
+      <div className="text-red-700 text-sm">
+        <div className="flex items-center gap-2">
+          <span>✗</span>
+          <span>Line of sight obstructed</span>
+        </div>
+        <div className="text-xs mt-1">
+          Obstruction at {stationLOSResult.obstructionDistance?.toFixed(1)}m (
+          {(stationLOSResult.obstructionFraction! * 100).toFixed(1)}% along path)
+        </div>
+      </div>
+    )}
+  </div>
+)}
+
       </div>
     );
   };
@@ -551,35 +555,120 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
     }
   : null;
 
-const chartOptions = {
-  responsive: true,
-  plugins: {
-    title: {
-      display: true,
-      text: "Station-to-Station LOS Profile",
-    },
-    tooltip: {
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: {
       mode: "index" as const,
       intersect: false,
     },
-  },
-  scales: {
-    x: {
-      title: {
+    plugins: {
+      legend: {
         display: true,
-        text: "Distance (m)",
+        position: "top" as const,
+        labels: {
+          boxWidth: 12,
+          font: { size: 10 },
+          padding: 8,
+        },
+      },
+      tooltip: {
+        enabled: true,
+        position: "nearest" as const,
+        callbacks: {
+          title: (tooltipItems: any[]) => {
+            if (!tooltipItems.length) return "";
+            const xVal = tooltipItems[0].parsed.x;
+            return `Distance: ${(xVal / 100).toFixed(2)} km`;
+          },
+          label: (context: any) => {
+            const label = context.dataset.label || "";
+            const value = context.parsed.y;
+            if (label.includes("Terrain")) {
+              return `Terrain: ${value.toFixed(1)} m`;
+            } else if (label.includes("Flight")) {
+              return `Flight: ${value.toFixed(1)} m`;
+            }
+            return `${label}: ${value.toFixed(1)} m`;
+          },
+          footer: (tooltipItems: any[]) => {
+            if (tooltipItems.length === 2) {
+              const terrainElevation = tooltipItems[0].parsed.y;
+              const flightAltitude = tooltipItems[1].parsed.y;
+              const clearance = flightAltitude - terrainElevation;
+              return `Clearance: ${clearance.toFixed(1)} m`;
+            }
+            return "";
+          },
+        },
+      },
+      annotation: {
+        animations: {
+          numbers: {
+            properties: ["x", "y"],
+            type: "number",
+          },
+        },
+        annotations: {
+          clearanceLine: {
+            type: "line" as const,
+            borderColor: "rgba(128, 128, 128, 0.8)",
+            borderWidth: 2,
+            display: false,
+            enter: (ctx: any) => {
+              return ctx.chart.tooltip?.dataPoints?.length === 2;
+            },
+            leave: () => false,
+            value: (ctx: any) => {
+              const tooltip = ctx.chart.tooltip;
+              if (tooltip?.dataPoints?.length === 2) {
+                return tooltip.dataPoints[0].parsed.x;
+              }
+              return 0;
+            },
+            scaleID: "x",
+          },
+        },
       },
     },
-    y: {
-      title: {
-        display: true,
-        text: "Altitude (m)",
+    layout: {
+      padding: 0, // Remove extra padding around the chart
+    },
+    scales: {
+      x: {
+        title: {
+          display: true,
+          text: "Distance (km)",
+        },
+      },
+      y: {
+        title: {
+          display: true,
+          text: "Elevation (m)",
+        },
       },
     },
-  },
-};
-
-
+    onHover: (event: any, elements: any[], chart: any) => {
+      const tooltip = chart.tooltip;
+      if (tooltip?.dataPoints?.length === 2) {
+        const xValue = tooltip.dataPoints[0].parsed.x;
+        const yLow = tooltip.dataPoints[0].parsed.y;
+        const yHigh = tooltip.dataPoints[1].parsed.y;
+  
+        // Update the clearance line annotation
+        const clearanceLine = chart.options.plugins.annotation.annotations.clearanceLine;
+        clearanceLine.display = true;
+        clearanceLine.yMin = yLow;
+        clearanceLine.yMax = yHigh;
+        clearanceLine.xMin = xValue;
+        clearanceLine.xMax = xValue;
+  
+        chart.update("none");
+      }
+    },
+  };
+  
+  
   const handleFlightPathVisibility = async () => {
     if (!mapRef.current || !flightPlan) {
       setError("Map or flight plan not initialized");
@@ -612,12 +701,9 @@ const chartOptions = {
       );
 
       // Add the visibility layer to the map
-      addVisibilityLayer(mapRef.current.getMap()!, result.segments);
+      addVisibilityLayer(mapRef.current.getMap()!, result.segments!);
 
-      // Store the results in state
-      const visibleCells = Math.round(result.stats.visibleLength);
-      const totalCells = Math.round(result.stats.totalLength);
-      
+
       setResults({
         cells: [], // Keep existing cells if any
         stats: {
@@ -909,7 +995,7 @@ const renderMergedAnalysisSection = () => {
           <div className="flex flex-row gap-4 mt-4">
             {/* Grid Range Slider */}
             <div className="flex-1">
-              <div className="flex justify-between text-xs mb-1">
+              <div className="flex justify-between text-sm mb-1">
                 <span>Analysis Range:</span>
                 <span>{elosGridRange}m</span>
               </div>
@@ -929,7 +1015,7 @@ const renderMergedAnalysisSection = () => {
 
             {/* Global Grid Size Slider */}
             <div className="flex-1">
-              <div className="flex justify-between text-xs mb-1">
+              <div className="flex justify-between text-sm mb-1">
                 <span>Grid Size:</span>
                 <span>{gridSize === 30 ? '30m: SRTM' : `${gridSize}m`}</span>
               </div>
@@ -957,7 +1043,7 @@ const renderMergedAnalysisSection = () => {
           <button
             onClick={handleAnalysis}
             disabled={!isFlightPlanLoaded || isAnalyzing}
-            className={`w-full py-2 rounded-lg text-m font-medium transition-colors ${
+            className={`w-full py-2 rounded-lg text-sm font-medium transition-colors ${
               !isFlightPlanLoaded || isAnalyzing
                 ? "bg-gray-300 cursor-not-allowed"
                 : "bg-blue-500 hover:bg-blue-600 text-white"
@@ -1009,7 +1095,7 @@ const renderMergedAnalysisSection = () => {
             Station Based LOS Analysis
           </h3>
           <p className="text-xs ml-2 text-gray-500">
-            Determine the LOS of your stations to the surrounding area. Don't forget to include their elevation. </p>
+            Determine the LOS of your stations to the surrounding area. Don&apos;t forget to include their elevation. </p>
 
           {/* --- Station Based LOS Analysis Sub-section --- */}
           <div className="mt-4 ml-2 p-4 bg-gray-50 rounded border-l-2 border-accentGold shadow-sm">
@@ -1115,15 +1201,35 @@ const renderMergedAnalysisSection = () => {
           </div>
 
           {/* --- Station-to-Station LOS Sub-section --- */}
-          <div className="mt-4 ml-2 p-4 bg-gray-50 rounded border-l-2 border-accentGold shadow-sm">
-          <h4 className="text-m font-semibold mb-2">
+            <div className="mt-4 ml-2 p-4 bg-gray-50 rounded border-l-2 border-accentGold shadow-sm">
+            <h4 className="text-m font-semibold mb-2">
               Station-to-Station Line of Sight
             </h4>
+
+          {/* Conditionally render the LOS Profile Graph above the buttons */}
+          {isGraphEnlarged && losProfileData && (
+            <div className="mb-4 p-2 bg-white rounded shadow-md">
+              <div className="flex justify-between items-center mb-2">
+                <h4 className="text-sm font-medium">LOS Profile Graph</h4>
+                <button
+                  onClick={() => setIsGraphEnlarged(false)}
+                  className="text-xs text-blue-500 hover:underline"
+                >
+                  Close
+                </button>
+              </div>
+              {/* Fixed height container for the chart */}
+              <div className="relative" style={{ height: "200px" }}>
+              <Line data={chartData!} options={chartOptions} />
+              </div>
+            </div>
+          )}
+            {/* Render the station-to-station UI */}
             {renderStationToStationUI()}
           </div>
+
         </div>
       </div>
-
 
     </div>
     </>

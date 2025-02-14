@@ -28,6 +28,19 @@ interface VerificationSection {
   }[];
 }
 
+interface WaypointCoordinate {
+  coord: number[];
+  index: number;
+}
+
+interface FlightPlanFeature {
+  geometry: {
+    coordinates: number[][];
+    type: string;
+  };
+  properties: Record<string, unknown>;
+}
+
 const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePanel }) => {
   const { flightPlan } = useFlightPlanContext();
   const { metrics } = useFlightConfiguration();
@@ -37,8 +50,8 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
   const [expandedSection, setExpandedSection] = useState<string | null>("basic");
   const [showTerrainPopup, setShowTerrainPopup] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [zeroAltitudePoints, setZeroAltitudePoints] = useState<any[]>([]);
-  const [duplicateWaypoints, setDuplicateWaypoints] = useState<any[]>([]);
+  const [zeroAltitudePoints, setZeroAltitudePoints] = useState<WaypointCoordinate[]>([]);
+  const [duplicateWaypoints, setDuplicateWaypoints] = useState<WaypointCoordinate[]>([]);
 
   // Utility function to get minimum clearance distance
   const getMinClearanceDistance = (): number | null => {
@@ -54,8 +67,8 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
   // Check for zero altitude points
   useEffect(() => {
     if (!flightPlan) return;
-    const zeroPoints: any[] = [];
-    flightPlan.features.forEach((feature: any) => {
+    const zeroPoints: WaypointCoordinate[] = [];
+    flightPlan.features.forEach((feature: FlightPlanFeature) => {
       feature.geometry.coordinates.forEach((coord: number[], index: number) => {
         if (coord[2] === 0) {
           zeroPoints.push({ coord, index });
@@ -68,8 +81,8 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
   // Check for duplicate waypoints
   useEffect(() => {
     if (!flightPlan) return;
-    const duplicates: any[] = [];
-    flightPlan.features.forEach((feature: any) => {
+    const duplicates: WaypointCoordinate[] = [];
+    flightPlan.features.forEach((feature: FlightPlanFeature) => {
       const seen = new Set();
       feature.geometry.coordinates.forEach((coord: number[], index: number) => {
         const key = coord.join(',');
@@ -380,8 +393,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
     }
   
     const coverage = losResults.stats?.averageVisibility || 0;
-    const stationLOSResult = losResults.stationLOSResult;
-  
+    
     return {
       id: "los",
       title: "Line of Sight Analysis",
@@ -439,7 +451,6 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
     getEnergyAnalysis(),
     getTerrainAnalysis(),
     getLOSAnalysis(),
-    getRegulatoryCheck()
   ];
 
   // Hidden ObstacleAssessment Component for background processing
@@ -469,7 +480,15 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
 
   return (
     <div className="flex flex-col gap-2">
-      {/* Hidden ObstacleAssessment Component */}
+      {/* Show a loading indicator when analysis is running */}
+      {isAnalyzing && (
+        <div className="flex items-center gap-2 p-2 bg-blue-100 text-blue-700 rounded">
+          <Loader className="w-5 h-5 animate-spin" />
+          <span className="text-sm">Analyzing flight plan...</span>
+        </div>
+      )}
+  
+      {/* Hidden ObstacleAssessment Component for background processing */}
       <div className="hidden">
         <ObstacleAssessment
           flightPlan={flightPlan}
@@ -480,7 +499,8 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
           }}
         />
       </div>
-
+  
+      {/* Render the rest of your sections */}
       {sections.map((section) => (
         <div
           key={section.id}
@@ -507,7 +527,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
               <ChevronRight className="w-5 h-5 text-gray-400" />
             )}
           </button>
-
+  
           {expandedSection === section.id && (
             <div className="px-4 py-3 bg-gray-50 border-t space-y-4">
               {section.subSections?.map((subSection, index) => (
@@ -534,9 +554,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
                   {section.id === "terrain" && (
                     <button
                       onClick={() => {
-                        trackEvent("powerlines_request_click", {
-                          panel: "terrain"
-                        });
+                        trackEvent("powerlines_request_click", { panel: "terrain" });
                         window.alert("Coming Soon!");
                       }}
                       className="mt-2 flex items-center gap-2 px-3 py-1.5 bg-green-500 text-white text-sm rounded-md hover:bg-green-600 transition-colors"
@@ -550,7 +568,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
           )}
         </div>
       ))}
-
+  
       {/* Terrain Clearance Popup */}
       {showTerrainPopup && (
         <TerrainClearancePopup
