@@ -215,6 +215,20 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded 
       <div {...getRootProps()} className="mt-4 border-2 border-dashed border-gray-300 p-6 rounded-lg flex flex-col items-center justify-center cursor-pointer">
         <input {...getInputProps()} />
         <p className="text-gray-500">Drag &amp; Drop your file here or click to upload</p>
+        {fileName && (
+          <p className="mt-2 text-sm text-gray-600">
+            Selected file: {fileName}
+          </p>
+        )}
+        {fileUploadStatus === "uploading" && (
+          <p className="mt-2 text-sm text-blue-600">Processing file...</p>
+        )}
+        {fileUploadStatus === "processed" && (
+          <p className="mt-2 text-sm text-green-600">File processed successfully!</p>
+        )}
+        {fileUploadStatus === "error" && (
+          <p className="mt-2 text-sm text-red-600">Error processing file. Please try again.</p>
+        )}
       </div>
 
       <div className="flex justify-center gap-2 mt-6">
