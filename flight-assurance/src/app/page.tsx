@@ -20,7 +20,7 @@ import Card from "./components/Card";
 import ELOSAnalysisCard from "./components/ELOSAnalysisCard";
 import { ObstacleAnalysisProvider } from "./context/ObstacleAnalysisContext";
 import MapSidePanel from "./components/MapSidePanel";
-import { Battery, Radio, GripVertical } from "lucide-react";
+import { Battery, Radio, GripVertical, X } from "lucide-react";
 import { trackEventWithForm as trackEvent } from "./components/tracking/tracking";
 
 const HomeContent = () => {
@@ -28,6 +28,7 @@ const HomeContent = () => {
   const [activePanel, setActivePanel] = useState<"energy" | "los" | null>(null);
   // New state for showing the flight plan uploader overlay.
   const [showUploader, setShowUploader] = useState(false);
+  const [logoVisible, setLogoVisible] = useState(true);
   const { flightPlan } = useFlightPlanContext();
 
   const togglePanel = (panel: "energy" | "los") => {
@@ -39,39 +40,41 @@ const HomeContent = () => {
       <DisclaimerModal />
 
       {/* Logo Section */}
-      <div className="absolute z-50 bottom-4 left-4 bg-white shadow-lg rounded-2xl p-4 w-40 flex flex-col items-center border border-gray-200">
-        {/* <button
-          className="absolute top-2 right-2 text-gray-500 hover:text-gray-700"
-          onClick={() => setIsVisible(false)}
-        >
-          <X size={20} />
-        </button> */}
-        <div className="flex flex-col items-center gap-3">
-          <Image
-            src="/Logonobackgrnd.png"
-            alt="Intel Aero Logo"
-            width={80}
-            height={80}
-            className="max-w-full h-auto"
-          />
-          <Image
-            src="/Namenobackgrnd.png"
-            alt="Intel Aero Title"
-            width={80}
-            height={40}
-            className="max-w-full h-auto"
-          />
-        </div>
+      {logoVisible && (
+        <div className="absolute z-50 bottom-4 left-4 bg-white shadow-lg rounded-2xl p-4 w-40 flex flex-col items-center border border-gray-200">
+          <button
+            className="absolute top-2 right-2 text-gray-500 hover:text-gray-700"
+            onClick={() => setLogoVisible(false)}
+          >
+            <X size={20} />
+          </button>
+          <div className="flex flex-col items-center gap-3">
+            <Image
+              src="/Logonobackgrnd.png"
+              alt="Intel Aero Logo"
+              width={80}
+              height={80}
+              className="max-w-full h-auto"
+            />
+            <Image
+              src="/Namenobackgrnd.png"
+              alt="Intel Aero Title"
+              width={80}
+              height={40}
+              className="max-w-full h-auto"
+            />
+          </div>
 
-        {/* <div className="text-center mt-3">
+          {/* <div className="text-center mt-3">
           <h2 className="text-lg sm:text-xl font-medium text-black">
-            Intelligent Mission Assurance For RPAS
+          Intelligent Mission Assurance For RPAS
           </h2>
           <p className="text-sm sm:text-base text-gray-700">
-            Smarter Planning, Safer Flights, Guaranteed Returns
+          Smarter Planning, Safer Flights, Guaranteed Returns
           </p>
-        </div> */}
-      </div>
+          </div> */}
+        </div>
+      )}
 
       {/* Main Content Area */}
       <div className="flex-1 mx-auto w-full max-w-[2000px] h-full">
