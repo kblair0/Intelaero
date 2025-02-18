@@ -1062,30 +1062,12 @@ const runMergedAnalysis = useCallback(async (
     onError
 ]);
 
-  // Expose run analysis method
-  useImperativeHandle(ref, () => ({
-    runAnalysis,
-    isAnalyzing
-  }), [runAnalysis, isAnalyzing]);
-  
-  // This needs to be SEPARATE from runMergedAnalysis, at the same level as other hooks
-  useImperativeHandle(ref, () => ({
-    runAnalysis,
-    runMergedAnalysis,
-    isAnalyzing
-  }), [
-    runAnalysis,
-    runMergedAnalysis,
-    isAnalyzing,
-    generateGrid,
-    analyzeVisibility,
-    visualizeGrid,
-    setResults,
-    setError,
-    setIsAnalyzing,
-    onSuccess,
-    onError
-  ]);
+useImperativeHandle(ref, () => ({
+  runAnalysis,
+  runMergedAnalysis,
+  isAnalyzing,
+}), [runAnalysis, runMergedAnalysis, isAnalyzing]);
+
 
   // Cleanup effect should be separate as well
   useEffect(() => {

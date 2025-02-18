@@ -56,6 +56,8 @@ interface LOSAnalysisContextType {
   isAnalyzing: boolean;
   results: AnalysisResults | null;
   error: string | null;
+  autoAnalysisRunning: boolean;
+  setAutoAnalysisRunning: (running: boolean) => void;
   
   // Configuration Actions
   setGridSize: (size: number) => void;
@@ -98,6 +100,7 @@ export function LOSAnalysisProvider({ children }: { children: ReactNode }) {
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [results, setResults] = useState<AnalysisResults | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [autoAnalysisRunning, setAutoAnalysisRunning] = useState<boolean>(false);
 
   // Marker Configuration Handler
   const handleMarkerConfigUpdate = (
@@ -130,6 +133,8 @@ export function LOSAnalysisProvider({ children }: { children: ReactNode }) {
     isAnalyzing,
     results,
     error,
+    autoAnalysisRunning,
+    setAutoAnalysisRunning,
     
     // Configuration Actions
     setGridSize,

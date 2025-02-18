@@ -82,7 +82,9 @@ const HomeContent = () => {
           {/* Map Section with Overlays */}
           <div className="flex-grow relative h-full">
             <div className="relative h-full">
-              <Map ref={mapRef} />
+            <Map
+              ref={mapRef}
+            />
 
               {/* Uploader Overlay:
                     - If no flight plan exists, show uploader automatically.
@@ -189,7 +191,10 @@ const HomeContent = () => {
                 <h3 className="text-lg font-semibold text-gray-900">
                   Plan Verification
                 </h3>
-                <PlanVerification mapRef={mapRef} onTogglePanel={togglePanel} />
+                <PlanVerification 
+                  mapRef={mapRef} 
+                  onTogglePanel={togglePanel} 
+                />
               </div>
             </Card>
           </div>

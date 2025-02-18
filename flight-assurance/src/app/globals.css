@@ -82,4 +82,12 @@ input[type="number"]::placeholder {
   overflow-y: auto;
 }
 
+@keyframes slide-down {
+  from { transform: translate(-50%, -100%); }
+  to { transform: translate(-50%, 0); }
+}
+
+.animate-slide-down {
+  animation: slide-down 0.3s ease forwards;
+}
 

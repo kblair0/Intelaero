@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import { CheckCircle, XCircle, Loader, ChevronDown, ChevronRight, Battery, Radio, Mountain } from "lucide-react";
 import { useFlightPlanContext } from "../context/FlightPlanContext";
 import { useObstacleAnalysis } from "../context/ObstacleAnalysisContext";
@@ -8,6 +8,8 @@ import TerrainClearancePopup from "./TerrainClearancePopup";
 import ObstacleAssessment from "./ObstacleAssessment";
 import { MapRef } from "./Map";
 import { trackEventWithForm as trackEvent } from "./tracking/tracking";
+import ELOSGridAnalysis from "./ELOSGridAnalysis";
+
 
 interface PlanVerificationProps {
   mapRef: React.RefObject<MapRef>;
@@ -45,13 +47,22 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
   const { flightPlan } = useFlightPlanContext();
   const { metrics } = useFlightConfiguration();
   const { analysisData, setAnalysisData } = useObstacleAnalysis();
-  const { results: losResults } = useLOSAnalysis();
+  const {
+    results: losResults,
+    autoAnalysisRunning,
+    setAutoAnalysisRunning
+  } = useLOSAnalysis();
   
   const [expandedSection, setExpandedSection] = useState<string | null>("basic");
   const [showTerrainPopup, setShowTerrainPopup] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [zeroAltitudePoints, setZeroAltitudePoints] = useState<WaypointCoordinate[]>([]);
   const [duplicateWaypoints, setDuplicateWaypoints] = useState<WaypointCoordinate[]>([]);
+
+  //Auto Analysis on Flightplan Upload States
+  const elosGridRef = useRef<ELOSGridAnalysisRef>(null);
+  const [terrainAnalysisComplete, setTerrainAnalysisComplete] = useState(false);
+  const [gridAnalysisTriggered, setGridAnalysisTriggered] = useState(false);
 
   // Utility function to get minimum clearance distance
   const getMinClearanceDistance = (): number | null => {
@@ -403,16 +414,6 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
     getLOSAnalysis(),
   ];
 
-  // Hidden ObstacleAssessment Component for background processing
-  useEffect(() => {
-    const handleTerrainAnalysis = () => {
-      if (!flightPlan || !mapRef.current?.getMap()) return;
-      const event = new CustomEvent("triggerTerrainAnalysis");
-      window.dispatchEvent(event);
-    };
-    handleTerrainAnalysis();
-  }, [flightPlan, mapRef]);
-
   const renderStatusIcon = (status: VerificationSection["status"]) => {
     switch (status) {
       case "success":
@@ -428,6 +429,39 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
     }
   };
 
+  //auto terrin analysis on flightplan upload and ELOS Grid Analysis effects
+  useEffect(() => {
+    if (flightPlan && mapRef.current?.getMap()) {   
+      const event = new CustomEvent("triggerTerrainAnalysis");
+      window.dispatchEvent(event);
+      console.log("triggerTerrainAnalysis event dispatched.");
+    }
+  }, [flightPlan, mapRef]);
+
+  useEffect(() => {
+    if (
+      terrainAnalysisComplete &&
+      flightPlan &&
+      mapRef.current?.getMap() &&
+      elosGridRef.current &&
+      !gridAnalysisTriggered
+    ) {
+      const timer = setTimeout(async () => {
+        try {
+          setAutoAnalysisRunning(true); //context state to show auto analysis running
+          await elosGridRef.current.runAnalysis();
+          setGridAnalysisTriggered(true);
+        } catch (error) {
+          console.error("Error during ELOS analysis:", error);
+        } finally {
+          setAutoAnalysisRunning(false);  // context state to hide auto analysis running
+        }
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [terrainAnalysisComplete, flightPlan, mapRef, elosGridRef, gridAnalysisTriggered]);
+  
+
   return (
     <div className="flex flex-col gap-2">
       {/* Show a loading indicator when analysis is running */}
@@ -437,19 +471,40 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
           <span className="text-sm">Analyzing flight plan...</span>
         </div>
       )}
-  
-      {/* Hidden ObstacleAssessment Component for background processing */}
+
+      {/* Auto analysis indicator */}
+      {autoAnalysisRunning && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 bg-white/95 backdrop-blur-sm border border-gray-200 px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 z-50 animate-slide-down">
+<Loader className="w-5 h-5 animate-spin text-yellow-400" />
+          <div className="flex flex-col">
+            <span className="font-medium text-gray-900">Analyzing Coverage</span>
+            <span className="text-sm text-gray-500">This may take a few moments...</span>
+          </div>
+        </div>
+      )}
+ 
+      {/* Hidden ObstacleAssessment/ELOS Grid analysis Component for background processing */}
       <div className="hidden">
         <ObstacleAssessment
           flightPlan={flightPlan}
           map={mapRef.current?.getMap() || null}
-          onDataProcessed={(data) => {
+          onDataProcessed={async (data) => {
+            console.log("ObstacleAssessment onDataProcessed fired", data);
             setAnalysisData(data);
             setIsAnalyzing(false);
+            // Mark terrain analysis as complete (this flag triggers grid analysis via a separate effect)
+            setTerrainAnalysisComplete(true);
           }}
         />
+        <ELOSGridAnalysis
+          ref={elosGridRef}
+          map={mapRef.current?.getMap() || null}
+          flightPath={flightPlan}
+          onError={(error) => console.error("ELOS Grid Analysis error:", error)}
+          onSuccess={(results) => console.log("ELOS Grid Analysis completed:", results)}
+        />
       </div>
-  
+
       {/* Render the rest of your sections */}
       {sections.map((section) => (
         <div

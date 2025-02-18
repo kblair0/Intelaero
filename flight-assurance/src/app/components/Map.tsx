@@ -26,6 +26,7 @@ import { useLOSAnalysis } from "../context/LOSAnalysisContext";
 import { Cloud } from "lucide-react";
 import { trackEventWithForm as trackEvent } from "./tracking/tracking";
 
+
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || "";
 
 export interface LocationData {
@@ -41,7 +42,7 @@ export interface MapRef {
   toggleLayerVisibility: (layerId: string) => void;
 }
 
-interface MapProps {
+export interface MapProps {
   estimatedFlightDistance: number;
   onShowTickChange?: (value: boolean) => void;
   onTotalDistanceChange?: (distance: number) => void;
@@ -179,7 +180,7 @@ const Map = forwardRef<MapRef, MapProps>(
     //FlightPlan Processing including logging
     useEffect(() => {
       if (!contextFlightPlan || contextFlightPlan.processed) {
-          return;
+        return;
       }
       const processFlightPlan = async () => {
           try {
@@ -294,15 +295,14 @@ const Map = forwardRef<MapRef, MapProps>(
               setContextFlightPlan(processedFlightPlan);
               setDistance(totalDistance);
               setResolvedGeoJSON(processedFlightPlan);
-  
-          } catch (error) {
+
+            } catch (error) {
               console.error("Error processing flight plan:", error);
               setError("Failed to process flight plan. Please try again.");
-          }
+            }
       };
-  
-      processFlightPlan();
-  }, [contextFlightPlan, queryTerrainElevation, setContextFlightPlan, setDistance, setError]);
+   processFlightPlan();
+}, [contextFlightPlan, queryTerrainElevation, setContextFlightPlan, setDistance, setError]);
 
     const addGeoJSONToMap = useCallback(
       (geojson: GeoJSON.FeatureCollection) => {
@@ -485,90 +485,95 @@ const Map = forwardRef<MapRef, MapProps>(
   const toggleLayerVisibility = useCallback((layerId: string) => {
     return layerManager.toggleLayerVisibility(layerId);
   }, []);
-
-    useImperativeHandle(ref, () => ({
+  useImperativeHandle(
+    ref,
+    () => ({
       addGeoJSONToMap,
-      runElosAnalysis: async (options?: MarkerAnalysisOptions | MergedAnalysisOptions) => {
-        // Log map initialization check
-        console.log("Checking map initialization...");
+      runElosAnalysis: async (
+        options?: MarkerAnalysisOptions | MergedAnalysisOptions
+      ) => {
+        console.log("[runElosAnalysis] Called with options:", options);
+  
         if (!mapRef.current) {
-          console.error("Error: Map is not initialized");
+          console.error("[runElosAnalysis] Error: Map is not initialized");
           throw new Error("Map is not initialized");
         }
-        console.log("Map initialized:", mapRef.current);
-    
-        if (elosGridRef.current) {
-          console.log("elosGridRef initialized:", elosGridRef.current);
-          try {
-            if (options && 'mergedAnalysis' in options) {
-              // Merged analysis
-              console.log("Running merged analysis with stations:", options.stations);
-              
-              // Clean up existing merged visibility layer if it exists
-              if (mapRef.current.getLayer(MAP_LAYERS.MERGED_VISIBILITY)) {
-                mapRef.current.removeLayer(MAP_LAYERS.MERGED_VISIBILITY);
-                mapRef.current.removeSource(MAP_LAYERS.MERGED_VISIBILITY);
-              }
-    
-              // Run the merged analysis using the elosGridRef
-              const results = await elosGridRef.current.runMergedAnalysis({
-                stations: options.stations
-              });
-    
-              console.log("Merged analysis complete");
-              return results;
-    
-            } else if (options) {
-              // Single marker analysis
-              console.log("Running marker-based analysis with options:", options);
-              
-              const layerId = `${options.markerType}-grid-layer`;
-              // Clean up existing layer if it exists
-              if (mapRef.current.getLayer(layerId)) {
-                mapRef.current.removeLayer(layerId);
-                mapRef.current.removeSource(layerId);
-              }
-    
-              // Run the analysis
-              await elosGridRef.current.runAnalysis({
-                markerOptions: {
-                  markerType: options.markerType,
-                  location: options.location,
-                  range: options.range,
-                },
-              });
-    
-              console.log("Marker-based analysis completed");
-    
-            } else {
-              // Flight path analysis
-              console.log("Running flight path analysis (no options)");
-              
-              // Clean up existing ELOS grid layer if it exists
-              if (mapRef.current.getLayer(MAP_LAYERS.ELOS_GRID)) {
-                mapRef.current.removeLayer(MAP_LAYERS.ELOS_GRID);
-                mapRef.current.removeSource(MAP_LAYERS.ELOS_GRID);
-              }
-    
-              await elosGridRef.current.runAnalysis();
-              console.log("Flight path analysis completed");
-            }
-    
-          } catch (error) {
-            console.error("Analysis error:", error);
-            throw error;
-          }
-        } else {
-          console.error("Error: ElosGridRef is not initialized");
+        if (!elosGridRef.current) {
+          console.error("[runElosAnalysis] Error: ElosGridRef is not initialized");
           throw new Error("Analysis component not initialized");
+        }
+  
+        try {
+          if (options && "mergedAnalysis" in options) {
+            // Merged analysis (user-triggered)
+            console.log(
+              "[runElosAnalysis] Running merged analysis with stations:",
+              options.stations
+            );
+            if (mapRef.current.getLayer(MAP_LAYERS.MERGED_VISIBILITY)) {
+              console.log(
+                "[runElosAnalysis] Removing existing merged analysis layer."
+              );
+              mapRef.current.removeLayer(MAP_LAYERS.MERGED_VISIBILITY);
+              mapRef.current.removeSource(MAP_LAYERS.MERGED_VISIBILITY);
+            }
+            const results = await elosGridRef.current.runMergedAnalysis({
+              stations: options.stations,
+              mergedAnalysis: true,
+            });
+            console.log("[runElosAnalysis] Merged analysis complete.");
+            return results;
+          } else if (options) {
+            // Marker-based analysis (user-triggered)
+            console.log(
+              "[runElosAnalysis] Running marker-based analysis with options:",
+              options
+            );
+            const layerId = `${options.markerType}-grid-layer`;
+            if (mapRef.current.getLayer(layerId)) {
+              console.log(
+                "[runElosAnalysis] Removing existing marker-based analysis layer:",
+                layerId
+              );
+              mapRef.current.removeLayer(layerId);
+              mapRef.current.removeSource(layerId);
+            }
+            await elosGridRef.current.runAnalysis({
+              markerOptions: {
+                markerType: options.markerType,
+                location: options.location,
+                range: options.range,
+              },
+            });
+            console.log("[runElosAnalysis] Marker-based analysis complete.");
+          } else {
+            // Flight path analysis (automatic)
+            console.log(
+              "[runElosAnalysis] Running flight path analysis (automatic) with no options."
+            );
+            if (mapRef.current.getLayer(MAP_LAYERS.ELOS_GRID)) {
+              console.log(
+                "[runElosAnalysis] Removing existing ELOS grid analysis layer."
+              );
+              mapRef.current.removeLayer(MAP_LAYERS.ELOS_GRID);
+              mapRef.current.removeSource(MAP_LAYERS.ELOS_GRID);
+            }
+            await elosGridRef.current.runAnalysis();
+            console.log("[runElosAnalysis] Flight path analysis complete.");
+          }
+        } catch (error) {
+          console.error("[runElosAnalysis] Analysis error:", error);
+          throw error;
         }
       },
       getMap: () => mapRef.current,
-      toggleLayerVisibility
-    }), [addGeoJSONToMap, toggleLayerVisibility]);
+      toggleLayerVisibility,
+    }),
+    [addGeoJSONToMap, toggleLayerVisibility ]
+  );
+  
 
     // Map initialization
-
     useEffect(() => {
       if (mapContainerRef.current) {
         try {
@@ -1022,19 +1027,16 @@ const handleFileProcessing = (data: any) => {
     };
 
     return (
-      <div>
-        {/* Map container with the buttons */}
+      <div className="relative">
+        {/* Map container with buttons, legend, etc. */}
         <div
           ref={mapContainerRef}
           style={{ height: "100vh", width: "100%" }}
-          className="relative"
         >
           <div className="absolute top-4 right-4 z-10 flex flex-col space-y-2">
             <button
               onClick={addGroundStation}
-              className={`map-button ground-station-icon ${
-                isAnalyzing ? "opacity-50" : ""
-              }`}
+              className={`map-button ground-station-icon ${isAnalyzing ? "opacity-50" : ""}`}
               disabled={isAnalyzing}
             >
               Add Ground Station 📡
@@ -1042,9 +1044,7 @@ const handleFileProcessing = (data: any) => {
             </button>
             <button
               onClick={addObserver}
-              className={`map-button observer-icon ${
-                isAnalyzing ? "opacity-50" : ""
-              }`}
+              className={`map-button observer-icon ${isAnalyzing ? "opacity-50" : ""}`}
               disabled={isAnalyzing}
             >
               Add Observer 🔭
@@ -1052,37 +1052,35 @@ const handleFileProcessing = (data: any) => {
             </button>
             <button
               onClick={addRepeater}
-              className={`map-button repeater-icon ${
-                isAnalyzing ? "opacity-50" : ""
-              }`}
+              className={`map-button repeater-icon ${isAnalyzing ? "opacity-50" : ""}`}
               disabled={isAnalyzing}
             >
               Add Repeater ⚡️
               {isAnalyzing && <span className="ml-2">•••</span>}
             </button>
           </div>
-
+    
           {/* Analysis Status Indicator */}
           {isAnalyzing && (
             <div className="absolute bottom-4 left-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg">
               Running Analysis...
             </div>
           )}
-
+    
           {/* Error UI */}
           {error && (
             <div className="absolute bottom-4 left-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center">
-                <span>⚠️</span>
-                <span className="ml-2">{error}</span>
-                <button
+              <span>⚠️</span>
+              <span className="ml-2">{error}</span>
+              <button
                 onClick={() => setError(null)}
                 className="ml-2 hover:opacity-75"
-                >
+              >
                 ✕
-                </button>
+              </button>
             </div>
-            )}
-
+          )}
+    
           {/* Legend for Visibility Colors */}
           <div className="map-legend">
             <h4 className="font-semibold mb-2">Legend</h4>
@@ -1110,7 +1108,7 @@ const handleFileProcessing = (data: any) => {
             </div>
           </div>
         </div>
-
+    
         {mapRef.current && (
           <ELOSGridAnalysis
             ref={elosGridRef}
