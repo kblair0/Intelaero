@@ -459,7 +459,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
       }, 2000);
       return () => clearTimeout(timer);
     }
-  }, [terrainAnalysisComplete, flightPlan, mapRef, elosGridRef, gridAnalysisTriggered]);
+  }, [terrainAnalysisComplete, flightPlan, mapRef, elosGridRef, gridAnalysisTriggered, setAutoAnalysisRunning]);
   
 
   return (
