@@ -1,5 +1,3 @@
-// index: page.tsx
-
 "use client";
 import { useRef, useState } from "react";
 import { MapRef } from "./components/Map";
@@ -26,7 +24,6 @@ import { trackEventWithForm as trackEvent } from "./components/tracking/tracking
 const HomeContent = () => {
   const mapRef = useRef<MapRef>(null);
   const [activePanel, setActivePanel] = useState<"energy" | "los" | null>(null);
-  // New state for showing the flight plan uploader overlay.
   const [showUploader, setShowUploader] = useState(false);
   const [logoVisible, setLogoVisible] = useState(true);
   const { flightPlan } = useFlightPlanContext();
@@ -64,33 +61,19 @@ const HomeContent = () => {
               className="max-w-full h-auto"
             />
           </div>
-
-          {/* <div className="text-center mt-3">
-          <h2 className="text-lg sm:text-xl font-medium text-black">
-          Intelligent Mission Assurance For RPAS
-          </h2>
-          <p className="text-sm sm:text-base text-gray-700">
-          Smarter Planning, Safer Flights, Guaranteed Returns
-          </p>
-          </div> */}
         </div>
       )}
 
       {/* Main Content Area */}
       <div className="flex-1 mx-auto w-full max-w-[2000px] h-full">
-        <div className="flex flex-row gap-4 h-full">
-          {/* Map Section with Overlays */}
-          <div className="flex-grow relative h-full">
-            <div className="relative h-full">
-            <Map
-              ref={mapRef}
-            />
+        <div className="flex flex-row h-full relative">
+          {/* Map Section */}
+          <div className="flex-grow relative h-full pr-2">
+          <div className="relative h-full rounded-r-xl overflow-hidden">
 
-              {/* Uploader Overlay:
-                    - If no flight plan exists, show uploader automatically.
-                    - If a flight plan exists, the uploader is hidden by default;
-                      it is shown only when 'showUploader' is true.
-                */}
+              <Map ref={mapRef} />
+
+              {/* Uploader Overlay */}
               {(!flightPlan || showUploader) && (
                 <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20">
                   <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
@@ -102,13 +85,9 @@ const HomeContent = () => {
                         onClick={() => setShowUploader(false)}
                         className="text-gray-500 hover:text-gray-700"
                       >
-                        X
+                        <X size={20} />
                       </button>
                     </div>
-                    {/* 
-                        Pass an onClose prop if your FlightPlanUploader supports it.
-                        Otherwise, rely on the close button above.
-                      */}
                     <FlightPlanUploader
                       onClose={() => setShowUploader(false)}
                     />
@@ -160,33 +139,12 @@ const HomeContent = () => {
                   Add Your Own DEM Data
                 </button>
               </div>
-
-              {/* Analysis Panels */}
-              <MapSidePanel
-                title="Energy Analysis"
-                icon={<Battery className="w-5 h-5" />}
-                isExpanded={activePanel === "energy"}
-                onToggle={() => togglePanel("energy")}
-                className="top-0 h-full"
-              >
-                <Calculator />
-              </MapSidePanel>
-
-              <MapSidePanel
-                title="LOS Analysis"
-                icon={<Radio className="w-5 h-5" />}
-                isExpanded={activePanel === "los"}
-                onToggle={() => togglePanel("los")}
-                className="top-4 h-[calc(100%-2rem)]"
-              >
-                <ELOSAnalysisCard mapRef={mapRef} />
-              </MapSidePanel>
             </div>
           </div>
 
-          {/* Plan Verification Section - Always visible */}
-          <div className="w-80 h-full">
-            <Card className="h-full">
+          {/* Plan Verification Section - Fixed on right side */}
+          <div className="w-80 h-full shrink-0">
+          <Card className="h-full rounded-l-xl">
               <div className="space-y-4 h-full">
                 <h3 className="text-lg font-semibold text-gray-900">
                   Plan Verification
@@ -198,6 +156,27 @@ const HomeContent = () => {
               </div>
             </Card>
           </div>
+
+          {/* Analysis Panels - Will slide over plan verification */}
+          <MapSidePanel
+            title="Energy Analysis"
+            icon={<Battery className="w-5 h-5" />}
+            isExpanded={activePanel === "energy"}
+            onToggle={() => togglePanel("energy")}
+            className="z-30"
+          >
+            <Calculator />
+          </MapSidePanel>
+
+          <MapSidePanel
+            title="LOS Analysis"
+            icon={<Radio className="w-5 h-5" />}
+            isExpanded={activePanel === "los"}
+            onToggle={() => togglePanel("los")}
+            className="z-30"
+          >
+            <ELOSAnalysisCard mapRef={mapRef} />
+          </MapSidePanel>
         </div>
       </div>
     </div>

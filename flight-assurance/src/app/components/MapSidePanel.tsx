@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 
 interface MapSidePanelProps {
   title: string;
@@ -20,26 +20,24 @@ const MapSidePanel: React.FC<MapSidePanelProps> = ({
 }) => {
   return (
     <div
-      className={`absolute z-20 transition-all duration-300 ease-in-out
-        ${isExpanded ? 'left-0' : '-left-[100%]'}
+      className={`fixed top-0 right-0 h-full w-80 transition-transform duration-300 ease-in-out
+        ${isExpanded ? 'translate-x-0' : 'translate-x-full'}
         ${className}`}
     >
-      {/* Main Panel with improved responsiveness */}
-      <div className="flex h-full">
+      {/* Main Panel */}
+      <div className="h-full">
         {/* Content Container */}
-        <div className="relative bg-white/95 backdrop-blur-sm shadow-xl 
-          w-[90vw] sm:w-[350px] lg:w-[400px] max-w-[400px]
-          flex flex-col rounded-r-lg border border-gray-200 overflow-hidden">
-          
-          {/* Header with improved visual hierarchy */}
-          <div className="px-4 py-3 bg-gray-50/90 border-b border-gray-200 
+        <div className="relative bg-white/95 backdrop-blur-sm shadow-xl
+          w-full h-full flex flex-col rounded-l-lg border border-gray-200 
+          overflow-hidden">
+          {/* Header */}
+          <div className="px-4 py-3 bg-gray-50/90 border-b border-gray-200
             flex items-center justify-between shadow-sm">
             <div className="flex items-center gap-2">
               {icon && <span className="text-gray-600">{icon}</span>}
               <h3 className="font-medium text-gray-900">{title}</h3>
             </div>
-
-            {/* Integrated close button in header */}
+            {/* Close button */}
             {isExpanded && (
               <button
                 onClick={onToggle}
@@ -47,25 +45,24 @@ const MapSidePanel: React.FC<MapSidePanelProps> = ({
                   focus:outline-none focus:ring-2 focus:ring-blue-500"
                 aria-label="Close panel"
               >
-                <ChevronLeft className="w-5 h-5 text-gray-600" />
+                <ChevronRight className="w-5 h-5 text-gray-600" />
               </button>
             )}
           </div>
-          
-          {/* Content with improved scrolling and padding */}
+          {/* Content */}
           <div className="flex-1 p-4 overflow-y-auto overscroll-contain
             scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent
             hover:scrollbar-thumb-gray-400">
-            <div className="max-w-[calc(100%-1rem)]">
+            <div className="max-w-full">
               {children}
             </div>
           </div>
         </div>
       </div>
-
+      
       {/* Mobile backdrop */}
       {isExpanded && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/10 backdrop-blur-[2px] lg:hidden"
           onClick={onToggle}
           aria-hidden="true"

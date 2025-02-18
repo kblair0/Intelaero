@@ -432,7 +432,7 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
               onChange={(e) =>
                 setSourceStation(e.target.value as "gcs" | "observer" | "repeater")
               }
-              className="w-full p-2 border rounded text-sm"
+              className="w-full p-2 border rounded text-xs"
             >
               {availableStations.map((station) => {
                 const { emoji, name } = getStationDisplay(station);
@@ -452,7 +452,7 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
               onChange={(e) =>
                 setTargetStation(e.target.value as "gcs" | "observer" | "repeater")
               }
-              className="w-full p-2 border rounded text-sm"
+              className="w-full p-2 border rounded text-xs"
             >
               {availableStations
                 .filter((station) => station !== sourceStation)
@@ -496,31 +496,30 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
   
         {/* Results display remains here */}
         {stationLOSResult && (
-  <div
-    className={`p-3 rounded ${
-      stationLOSResult.clear ? "bg-green-100" : "bg-red-100"
-    }`}
-  >
-    {stationLOSResult.clear ? (
-      <div className="text-green-700 text-sm flex items-center gap-2">
-        <span>✓</span>
-        <span>Clear line of sight between stations</span>
-      </div>
-    ) : (
-      <div className="text-red-700 text-sm">
-        <div className="flex items-center gap-2">
-          <span>✗</span>
-          <span>Line of sight obstructed</span>
-        </div>
-        <div className="text-xs mt-1">
-          Obstruction at {stationLOSResult.obstructionDistance?.toFixed(1)}m (
-          {(stationLOSResult.obstructionFraction! * 100).toFixed(1)}% along path)
-        </div>
-      </div>
-    )}
-  </div>
-)}
-
+          <div
+            className={`p-3 rounded ${
+              stationLOSResult.clear ? "bg-green-100" : "bg-red-100"
+            }`}
+          >
+            {stationLOSResult.clear ? (
+              <div className="text-green-700 text-sm flex items-center gap-2">
+                <span>✓</span>
+                <span>Clear line of sight between stations</span>
+              </div>
+            ) : (
+              <div className="text-red-700 text-sm">
+                <div className="flex items-center gap-2">
+                  <span>✗</span>
+                  <span>Line of sight obstructed</span>
+                </div>
+                <div className="text-xs mt-1">
+                  Obstruction at {stationLOSResult.obstructionDistance?.toFixed(1)}m (
+                  {(stationLOSResult.obstructionFraction! * 100).toFixed(1)}% along path)
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   };
@@ -931,24 +930,24 @@ const renderMergedAnalysisSection = () => {
 
           {/* Results Display */}
           {mergedResults?.stats && (
-            <div className="mt-4 p-4 bg-white rounded shadow-sm">
+            <div className="mt-4 p-4 bg-white gap-2 rounded shadow-sm">
               <h4 className="text-m font-semibold mb-3">Merged Visibility Analysis Results</h4>
               <div className="grid grid-cols-3 gap-4 text-center">
                 <div>
                   <p className="text-xs text-gray-600">Visible Areas</p>
-                  <p className="text-lg font-medium">
+                  <p className="text-xs font-medium">
                     {mergedResults.stats.visibleCells}/{mergedResults.stats.totalCells}
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-600">Average Visibility</p>
-                  <p className="text-lg font-medium">
+                  <p className="text-xs font-medium">
                     {mergedResults.stats.averageVisibility.toFixed(1)}%
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-600">Analysis Time</p>
-                  <p className="text-lg font-medium">
+                  <p className="text-xs font-medium">
                     {(mergedResults.stats.analysisTime / 1000).toFixed(1)}s
                   </p>
                 </div>
@@ -1065,19 +1064,19 @@ const renderMergedAnalysisSection = () => {
               <div className="grid grid-cols-3 gap-4 text-center">
                 <div>
                   <p className="text-xs text-gray-600">Visibility</p>
-                  <p className="text-m font-medium">
+                  <p className="text-xs font-medium">
                     {results.stats.visibleCells}/{results.stats.totalCells}
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-600">Average</p>
-                  <p className="text-m font-medium">
+                  <p className="text-xs font-medium">
                     {results.stats.averageVisibility.toFixed(1)}%
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-600">Time</p>
-                  <p className="text-m font-medium">
+                  <p className="text-xs font-medium">
                     {(results.stats.analysisTime / 1000).toFixed(1)}s
                   </p>
                 </div>
@@ -1179,19 +1178,19 @@ const renderMergedAnalysisSection = () => {
                 <div className="grid grid-cols-3 gap-4 text-center">
                   <div>
                     <p className="text-xs text-gray-600">Coverage</p>
-                    <p className="text-m font-medium">
+                    <p className="text-xs font-medium">
                       {(results.stats.averageVisibility).toFixed(1)}%
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-gray-600">Visible Length</p>
-                    <p className="text-m font-medium">
+                    <p className="text-xs font-medium">
                       {(results.stats.visibleCells / 1000).toFixed(2)} km
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-gray-600">Analysis Time</p>
-                    <p className="text-m font-medium">
+                    <p className="text-xs font-medium">
                       {(results.stats.analysisTime / 1000).toFixed(1)}s
                     </p>
                   </div>
