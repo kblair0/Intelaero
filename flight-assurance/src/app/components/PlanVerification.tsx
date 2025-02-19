@@ -491,7 +491,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
   
       return () => clearInterval(intervalId);
     }
-  }, [gridAnalysisTriggered, mapRef]);
+  }, [gridAnalysisTriggered, setAutoAnalysisRunning, mapRef]);
   
   
 
