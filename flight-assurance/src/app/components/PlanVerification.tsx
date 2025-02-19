@@ -9,6 +9,7 @@ import ObstacleAssessment from "./ObstacleAssessment";
 import { MapRef } from "./Map";
 import { trackEventWithForm as trackEvent } from "./tracking/tracking";
 import ELOSGridAnalysis from "./ELOSGridAnalysis";
+import { MAP_LAYERS } from "./LayerManager";
 
 
 interface PlanVerificationProps {
@@ -461,13 +462,37 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
           setGridAnalysisTriggered(true);
         } catch (error) {
           console.error("Error during ELOS analysis:", error);
-        } finally {
-          setAutoAnalysisRunning(false);  // context state to hide auto analysis running
+          setAutoAnalysisRunning(false); 
         }
       }, 2000);
       return () => clearTimeout(timer);
     }
   }, [terrainAnalysisComplete, flightPlan, mapRef, elosGridRef, gridAnalysisTriggered, setAutoAnalysisRunning]);
+
+  useEffect(() => {
+    if (gridAnalysisTriggered) {
+      let retries = 0;
+      const maxRetries = 10;
+      const intervalId = setInterval(() => {
+        const map = mapRef.current?.getMap();
+        if (map && map.getLayer(MAP_LAYERS.ELOS_GRID)) {
+          console.log("✅ Grid analysis layer is present on the map.");
+          clearInterval(intervalId);
+          setAutoAnalysisRunning(false); // Turn off indicator only when layer is detected
+        } else if (retries >= maxRetries) {
+          console.error("⚠️ Grid analysis layer did not load after maximum retries.");
+          clearInterval(intervalId);
+          setAutoAnalysisRunning(false); // Also turn it off if we've retried enough
+        } else {
+          retries++;
+          console.log(`Grid analysis layer not yet loaded, retry ${retries}/${maxRetries}...`);
+        }
+      }, 1000); // check every 1 second
+  
+      return () => clearInterval(intervalId);
+    }
+  }, [gridAnalysisTriggered, mapRef]);
+  
   
 
   return (

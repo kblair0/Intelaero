@@ -93,7 +93,7 @@ const LOSAnalysisContext = createContext<LOSAnalysisContextType | undefined>(und
 export function LOSAnalysisProvider({ children }: { children: ReactNode }) {
   // Configuration State
   const [gridSize, setGridSize] = useState<number>(30);
-  const [elosGridRange, setElosGridRange] = useState<number>(1500);
+  const [elosGridRange, setElosGridRange] = useState<number>(1000);
   const [markerConfigs, setMarkerConfigs] = useState<MarkerConfigs>(DEFAULT_MARKER_CONFIGS);
   
   // Analysis State
