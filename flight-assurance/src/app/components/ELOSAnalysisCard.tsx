@@ -1170,6 +1170,12 @@ const renderMergedAnalysisSection = () => {
                 ? "Analyzing..."
                 : "Check Visibility from All Stations"}
             </button>
+              {/* Warning message when no station is placed */}
+              {(!gcsLocation && !observerLocation && !repeaterLocation) && (
+                <div className="mt-2 p-3 bg-yellow-100 border border-yellow-400 text-sm text-yellow-700 rounded">
+                  ⚠️ Place at least one station on the map to perform Flight Path Visibility Analysis.
+                </div>
+              )}
             {results?.stats && (
               <div className="mt-4 p-4 bg-white rounded shadow-sm">
                 <h4 className="text-sm font-semibold mb-3">
