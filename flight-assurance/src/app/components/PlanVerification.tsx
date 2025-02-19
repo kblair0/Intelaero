@@ -477,7 +477,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 bg-white/95 backdrop-blur-sm border border-gray-200 px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 z-50 animate-slide-down">
 <Loader className="w-5 h-5 animate-spin text-yellow-400" />
           <div className="flex flex-col">
-            <span className="font-medium text-gray-900">Analyzing Coverage</span>
+            <span className="font-medium text-gray-900">Analysing Line of Sight Coverage</span>
             <span className="text-sm text-gray-500">This may take a few moments...</span>
           </div>
         </div>
