@@ -287,26 +287,6 @@ const ELOSGridAnalysis = forwardRef<ELOSGridAnalysisRef, Props>((props, ref) => 
     }
   }, [flightPath, elosGridRange, gridSize, getTerrainElevation]);
 
-  // Ensure elos-grid-layer is visible
-  useEffect(() => {
-    if (!map) return;
-    
-    const onStyleData = () => {
-      if (map.getLayer('elos-grid-layer')) {
-        map.setLayoutProperty('elos-grid-layer', 'visibility', 'visible');
-        console.log('Ensured elos-grid-layer is visible on styledata update.');
-      }
-    };
-  
-    map.on('styledata', onStyleData);
-  
-    // Clean up the listener on unmount
-    return () => {
-      map.off('styledata', onStyleData);
-    };
-  }, [map]);
-  
-
   // Enhanced visibility analysis with terrain consideration
   const analyzeVisibility = useCallback(async (cells: GridCell[]): Promise<AnalysisResults> => {
     const startTime = performance.now();
