@@ -495,9 +495,10 @@ const ELOSGridAnalysis = forwardRef<ELOSGridAnalysisRef, Props>((props, ref) => 
           throw createError('Map is not initialized', 'MAP_INTERACTION');
         }
   
-        // If the map style isn’t loaded yet, wait for it
+        // Check if the map style is loaded
         if (!map.isStyleLoaded()) {
           console.log('Map style not loaded, deferring visualization');
+          // Wait until a style update happens, then call visualizeGrid again
           map.once('styledata', () =>
             visualizeGrid(analysisResults, layerId, currentVisibility)
           );
@@ -555,8 +556,7 @@ const ELOSGridAnalysis = forwardRef<ELOSGridAnalysisRef, Props>((props, ref) => 
             },
           });
           layerManager.registerLayer(targetLayerId, currentVisibility === 'visible');
-        }
-  
+        }  
         // --- SET UP EVENT HANDLERS FOR POPUPS ---
         // Define the mousemove handler. (We attach a property "popup" to it to store a reference.)
         const onMouseMove = (

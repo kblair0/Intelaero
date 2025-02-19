@@ -25,7 +25,7 @@ export const trackEventWithForm = (eventName, additionalData = {}) => {
     const form = document.createElement("form");
     form.action = formUrl;
     form.method = "POST";
-    form.target = "hidden_iframe"; // This makes the form submit to the iframe.
+    form.target = "hidden_iframe"; 
     form.style.display = "none";
   
     // Create hidden input elements for each field.
