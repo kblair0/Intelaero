@@ -1,4 +1,4 @@
-"use client";
+// FlightPlanUploader.tsx
 import React, { useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useFlightPlanContext } from "../context/FlightPlanContext";
@@ -170,8 +170,16 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded 
             flightData = parseKMLFile(reader.result as string);
           }
 
-          setFlightPlan(flightData);
+          // Reset the processed flag to false to ensure fresh processing
+          const newFlightPlan = { ...flightData, processed: false };
+
+          setFlightPlan(newFlightPlan);
           setFileUploadStatus("processed");
+
+          // Notify parent that a new flight plan is available so it can auto-close the uploader window.
+          if (onPlanUploaded) {
+            onPlanUploaded(newFlightPlan);
+          }
         }
       } catch (error) {
         console.error("Error processing file:", error);
@@ -182,7 +190,11 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded 
   };
 
   const { getRootProps, getInputProps } = useDropzone({
-    accept: { "application/vnd.google-earth.kml+xml": [".kml"], "application/geo+json": [".geojson"], "application/waypoints": [".waypoints"] },
+    accept: {
+      "application/vnd.google-earth.kml+xml": [".kml"],
+      "application/geo+json": [".geojson"],
+      "application/waypoints": [".waypoints"],
+    },
     onDrop,
   });
 
@@ -192,10 +204,13 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded 
       const rawData = await response.json();
 
       const processedData = parseGeoJSONFile(JSON.stringify(rawData));
-      setFlightPlan(processedData);
+      // Reset the processed flag here too
+      const newFlightPlan = { ...processedData, processed: false };
+
+      setFlightPlan(newFlightPlan);
 
       if (onPlanUploaded) {
-        onPlanUploaded(processedData);
+        onPlanUploaded(newFlightPlan);
       }
       setFileUploadStatus("processed");
     } catch (error) {
@@ -208,17 +223,17 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded 
     <div className="flex-1 bg-white shadow-lg p-6 rounded-lg border border-gray-200">
       <h3 className="text-lg font-bold text-black">📁 Upload Your Flight Plan</h3>
       <p className="text-sm text-gray-600">
-        Upload a <strong>.waypoints</strong>, <strong>.geojson</strong>, or{" "}
-        <strong>.kml</strong> file to analyze your drone&apos;s flight path.
+        Upload a <strong>.waypoints</strong>, <strong>.geojson</strong>, or <strong>.kml</strong> file to analyze your drone&apos;s flight path.
       </p>
 
-      <div {...getRootProps()} className="mt-4 border-2 border-dashed border-gray-300 p-6 rounded-lg flex flex-col items-center justify-center cursor-pointer">
+      <div
+        {...getRootProps()}
+        className="mt-4 border-2 border-dashed border-gray-300 p-6 rounded-lg flex flex-col items-center justify-center cursor-pointer"
+      >
         <input {...getInputProps()} />
         <p className="text-gray-500">Drag &amp; Drop your file here or click to upload</p>
         {fileName && (
-          <p className="mt-2 text-sm text-gray-600">
-            Selected file: {fileName}
-          </p>
+          <p className="mt-2 text-sm text-gray-600">Selected file: {fileName}</p>
         )}
         {fileUploadStatus === "uploading" && (
           <p className="mt-2 text-sm text-blue-600">Processing file...</p>
@@ -232,7 +247,10 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded 
       </div>
 
       <div className="flex justify-center gap-2 mt-6">
-        <button onClick={loadExampleGeoJSON} className="bg-blue-500 text-white px-4 py-2 rounded shadow hover:bg-blue-600 text-sm">
+        <button
+          onClick={loadExampleGeoJSON}
+          className="bg-blue-500 text-white px-4 py-2 rounded shadow hover:bg-blue-600 text-sm"
+        >
           Show Me an Example
         </button>
       </div>

@@ -63,6 +63,14 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
   const elosGridRef = useRef<ELOSGridAnalysisRef>(null);
   const [terrainAnalysisComplete, setTerrainAnalysisComplete] = useState(false);
   const [gridAnalysisTriggered, setGridAnalysisTriggered] = useState(false);
+  
+  // Reset analysis state when a new flight plan is loaded
+  useEffect(() => {
+    if (flightPlan) {
+      setTerrainAnalysisComplete(false);
+      setGridAnalysisTriggered(false);
+    }
+  }, [flightPlan]);
 
   // Utility function to get minimum clearance distance
   const getMinClearanceDistance = (): number | null => {
