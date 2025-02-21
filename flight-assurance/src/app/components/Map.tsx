@@ -20,7 +20,7 @@ import { layerManager, MAP_LAYERS } from "./LayerManager";
 
 // Contexts
 import { useLocation } from "../context/LocationContext";
-import { useFlightPlanContext } from "../context/FlightPlanContext";
+import { FlightPlanData, useFlightPlanContext } from "../context/FlightPlanContext";
 import { useFlightConfiguration } from "../context/FlightConfigurationContext";
 import { useLOSAnalysis } from "../context/LOSAnalysisContext";
 import { Cloud } from "lucide-react";
@@ -177,132 +177,155 @@ const Map = forwardRef<MapRef, MapProps>(
       }
     }, [mapRef]);
 
-    //FlightPlan Processing including logging
-    useEffect(() => {
-      if (!contextFlightPlan || contextFlightPlan.processed) {
-        return;
-      }
-      const processFlightPlan = async () => {
-          try {
-              if (!mapRef.current) {
-                  throw new Error("Map not initialized");
-              }
-  
-              // Calculate bounds of flight plan
-              const bounds = contextFlightPlan.features[0].geometry.coordinates.reduce(
-                  (acc, coord) => {
-                      acc[0] = Math.min(acc[0], coord[0]);  // min lng
-                      acc[1] = Math.min(acc[1], coord[1]);  // min lat
-                      acc[2] = Math.max(acc[2], coord[0]);  // max lng
-                      acc[3] = Math.max(acc[3], coord[1]);  // max lat
-                      return acc;
-                  },
-                  [Infinity, Infinity, -Infinity, -Infinity]
-              );
-  
-              // Move map to flight plan area first
-              mapRef.current.fitBounds(bounds as [number, number, number, number], {
-                  padding: 50,
-                  duration: 0
-              });
-  
-              // Wait for tiles to load
-              console.log("Waiting for terrain tiles to load...");
-              await new Promise(resolve => setTimeout(resolve, 2000));
-  
-              console.log("Starting Altitude Resolution:", { inputPlan: contextFlightPlan });
-              const newPlan = structuredClone(contextFlightPlan);
-              
-              // Get and set home position elevation
-              const homePosition = newPlan.properties.homePosition;
-              const homeTerrainElev = await queryTerrainElevation([homePosition.longitude, homePosition.latitude]);
-              homePosition.altitude = homeTerrainElev;
-              if (newPlan.features[0]?.geometry?.coordinates?.[0]) {
-                  newPlan.features[0].geometry.coordinates[0][2] = homeTerrainElev;
-              }
-              
-              // Process each feature's waypoints...
-              for (const feature of newPlan.features) {
-                  if (feature.geometry.type !== "LineString") continue;
-                  const coords = feature.geometry.coordinates;
-                  const waypoints = feature.properties.waypoints || [];
-                  for (let i = 0; i < coords.length; i++) {
-                      const [lon, lat, originalAlt] = coords[i];
-                      const wp = waypoints[i];
-                      if (!wp) continue;
-                      try {
-                          const terrainElev = await queryTerrainElevation([lon, lat]);
-                          console.log(`Waypoint ${i} processing:`, {
-                              longitude: lon,
-                              latitude: lat,
-                              originalAltitude: originalAlt,
-                              terrainElevation: terrainElev,
-                              mode: wp.altitudeMode,
-                              beforeResolution: coords[i][2],
-                          });
-                          switch (wp.altitudeMode) {
-                              case "absolute":
-                                  break;
-                              case "relative":
-                                  if (wp.commandType === 22) {
-                                      const takeoffGroundElev = await queryTerrainElevation([lon, lat]);
-                                      coords[i][2] = takeoffGroundElev + originalAlt;
-                                  } else {
-                                      coords[i][2] = terrainElev + originalAlt;
-                                  }
-                                  break;
-                              case "terrain":
-                                  coords[i][2] = terrainElev + originalAlt;
-                                  break;
-                              default:
-                                  break;
-                          }
-                      } catch (error) {
-                          console.error(`Error processing waypoint ${i}:`, error);
-                          throw error;
-                      }
-                  }
-              }
-  
-              // Calculate distances
-              const coords2D = newPlan.features[0].geometry.coordinates.map(
-                  (coord: [number, number, number]) => [coord[0], coord[1]]
-              );
-              const routeLine = turf.lineString(coords2D);
-              const totalDistance = turf.length(routeLine, { units: "kilometers" });
-  
-              // Calculate waypoint distances
-              let cumulativeDistance = 0;
-              const waypointDistances = newPlan.features[0].geometry.coordinates.map(
-                  (coord, idx, arr) => {
-                      if (idx === 0) return 0;
-                      const segment = turf.lineString([
-                          arr[idx - 1].slice(0, 2),
-                          coord.slice(0, 2),
-                      ]);
-                      cumulativeDistance += turf.length(segment, { units: "kilometers" });
-                      return cumulativeDistance;
-                  }
-              );
-  
-              const processedFlightPlan = {
-                  ...newPlan,
-                  waypointDistances,
-                  totalDistance,
-                  processed: true
-              };
-  
-              setContextFlightPlan(processedFlightPlan);
-              setDistance(totalDistance);
-              setResolvedGeoJSON(processedFlightPlan);
 
-            } catch (error) {
-              console.error("Error processing flight plan:", error);
-              setError("Failed to process flight plan. Please try again.");
+  // Function to process contextFlightPlan
+  useEffect(() => {
+    if (!contextFlightPlan || contextFlightPlan.processed) {
+      return;
+    }
+  
+    const processFlightPlan = async () => {
+      try {
+        if (!mapRef.current) {
+          throw new Error("Map not initialized");
+        }
+  
+        const coordinates = contextFlightPlan.features[0].geometry.coordinates;
+        console.log("Initial Coordinates:", coordinates);
+  
+        if (coordinates.length < 2) {
+          console.warn("Flight plan has fewer than 2 coordinates. Skipping distance calculation.");
+        }
+  
+        const bounds = coordinates.reduce(
+          (acc, coord) => {
+            acc[0] = Math.min(acc[0], coord[0]);
+            acc[1] = Math.min(acc[1], coord[1]);
+            acc[2] = Math.max(acc[2], coord[0]);
+            acc[3] = Math.max(acc[3], coord[1]);
+            return acc;
+          },
+          [Infinity, Infinity, -Infinity, -Infinity]
+        );
+  
+        mapRef.current.fitBounds(bounds as [number, number, number, number], {
+          padding: 50,
+          duration: 0
+        });
+  
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        const newPlan: FlightPlanData = structuredClone(contextFlightPlan);
+        const homePosition = newPlan.properties.homePosition;
+        const homeTerrainElev = await queryTerrainElevation([homePosition.longitude, homePosition.latitude]);
+  
+        const homeWaypoint = newPlan.features[0].properties.waypoints.find(wp => wp.index === 0);
+        const homeAltitudeMode = homeWaypoint ? homeWaypoint.altitudeMode : "absolute";
+  
+        let resolvedHomeAlt: number;
+        const hasTakeoff = newPlan.features[0].properties.rawCommands.some(cmd => cmd === 22);
+        if (hasTakeoff) {
+          // When takeoff command exists, home altitude is terrain + takeoff altitude
+          resolvedHomeAlt = homeTerrainElev + homePosition.altitude;
+        } else {
+          resolvedHomeAlt = homeAltitudeMode === "relative"
+            ? homeTerrainElev + homePosition.altitude
+            : homePosition.altitude;
+        }
+  
+        for (const feature of newPlan.features) {
+          if (feature.geometry.type !== "LineString") continue;
+          const coords = feature.geometry.coordinates as [number, number, number][];
+          const waypoints = feature.properties.waypoints || [];
+  
+          for (let i = 0; i < coords.length; i++) {
+            const [lon, lat, originalAlt] = coords[i];
+            const wp = waypoints[i];
+            if (!wp) continue;
+  
+            const terrainElev = await queryTerrainElevation([lon, lat]);
+            let resolvedAlt: number;
+  
+            if (wp.index === 0 && hasTakeoff) {
+              // Home waypoint remains unchanged.
+              resolvedAlt = resolvedHomeAlt;
+            } else if (wp.commandType === 22) {
+              // Takeoff waypoint remains unchanged.
+              resolvedAlt = resolvedHomeAlt;
+            } else {
+              // For all other waypoints, use the local terrain elevation
+              switch (wp.altitudeMode) {
+                case "relative":
+                  resolvedAlt = terrainElev + originalAlt;
+                  break;
+                case "absolute":
+                  resolvedAlt = originalAlt;
+                  break;
+                case "terrain":
+                  resolvedAlt = terrainElev + originalAlt;
+                  break;
+                default:
+                  resolvedAlt = originalAlt;
+              }
             }
-      };
-   processFlightPlan();
-}, [contextFlightPlan, queryTerrainElevation, setContextFlightPlan, setDistance, setError]);
+            
+  
+            coords[i] = [lon, lat, resolvedAlt];
+          }
+  
+          feature.geometry.coordinates = coords;
+        }
+  
+        let totalDistance = 0;
+        let waypointDistances: number[] = [];
+        if (coordinates.length >= 2) {
+          const coords2D = newPlan.features[0].geometry.coordinates.map(
+            (coord: [number, number, number]) => [coord[0], coord[1]]
+          );
+  
+          const routeLine = turf.lineString(coords2D);
+          totalDistance = turf.length(routeLine, { units: "kilometers" });
+  
+          let cumulativeDistance = 0;
+          waypointDistances = newPlan.features[0].geometry.coordinates.map(
+            (coord, idx, arr) => {
+              if (idx === 0) return 0;
+              const segment = turf.lineString([
+                arr[idx - 1].slice(0, 2),
+                coord.slice(0, 2),
+              ]);
+              cumulativeDistance += turf.length(segment, { units: "kilometers" });
+              return cumulativeDistance;
+            }
+          );
+        }
+  
+        const processedFlightPlan: FlightPlanData = {
+          ...newPlan,
+          properties: {
+            ...newPlan.properties,
+            homePosition: {
+              ...homePosition,
+              altitude: resolvedHomeAlt
+            }
+          },
+          waypointDistances,
+          totalDistance,
+          processed: true
+        };
+  
+        setContextFlightPlan(processedFlightPlan);
+        setDistance(totalDistance);
+        setResolvedGeoJSON(processedFlightPlan);
+  
+      } catch (error) {
+        console.error("Error processing flight plan:", error);
+        setError("Failed to process flight plan. Please try again.");
+      }
+    };
+  
+    processFlightPlan();
+  }, [contextFlightPlan, queryTerrainElevation, setContextFlightPlan, setDistance, setError]);
 
     const addGeoJSONToMap = useCallback(
       (geojson: GeoJSON.FeatureCollection) => {

@@ -18,6 +18,34 @@ function frameToAltitudeMode(frame: number): "absolute" | "relative" | "terrain"
   }
 }
 
+class HomePositionHandler {
+  private homePosition: { latitude: number; longitude: number; altitude: number };
+  private takeoffAltitude: number | null = null;
+
+  constructor() {
+    this.homePosition = { latitude: 0, longitude: 0, altitude: 0 };
+  }
+
+  processWaypoint(index: number, command: number, alt: number, lat: number, lon: number) {
+    if (index === 0) {
+      this.homePosition = { latitude: lat, longitude: lon, altitude: alt };
+    }
+    if (command === 22) { // MAV_CMD_NAV_TAKEOFF
+      this.takeoffAltitude = alt;
+    }
+  }
+
+  getHomePosition(): { latitude: number; longitude: number; altitude: number } {
+    if (this.takeoffAltitude !== null) {
+      return {
+        ...this.homePosition,
+        altitude: this.takeoffAltitude
+      };
+    }
+    return this.homePosition;
+  }
+}
+
 function parseQGCFile(content: string): import("../context/FlightPlanContext").FlightPlanData {
   const lines = content.trim().split("\n");
 
@@ -25,7 +53,7 @@ function parseQGCFile(content: string): import("../context/FlightPlanContext").F
     throw new Error("Invalid .waypoints file. Missing QGC WPL 110 header.");
   }
 
-  let homePosition = { latitude: 0, longitude: 0, altitude: 0 };
+  const homeHandler = new HomePositionHandler();
   const waypoints = [];
   const coordinates = [];
 
@@ -44,10 +72,9 @@ function parseQGCFile(content: string): import("../context/FlightPlanContext").F
 
     const altitudeMode = frameToAltitudeMode(frame);
 
-    if (index === 0 && current === 1) {
-      homePosition = { latitude: lat, longitude: lon, altitude: alt };
-    }
+    homeHandler.processWaypoint(index, command, alt, lat, lon);
 
+    // Include all waypoints for debugging, not just current === 1
     waypoints.push({
       index,
       altitudeMode,
@@ -59,7 +86,16 @@ function parseQGCFile(content: string): import("../context/FlightPlanContext").F
 
     if (!isNaN(lat) && !isNaN(lon) && lat !== 0 && lon !== 0) {
       coordinates.push([lon, lat, alt]);
+    } else {
+      console.log(`Skipping invalid coordinate at index ${index}: lat=${lat}, lon=${lon}`);
     }
+  }
+
+  const homePosition = homeHandler.getHomePosition();
+  console.log("Parsed Coordinates:", coordinates);
+
+  if (coordinates.length < 2) {
+    throw new Error("Flight plan must contain at least 2 valid coordinates.");
   }
 
   return {
@@ -170,13 +206,10 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded 
             flightData = parseKMLFile(reader.result as string);
           }
 
-          // Reset the processed flag to false to ensure fresh processing
           const newFlightPlan = { ...flightData, processed: false };
-
           setFlightPlan(newFlightPlan);
           setFileUploadStatus("processed");
 
-          // Notify parent that a new flight plan is available so it can auto-close the uploader window.
           if (onPlanUploaded) {
             onPlanUploaded(newFlightPlan);
           }
@@ -204,7 +237,6 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded 
       const rawData = await response.json();
 
       const processedData = parseGeoJSONFile(JSON.stringify(rawData));
-      // Reset the processed flag here too
       const newFlightPlan = { ...processedData, processed: false };
 
       setFlightPlan(newFlightPlan);
@@ -223,7 +255,7 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded 
     <div className="flex-1 bg-white shadow-lg p-6 rounded-lg border border-gray-200">
       <h3 className="text-lg font-bold text-black">📁 Upload Your Flight Plan</h3>
       <p className="text-sm text-gray-600">
-        Upload a <strong>.waypoints</strong>, <strong>.geojson</strong>, or <strong>.kml</strong> file to analyze your drone&apos;s flight path.
+        Upload a <strong>.waypoints</strong>, <strong>.geojson</strong>, or <strong>.kml</strong> file to analyze your drone's flight path.
       </p>
 
       <div
@@ -231,7 +263,7 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded 
         className="mt-4 border-2 border-dashed border-gray-300 p-6 rounded-lg flex flex-col items-center justify-center cursor-pointer"
       >
         <input {...getInputProps()} />
-        <p className="text-gray-500">Drag &amp; Drop your file here or click to upload</p>
+        <p className="text-gray-500">Drag & Drop your file here or click to upload</p>
         {fileName && (
           <p className="mt-2 text-sm text-gray-600">Selected file: {fileName}</p>
         )}

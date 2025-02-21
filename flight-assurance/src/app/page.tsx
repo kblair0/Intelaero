@@ -49,15 +49,19 @@ const HomeContent = () => {
             <Image
               src="/Logonobackgrnd.png"
               alt="Intel Aero Logo"
-              width={80}
-              height={80}
+              width={0}
+              height={0}
+              sizes="100vw"
+              style={{ width: '100%', height: 'auto' }}
               className="max-w-full h-auto"
             />
             <Image
               src="/Namenobackgrnd.png"
               alt="Intel Aero Title"
-              width={80}
-              height={40}
+              width={0}
+              height={0}
+              sizes="100vw"
+              style={{ width: '100%', height: 'auto' }}
               className="max-w-full h-auto"
             />
           </div>
