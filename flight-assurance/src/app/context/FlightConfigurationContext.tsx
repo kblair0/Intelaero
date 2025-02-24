@@ -22,6 +22,7 @@ interface MetricsState {
   availableBatteryCapacity: number;
   remainingCapacity: number;
   remainingTime: string;
+  flightTimeMargin: string;
   totalEndurance: string;
 }
 
@@ -62,87 +63,75 @@ export const FlightConfigurationProvider: React.FC<{ children: React.ReactNode }
     mainAltitudeMode: "N/A",
     availableBatteryCapacity: 0,
     remainingCapacity: 0,
-    remainingTime: "0:00"
+    remainingTime: "0:00",
+    flightTimeMargin: "0:00" 
 });
 
-  const calculateMetrics = useCallback(() => {
-    // Parse input values
-    const batteryCapacity = parseFloat(config.batteryCapacity) || 0;
-    const dischargeRate = parseFloat(config.dischargeRate) || 0;
-    const assumedSpeed = parseFloat(config.assumedSpeed) || 20;
-    const reservePercentage = parseFloat(config.batteryReserveReq) || 20;
+const calculateMetrics = useCallback(() => {
+  // Parse input values
+  const batteryCapacity = parseFloat(config.batteryCapacity) || 0;
+  const dischargeRate = parseFloat(config.dischargeRate) || 0;
+  const assumedSpeed = parseFloat(config.assumedSpeed) || 20;
+  const reservePercentage = parseFloat(config.batteryReserveReq) || 20;
 
-    // Battery calculations
-    const reserveAmount = batteryCapacity * (reservePercentage / 100);
-    const availableBatteryCapacity = batteryCapacity - reserveAmount;
+  // Battery calculations
+  const reserveAmount = batteryCapacity * (reservePercentage / 100);
+  const availableBatteryCapacity = batteryCapacity - reserveAmount;
 
-    // Time calculations
-    const availableFlightTime = availableBatteryCapacity / dischargeRate || 0;
-    const totalFlightTime = batteryCapacity / dischargeRate || 0; 
+  // Time calculations
+  const availableFlightTime = availableBatteryCapacity / dischargeRate || 0;
+  const totalFlightTime = batteryCapacity / dischargeRate || 0; 
 
-    // Distance calculations
-    const maxAvailableDistance = (availableFlightTime / 60) * assumedSpeed;
+  // Distance calculations
+  const maxAvailableDistance = (availableFlightTime / 60) * assumedSpeed;
 
-    // Initialize metrics object
-    const newMetrics: MetricsState = {
-        flightTime: formatFlightTime(availableFlightTime),
-        maxDistance: maxAvailableDistance,
-        batteryReserve: `${reservePercentage}%`,
-        isFeasible: true,
-        estimatedDistance: maxAvailableDistance,
-        totalEndurance: formatFlightTime(totalFlightTime),
-        flightPlanEstimatedTime: "0:00",
-        expectedBatteryConsumption: 0,
-        numberOfWaypoints: 0,
-        mainAltitudeMode: "N/A",
-        availableBatteryCapacity: Math.round(availableBatteryCapacity),
-        remainingCapacity: Math.round(availableBatteryCapacity),
-        remainingTime: formatFlightTime(availableFlightTime)
-    };
+  // Initialize metrics object
+  const newMetrics: MetricsState = {
+      flightTime: formatFlightTime(availableFlightTime),
+      maxDistance: maxAvailableDistance,
+      batteryReserve: `${reservePercentage}%`,
+      isFeasible: true,
+      estimatedDistance: maxAvailableDistance,
+      totalEndurance: formatFlightTime(totalFlightTime),
+      flightPlanEstimatedTime: "0:00",
+      expectedBatteryConsumption: 0,
+      numberOfWaypoints: 0,
+      mainAltitudeMode: "N/A",
+      availableBatteryCapacity: Math.round(availableBatteryCapacity),
+      remainingCapacity: Math.round(availableBatteryCapacity),
+      remainingTime: formatFlightTime(availableFlightTime),
+      flightTimeMargin: formatFlightTime(availableFlightTime) // Initial placeholder
+  };
 
-    // Flight plan specific calculations
-    if (flightPlanDistance) {
-        const flightPlanTimeMinutes = (flightPlanDistance / assumedSpeed) * 60;
-        const requiredBatteryCapacity = flightPlanTimeMinutes * dischargeRate;
-        
-        newMetrics.isFeasible = requiredBatteryCapacity <= availableBatteryCapacity;
-        newMetrics.flightPlanEstimatedTime = formatFlightTime(flightPlanTimeMinutes);
-        newMetrics.expectedBatteryConsumption = Math.round(requiredBatteryCapacity);
-        
-        // Calculate remaining capacity after flight plan
-        const remainingCapacity = availableBatteryCapacity - requiredBatteryCapacity;
-        newMetrics.remainingCapacity = Math.round(remainingCapacity);
-        newMetrics.remainingTime = formatFlightTime(remainingCapacity / dischargeRate);
-    }
+  // Flight plan specific calculations
+  if (flightPlanDistance) {
+      const flightPlanTimeMinutes = (flightPlanDistance / assumedSpeed) * 60;
+      const requiredBatteryCapacity = flightPlanTimeMinutes * dischargeRate;
+      
+      newMetrics.isFeasible = requiredBatteryCapacity <= availableBatteryCapacity;
+      newMetrics.flightPlanEstimatedTime = formatFlightTime(flightPlanTimeMinutes);
+      newMetrics.expectedBatteryConsumption = Math.round(requiredBatteryCapacity);
+      
+      // Calculate remaining capacity after flight plan
+      const remainingCapacity = availableBatteryCapacity - requiredBatteryCapacity;
+      newMetrics.remainingCapacity = Math.round(remainingCapacity);
+      
+      // Calculate excess flight time available (in minutes)
+      const extraFlightTimeMinutes = remainingCapacity / dischargeRate;
+      newMetrics.remainingTime = formatFlightTime(extraFlightTimeMinutes);
+      newMetrics.flightTimeMargin = formatFlightTime(extraFlightTimeMinutes);
+  }
 
-    // Waypoint analysis
-    if (flightPlan?.features?.[0]?.properties?.waypoints) {
-        const waypoints = flightPlan.features[0].properties.waypoints;
-        newMetrics.numberOfWaypoints = waypoints.length;
-
-        if (waypoints.length > 2) {
-            const mainSegment = waypoints.slice(1, -1);
-            const modeCounts: Record<string, number> = {};
-            
-            mainSegment.forEach((wp: any) => {
-                const mode = wp.altitudeMode;
-                modeCounts[mode] = (modeCounts[mode] || 0) + 1;
-            });
-
-            newMetrics.mainAltitudeMode = Object.entries(modeCounts)
-                .reduce((a, b) => a[1] > b[1] ? a : b)[0];
-        }
-    }
-
-    setMetrics(newMetrics);
+  setMetrics(newMetrics);
 }, [
-    config.batteryCapacity, 
-    config.dischargeRate, 
-    config.assumedSpeed, 
-    config.batteryReserveReq,
-    flightPlanDistance, 
-    flightPlan
+  config.batteryCapacity, 
+  config.dischargeRate, 
+  config.assumedSpeed, 
+  config.batteryReserveReq,
+  flightPlanDistance, 
+  flightPlan
 ]);
+
 
   useEffect(() => {
     calculateMetrics();

@@ -438,7 +438,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
     }
   };
 
-  //auto terrin analysis on flightplan upload and ELOS Grid Analysis effects
+  //auto terrin analysis on flightplan upload a
   useEffect(() => {
     if (flightPlan && mapRef.current?.getMap()) {   
       const event = new CustomEvent("triggerTerrainAnalysis");
@@ -446,54 +446,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
       console.log("triggerTerrainAnalysis event dispatched.");
     }
   }, [flightPlan, mapRef]);
-
-  useEffect(() => {
-    if (
-      terrainAnalysisComplete &&
-      flightPlan &&
-      mapRef.current?.getMap() &&
-      elosGridRef.current &&
-      !gridAnalysisTriggered
-    ) {
-      const timer = setTimeout(async () => {
-        try {
-          setAutoAnalysisRunning(true); //context state to show auto analysis running
-          await elosGridRef.current.runAnalysis();
-          setGridAnalysisTriggered(true);
-        } catch (error) {
-          console.error("Error during ELOS analysis:", error);
-          setAutoAnalysisRunning(false); 
-        }
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [terrainAnalysisComplete, flightPlan, mapRef, elosGridRef, gridAnalysisTriggered, setAutoAnalysisRunning]);
-
-  useEffect(() => {
-    if (gridAnalysisTriggered) {
-      let retries = 0;
-      const maxRetries = 10;
-      const intervalId = setInterval(() => {
-        const map = mapRef.current?.getMap();
-        if (map && map.getLayer(MAP_LAYERS.ELOS_GRID)) {
-          console.log("✅ Grid analysis layer is present on the map.");
-          clearInterval(intervalId);
-          setAutoAnalysisRunning(false); // Turn off indicator only when layer is detected
-        } else if (retries >= maxRetries) {
-          console.error("⚠️ Grid analysis layer did not load after maximum retries.");
-          clearInterval(intervalId);
-          setAutoAnalysisRunning(false); // Also turn it off if we've retried enough
-        } else {
-          retries++;
-          console.log(`Grid analysis layer not yet loaded, retry ${retries}/${maxRetries}...`);
-        }
-      }, 1000); // check every 1 second
-  
-      return () => clearInterval(intervalId);
-    }
-  }, [gridAnalysisTriggered, setAutoAnalysisRunning, mapRef]);
-  
-  
+ 
 
   return (
     <div className="flex flex-col gap-2">
@@ -510,7 +463,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 bg-white/95 backdrop-blur-sm border border-gray-200 px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 z-50 animate-slide-down">
 <Loader className="w-5 h-5 animate-spin text-yellow-400" />
           <div className="flex flex-col">
-            <span className="font-medium text-gray-900">Analysing Line of Sight Coverage</span>
+            <span className="font-medium text-gray-900">Analysing</span>
             <span className="text-sm text-gray-500">This may take a few moments...</span>
           </div>
         </div>
@@ -528,13 +481,6 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
             // Mark terrain analysis as complete (this flag triggers grid analysis via a separate effect)
             setTerrainAnalysisComplete(true);
           }}
-        />
-        <ELOSGridAnalysis
-          ref={elosGridRef}
-          map={mapRef.current?.getMap() || null}
-          flightPath={flightPlan}
-          onError={(error) => console.error("ELOS Grid Analysis error:", error)}
-          onSuccess={(results) => console.log("ELOS Grid Analysis completed:", results)}
         />
       </div>
 

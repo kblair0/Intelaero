@@ -40,6 +40,7 @@ export interface FlightPlanFeature extends GeoJSON.Feature {
     rawCommands: number[];
     // Detailed waypoint data
     waypoints: WaypointData[];
+    originalCoordinates?: [number, number, number][];
   };
 }
 

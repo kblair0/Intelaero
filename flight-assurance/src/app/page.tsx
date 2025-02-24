@@ -33,7 +33,7 @@ const HomeContent = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-white">
+    <div className="min-h-screen flex flex-col bg-white overflow-x-hidden">
       <DisclaimerModal />
 
       {/* Logo Section */}
@@ -69,14 +69,12 @@ const HomeContent = () => {
       )}
 
       {/* Main Content Area */}
-      <div className="flex-1 mx-auto w-full max-w-[2000px] h-full">
+      <div className="flex-1 w-full h-full mx-2">
         <div className="flex flex-row h-full relative">
           {/* Map Section */}
-          <div className="flex-grow relative h-full pr-2">
-          <div className="relative h-full rounded-r-xl overflow-hidden">
-
+          <div className="flex-grow relative h-full pr-6">
+            <div className="relative h-full rounded-r-xl overflow-hidden">
               <Map ref={mapRef} />
-
               {/* Uploader Overlay */}
               {(!flightPlan || showUploader) && (
                 <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20">
@@ -98,7 +96,6 @@ const HomeContent = () => {
                   </div>
                 </div>
               )}
-
               {/* Analysis Control Buttons */}
               <div className="absolute top-4 left-4 z-10 flex flex-row gap-2 mb-4">
                 <button
@@ -131,7 +128,6 @@ const HomeContent = () => {
                     Upload Flight Plan
                   </button>
                 )}
-                {/* New DEM Data Button */}
                 <button
                   onClick={() => {
                     trackEvent("own_dem_data_request", { panel: "dem" });
@@ -146,9 +142,9 @@ const HomeContent = () => {
             </div>
           </div>
 
-          {/* Plan Verification Section - Fixed on right side */}
+          {/* Plan Verification Section - Fixed Width */}
           <div className="w-80 h-full shrink-0">
-          <Card className="h-full rounded-l-xl">
+            <Card className="h-full rounded-l-xl">
               <div className="space-y-4 h-full">
                 <h3 className="text-lg font-semibold text-gray-900">
                   Plan Verification
@@ -161,7 +157,7 @@ const HomeContent = () => {
             </Card>
           </div>
 
-          {/* Analysis Panels - Will slide over plan verification */}
+          {/* Analysis Panels */}
           <MapSidePanel
             title="Energy Analysis"
             icon={<Battery className="w-5 h-5" />}

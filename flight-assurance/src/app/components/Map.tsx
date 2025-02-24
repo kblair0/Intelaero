@@ -17,6 +17,8 @@ import * as turf from "@turf/turf";
 import FlightLogUploader from "./ULGLogUploader";
 import ELOSGridAnalysis from "./ELOSGridAnalysis";
 import { layerManager, MAP_LAYERS } from "./LayerManager";
+import "../globals.css";
+
 
 // Contexts
 import { useLocation } from "../context/LocationContext";
@@ -25,7 +27,6 @@ import { useFlightConfiguration } from "../context/FlightConfigurationContext";
 import { useLOSAnalysis } from "../context/LOSAnalysisContext";
 import { Cloud } from "lucide-react";
 import { trackEventWithForm as trackEvent } from "./tracking/tracking";
-
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || "";
 
@@ -133,6 +134,12 @@ const Map = forwardRef<MapRef, MapProps>(
       setDistance,
     } = useFlightPlanContext();
 
+    //measuring tool
+    const FIXED_LINE_SOURCE = 'fixed-line-source';
+    const TEMP_LINE_SOURCE = 'temp-line-source';
+    const FIXED_LINE_LAYER = 'fixed-line-layer';
+    const TEMP_LINE_LAYER = 'temp-line-layer';
+
     const [totalDistance, setTotalDistance] = useState<number>(0);
     const lineRef = useRef<GeoJSON.FeatureCollection | null>(null);
     const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -144,6 +151,13 @@ const Map = forwardRef<MapRef, MapProps>(
     const { metrics } = useFlightConfiguration();
     const [resolvedGeoJSON, setResolvedGeoJSON] = useState<GeoJSON.FeatureCollection | null>(null);
     const terrainLoadedRef = useRef<boolean>(false);
+    
+    //measuirng tool
+    const [isMeasuring, setIsMeasuring] = useState(false);
+    const fixedPointsRef = useRef<[number, number][]>([]);
+    const markersRef = useRef<mapboxgl.Marker[]>([]);
+    const movingPopupRef = useRef<mapboxgl.Popup | null>(null);
+
 
     const queryTerrainElevation = useCallback(async (
       coordinates: [number, number],
@@ -176,156 +190,186 @@ const Map = forwardRef<MapRef, MapProps>(
         throw error;
       }
     }, [mapRef]);
-
-
-  // Function to process contextFlightPlan
-  useEffect(() => {
-    if (!contextFlightPlan || contextFlightPlan.processed) {
-      return;
-    }
-  
-    const processFlightPlan = async () => {
-      try {
-        if (!mapRef.current) {
-          throw new Error("Map not initialized");
-        }
-  
-        const coordinates = contextFlightPlan.features[0].geometry.coordinates;
-        console.log("Initial Coordinates:", coordinates);
-  
-        if (coordinates.length < 2) {
-          console.warn("Flight plan has fewer than 2 coordinates. Skipping distance calculation.");
-        }
-  
-        const bounds = coordinates.reduce(
-          (acc, coord) => {
-            acc[0] = Math.min(acc[0], coord[0]);
-            acc[1] = Math.min(acc[1], coord[1]);
-            acc[2] = Math.max(acc[2], coord[0]);
-            acc[3] = Math.max(acc[3], coord[1]);
-            return acc;
-          },
-          [Infinity, Infinity, -Infinity, -Infinity]
-        );
-  
-        mapRef.current.fitBounds(bounds as [number, number, number, number], {
-          padding: 50,
-          duration: 0
-        });
-  
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-        const newPlan: FlightPlanData = structuredClone(contextFlightPlan);
-        const homePosition = newPlan.properties.homePosition;
-        const homeTerrainElev = await queryTerrainElevation([homePosition.longitude, homePosition.latitude]);
-  
-        const homeWaypoint = newPlan.features[0].properties.waypoints.find(wp => wp.index === 0);
-        const homeAltitudeMode = homeWaypoint ? homeWaypoint.altitudeMode : "absolute";
-  
-        let resolvedHomeAlt: number;
-        const hasTakeoff = newPlan.features[0].properties.rawCommands.some(cmd => cmd === 22);
-        if (hasTakeoff) {
-          // When takeoff command exists, home altitude is terrain + takeoff altitude
-          resolvedHomeAlt = homeTerrainElev + homePosition.altitude;
-        } else {
-          resolvedHomeAlt = homeAltitudeMode === "relative"
-            ? homeTerrainElev + homePosition.altitude
-            : homePosition.altitude;
-        }
-  
-        for (const feature of newPlan.features) {
-          if (feature.geometry.type !== "LineString") continue;
-          const coords = feature.geometry.coordinates as [number, number, number][];
-          const waypoints = feature.properties.waypoints || [];
-  
-          for (let i = 0; i < coords.length; i++) {
-            const [lon, lat, originalAlt] = coords[i];
-            const wp = waypoints[i];
-            if (!wp) continue;
-  
-            const terrainElev = await queryTerrainElevation([lon, lat]);
-            let resolvedAlt: number;
-  
-            if (wp.index === 0 && hasTakeoff) {
-              // Home waypoint remains unchanged.
-              resolvedAlt = resolvedHomeAlt;
-            } else if (wp.commandType === 22) {
-              // Takeoff waypoint remains unchanged.
-              resolvedAlt = resolvedHomeAlt;
+    useEffect(() => {
+      if (!contextFlightPlan || contextFlightPlan.processed) {
+        return;
+      }
+    
+      const processFlightPlan = async () => {
+        try {
+          if (!mapRef.current) {
+            throw new Error("Map not initialized");
+          }
+    
+          // Fit the map to the flight plan bounds
+          const coordinates = contextFlightPlan.features[0].geometry.coordinates;
+          console.log("Initial Coordinates:", coordinates);
+          if (coordinates.length < 2) {
+            console.warn("Flight plan has fewer than 2 coordinates. Skipping distance calculation.");
+          }
+          const bounds = coordinates.reduce(
+            (acc, coord) => {
+              acc[0] = Math.min(acc[0], coord[0]);
+              acc[1] = Math.min(acc[1], coord[1]);
+              acc[2] = Math.max(acc[2], coord[0]);
+              acc[3] = Math.max(acc[3], coord[1]);
+              return acc;
+            },
+            [Infinity, Infinity, -Infinity, -Infinity]
+          );
+          mapRef.current.fitBounds(bounds as [number, number, number, number], {
+            padding: 50,
+            duration: 0,
+          });
+    
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+    
+          console.log("Starting Flight Plan Processing:", { inputPlan: contextFlightPlan });
+          const newPlan: FlightPlanData = structuredClone(contextFlightPlan);
+          const homePosition = newPlan.properties.homePosition;
+          const homeTerrainElev = await queryTerrainElevation([homePosition.longitude, homePosition.latitude]);
+    
+          // Determine home altitude using the takeoff command logic
+          const homeWaypoint = newPlan.features[0].properties.waypoints.find((wp) => wp.index === 0);
+          const homeAltitudeMode = homeWaypoint ? homeWaypoint.altitudeMode : "absolute";
+          let resolvedHomeAlt: number;
+          const hasTakeoff = newPlan.features[0].properties.rawCommands.some((cmd) => cmd === 22);
+          if (hasTakeoff) {
+            resolvedHomeAlt = homeTerrainElev + homePosition.altitude;
+          } else {
+            resolvedHomeAlt =
+              homeAltitudeMode === "relative" ? homeTerrainElev + homePosition.altitude : homePosition.altitude;
+          }
+    
+          let totalDistance = 0;
+          let waypointDistances: number[] = [];
+    
+          // ---- TASK 1: Include All Waypoints (including home) ----
+          const allWaypoints = newPlan.features[0].properties.waypoints;
+          const flightWaypoints = allWaypoints; // Include all waypoints, including index 0
+    
+          // ---- TASK 2: Segment Flight Waypoints by Altitude Mode ----
+          const segments: { waypoint: typeof flightWaypoints[0]; coordinate: [number, number, number] }[][] = [];
+          let currentSegment: { waypoint: typeof flightWaypoints[0]; coordinate: [number, number, number] }[] = [];
+          for (let i = 0; i < flightWaypoints.length; i++) {
+            const wp = flightWaypoints[i];
+            const coord = newPlan.features[0].geometry.coordinates[wp.index];
+            if (!coord) continue;
+            if (currentSegment.length === 0) {
+              currentSegment.push({ waypoint: wp, coordinate: coord });
             } else {
-              // For all other waypoints, use the local terrain elevation
-              switch (wp.altitudeMode) {
-                case "relative":
-                  resolvedAlt = terrainElev + originalAlt;
-                  break;
-                case "absolute":
-                  resolvedAlt = originalAlt;
-                  break;
-                case "terrain":
-                  resolvedAlt = terrainElev + originalAlt;
-                  break;
-                default:
-                  resolvedAlt = originalAlt;
+              if (wp.altitudeMode === currentSegment[currentSegment.length - 1].waypoint.altitudeMode) {
+                currentSegment.push({ waypoint: wp, coordinate: coord });
+              } else {
+                segments.push(currentSegment);
+                currentSegment = [{ waypoint: wp, coordinate: coord }];
               }
             }
-            
-  
-            coords[i] = [lon, lat, resolvedAlt];
           }
-  
-          feature.geometry.coordinates = coords;
-        }
-  
-        let totalDistance = 0;
-        let waypointDistances: number[] = [];
-        if (coordinates.length >= 2) {
-          const coords2D = newPlan.features[0].geometry.coordinates.map(
-            (coord: [number, number, number]) => [coord[0], coord[1]]
-          );
-  
-          const routeLine = turf.lineString(coords2D);
-          totalDistance = turf.length(routeLine, { units: "kilometers" });
-  
-          let cumulativeDistance = 0;
-          waypointDistances = newPlan.features[0].geometry.coordinates.map(
-            (coord, idx, arr) => {
-              if (idx === 0) return 0;
-              const segment = turf.lineString([
-                arr[idx - 1].slice(0, 2),
-                coord.slice(0, 2),
-              ]);
-              cumulativeDistance += turf.length(segment, { units: "kilometers" });
-              return cumulativeDistance;
+          if (currentSegment.length > 0) {
+            segments.push(currentSegment);
+          }
+    
+          // ---- TASK 3: Process Each Segment and Merge ----
+          const processedFlightCoords: [number, number, number][] = [];
+          const originalProcessedCoords: [number, number, number][] = []; // New array for original waypoints
+    
+          // Process each flight segment, including home waypoint
+          for (const segment of segments) {
+            const segmentMode = segment[0].waypoint.altitudeMode;
+            const segmentCoords = segment.map(item => item.coordinate);
+    
+            if (segmentMode === "terrain") {
+              const densifiedSegment = await densifyTerrainSegment(segmentCoords);
+              processedFlightCoords.push(...densifiedSegment);
+              // Store original waypoints with resolved altitudes
+              for (let i = 0; i < segmentCoords.length; i++) {
+                const [lon, lat, origAlt] = segmentCoords[i];
+                const terrainElev = await queryTerrainElevation([lon, lat]);
+                const resolvedAlt = terrainElev + origAlt; // Terrain mode: add to terrain elevation
+                originalProcessedCoords.push([lon, lat, resolvedAlt]);
+              }
+            } else {
+              const processedSegment: [number, number, number][] = [];
+              for (let i = 0; i < segmentCoords.length; i++) {
+                const [lon, lat, origAlt] = segmentCoords[i];
+                const terrainElev = await queryTerrainElevation([lon, lat]);
+                let resolvedAlt = origAlt;
+                switch (segment[i].waypoint.altitudeMode) {
+                  case "relative":
+                    resolvedAlt = homeTerrainElev + origAlt;
+                    break;
+                  case "absolute":
+                    resolvedAlt = origAlt;
+                    break;
+                  case "terrain":
+                    resolvedAlt = terrainElev + origAlt;
+                    break;
+                  default:
+                    resolvedAlt = origAlt;
+                }
+                // Special case for home waypoint (index 0)
+                if (segment[i].waypoint.index === 0) {
+                  resolvedAlt = resolvedHomeAlt; // Use the resolved home altitude
+                }
+                processedSegment.push([lon, lat, resolvedAlt]);
+              }
+              processedFlightCoords.push(...processedSegment);
+              originalProcessedCoords.push(...processedSegment); // Same as processed for non-terrain
             }
-          );
+          }
+    
+          // ---- TASK 4: Recalculate Distances ----
+          let cumulative = 0;
+          waypointDistances = [0];
+          for (let i = 1; i < processedFlightCoords.length; i++) {
+            const segmentLine = turf.lineString([
+              processedFlightCoords[i - 1].slice(0, 2),
+              processedFlightCoords[i].slice(0, 2)
+            ]);
+            cumulative += turf.length(segmentLine, { units: "kilometers" });
+            waypointDistances.push(cumulative);
+          }
+          totalDistance = cumulative;
+    
+          // ---- TASK 5: Update Flight Plan Context ----
+          const processedFlightPlan: FlightPlanData = {
+            ...newPlan,
+            properties: {
+              ...newPlan.properties,
+              homePosition: {
+                ...homePosition,
+                altitude: resolvedHomeAlt,
+              },
+            },
+            features: [{
+              ...newPlan.features[0],
+              geometry: {
+                ...newPlan.features[0].geometry,
+                coordinates: processedFlightCoords // Densified coordinates for map
+              },
+              properties: {
+                ...newPlan.features[0].properties,
+                originalCoordinates: originalProcessedCoords // Original waypoints with resolved altitudes
+              }
+            }],
+            waypointDistances,
+            totalDistance,
+            processed: true,
+          };
+    
+          setContextFlightPlan(processedFlightPlan);
+          setDistance(totalDistance);
+          setResolvedGeoJSON(processedFlightPlan);
+        } catch (error) {
+          console.error("Error processing flight plan:", error);
+          setError("Failed to process flight plan. Please try again.");
         }
+      };
+    
+      processFlightPlan();
+    }, [contextFlightPlan, queryTerrainElevation, setContextFlightPlan, setDistance, setError]);
   
-        const processedFlightPlan: FlightPlanData = {
-          ...newPlan,
-          properties: {
-            ...newPlan.properties,
-            homePosition: {
-              ...homePosition,
-              altitude: resolvedHomeAlt
-            }
-          },
-          waypointDistances,
-          totalDistance,
-          processed: true
-        };
-  
-        setContextFlightPlan(processedFlightPlan);
-        setDistance(totalDistance);
-        setResolvedGeoJSON(processedFlightPlan);
-  
-      } catch (error) {
-        console.error("Error processing flight plan:", error);
-        setError("Failed to process flight plan. Please try again.");
-      }
-    };
-  
-    processFlightPlan();
-  }, [contextFlightPlan, queryTerrainElevation, setContextFlightPlan, setDistance, setError]);
 
     const addGeoJSONToMap = useCallback(
       (geojson: GeoJSON.FeatureCollection) => {
@@ -459,6 +503,64 @@ const Map = forwardRef<MapRef, MapProps>(
         addGeoJSONToMap(resolvedGeoJSON);
       }
     }, [resolvedGeoJSON, mapRef, addGeoJSONToMap]);
+
+      /**
+   * Densify a segment of flight coordinates in terrain mode.
+   * This function takes an array of coordinates ([lon, lat, alt]) that belong to a terrain segment,
+   * builds a 2D LineString, and samples points every 10 meters along the segment.
+   * For each sampled point, it linearly interpolates the original altitude between segment endpoints,
+   * queries the terrain elevation, and returns a densified coordinate with the resolved altitude.
+   *
+   * @param segmentCoords - An array of [lon, lat, alt] for the segment.
+   * @returns A promise resolving to a densified array of [lon, lat, resolvedAlt] coordinates.
+   */
+  async function densifyTerrainSegment(
+    segmentCoords: [number, number, number][]
+  ): Promise<[number, number, number][]> {
+    if (segmentCoords.length < 2) return segmentCoords;
+    
+    // Build a 2D LineString from the segment (ignoring altitude)
+    const coords2D = segmentCoords.map(coord => [coord[0], coord[1]]);
+    const line = turf.lineString(coords2D);
+    
+    // Compute cumulative distances (in meters) along the segment
+    const cumDistances: number[] = [0];
+    for (let i = 1; i < segmentCoords.length; i++) {
+      const segmentDist = turf.distance(segmentCoords[i - 1], segmentCoords[i], { units: "meters" });
+      cumDistances.push(cumDistances[i - 1] + segmentDist);
+    }
+    const totalLength = cumDistances[cumDistances.length - 1];
+    
+    const densified: [number, number, number][] = [];
+    // Sample every 10 meters along the line
+    for (let d = 0; d <= totalLength; d += 10) {
+      const pt = turf.along(line, d, { units: "meters" });
+      const [lon, lat] = pt.geometry.coordinates;
+      
+      // Interpolate the original altitude (AGL offset) along the segment
+      let interpAlt = segmentCoords[0][2];
+      if (d <= cumDistances[0]) {
+        interpAlt = segmentCoords[0][2];
+      } else if (d >= cumDistances[cumDistances.length - 1]) {
+        interpAlt = segmentCoords[segmentCoords.length - 1][2];
+      } else {
+        for (let i = 0; i < cumDistances.length - 1; i++) {
+          if (d >= cumDistances[i] && d <= cumDistances[i + 1]) {
+            const fraction = (d - cumDistances[i]) / (cumDistances[i + 1] - cumDistances[i]);
+            interpAlt = segmentCoords[i][2] + fraction * (segmentCoords[i + 1][2] - segmentCoords[i][2]);
+            break;
+          }
+        }
+      }
+      
+      // Query the current terrain elevation at this location
+      const terrainElev = await queryTerrainElevation([lon, lat]);
+      const resolvedAlt = terrainElev + interpAlt;
+      densified.push([lon, lat, resolvedAlt]);
+    }
+    return densified;
+  }
+
 
     useEffect(() => {
       if (lineRef.current && metrics.availableBatteryCapacity > 0) {
@@ -676,6 +778,123 @@ const Map = forwardRef<MapRef, MapProps>(
         }
       };
     }, []);
+
+    useEffect(() => {
+      if (!mapRef.current || !isMeasuring) return;
+    
+      const map = mapRef.current;
+      map.getCanvas().style.cursor = 'crosshair';
+    
+      const onClick = (e: mapboxgl.MapMouseEvent) => {
+        try {
+          const point = [e.lngLat.lng, e.lngLat.lat];
+          if (fixedPointsRef.current.length === 0) {
+            fixedPointsRef.current.push(point);
+            const marker = new mapboxgl.Marker({ color: '#800080' }) // Purple color
+              .setLngLat(point)
+              .setPopup(new mapboxgl.Popup({ closeButton: false, className: 'measure-popup' })
+                .setHTML('<div>Start</div>'))
+              .addTo(map);
+            marker.togglePopup();
+            markersRef.current.push(marker);
+          } else {
+            const lastPoint = fixedPointsRef.current[fixedPointsRef.current.length - 1];
+            const distance = turf.distance(lastPoint, point, { units: 'kilometers' });
+            fixedPointsRef.current.push(point);
+    
+            const lineFeature = {
+              type: 'Feature',
+              geometry: { type: 'LineString', coordinates: fixedPointsRef.current },
+            };
+            map.getSource(FIXED_LINE_SOURCE).setData({
+              type: 'FeatureCollection',
+              features: [lineFeature],
+            });
+    
+            const marker = new mapboxgl.Marker({ color: '#800080' }) // Purple color
+              .setLngLat(point)
+              .setPopup(new mapboxgl.Popup({ closeButton: false, className: 'measure-popup' })
+                .setHTML(`<div>${distance.toFixed(2)} km</div>`))
+              .addTo(map);
+            marker.togglePopup();
+            markersRef.current.push(marker);
+          }
+        } catch (error) {
+          console.error("Error during measurement click:", error);
+        }
+      };
+    
+      const onMouseMove = (e: mapboxgl.MapMouseEvent) => {
+        if (fixedPointsRef.current.length > 0) {
+          const mousePoint = [e.lngLat.lng, e.lngLat.lat];
+          const lastPoint = fixedPointsRef.current[fixedPointsRef.current.length - 1];
+          const tempLineFeature = {
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: [lastPoint, mousePoint] },
+          };
+          map.getSource(TEMP_LINE_SOURCE).setData({
+            type: 'FeatureCollection',
+            features: [tempLineFeature],
+          });
+    
+          if (!movingPopupRef.current) {
+            movingPopupRef.current = new mapboxgl.Popup({ closeButton: false, className: 'measure-popup' });
+            movingPopupRef.current.addTo(map);
+          }
+          const distance = turf.distance(lastPoint, mousePoint, { units: 'kilometers' });
+          movingPopupRef.current.setLngLat(mousePoint).setHTML(`<div>${distance.toFixed(2)} km</div>`);
+        } else {
+          if (!movingPopupRef.current) {
+            movingPopupRef.current = new mapboxgl.Popup({ closeButton: false, className: 'measure-popup' });
+            movingPopupRef.current.addTo(map);
+          }
+          movingPopupRef.current.setLngLat(e.lngLat).setHTML('<div>Pick a position on the map</div>');
+        }
+      };
+    
+      const onDblClick = (e: mapboxgl.MapMouseEvent) => {
+        e.preventDefault();
+        if (fixedPointsRef.current.length > 0) {
+          setIsMeasuring(false);
+          map.getSource(TEMP_LINE_SOURCE).setData({ type: 'FeatureCollection', features: [] });
+          if (movingPopupRef.current) {
+            movingPopupRef.current.remove();
+            movingPopupRef.current = null;
+          }
+        }
+      };
+    
+      const onRightClick = (e: mapboxgl.MapMouseEvent) => {
+        e.preventDefault(); // Prevent the default context menu
+        // Reset measurement state without exiting measuring mode
+        markersRef.current.forEach(marker => marker.remove());
+        markersRef.current = [];
+        fixedPointsRef.current = [];
+        map.getSource(FIXED_LINE_SOURCE).setData({ type: 'FeatureCollection', features: [] });
+        map.getSource(TEMP_LINE_SOURCE).setData({ type: 'FeatureCollection', features: [] });
+        if (movingPopupRef.current) {
+          movingPopupRef.current.remove();
+          movingPopupRef.current = null;
+        }
+      };
+    
+      map.on('click', onClick);
+      map.on('mousemove', onMouseMove);
+      map.on('dblclick', onDblClick);
+      map.on('contextmenu', onRightClick);
+    
+      return () => {
+        map.off('click', onClick);
+        map.off('mousemove', onMouseMove);
+        map.off('dblclick', onDblClick);
+        map.off('contextmenu', onRightClick);
+        map.getCanvas().style.cursor = '';
+        if (movingPopupRef.current) {
+          movingPopupRef.current.remove();
+          movingPopupRef.current = null;
+        }
+      };
+    }, [isMeasuring, mapRef]);
     
 
 async function fetchTerrainElevation(lng: number, lat: number): Promise<number> {
@@ -730,6 +949,65 @@ async function fetchTerrainElevation(lng: number, lat: number): Promise<number> 
     return 0;
   }
 }
+
+
+const startMeasuring = () => {
+  if (!mapRef.current || !terrainLoadedRef.current) return; // Ensure map and terrain are loaded
+  deleteMeasurement();
+  setIsMeasuring(true);
+
+  const map = mapRef.current;
+  if (!map.getSource(FIXED_LINE_SOURCE)) {
+    map.addSource(FIXED_LINE_SOURCE, {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: [] },
+    });
+    map.addLayer({
+      id: FIXED_LINE_LAYER,
+      type: 'line',
+      source: FIXED_LINE_SOURCE,
+      paint: { 'line-color': '#0000FF', 'line-width': 2 },
+    });
+  }
+
+  if (!map.getSource(TEMP_LINE_SOURCE)) {
+    map.addSource(TEMP_LINE_SOURCE, {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: [] },
+    });
+    map.addLayer({
+      id: TEMP_LINE_LAYER,
+      type: 'line',
+      source: TEMP_LINE_SOURCE,
+      paint: { 'line-color': '#0000FF', 'line-width': 2, 'line-dasharray': [2, 2] },
+    });
+  }
+};
+
+const deleteMeasurement = () => {
+  if (mapRef.current) {
+    const map = mapRef.current;
+
+    // Remove markers and their popups
+    markersRef.current.forEach(marker => marker.remove());
+    markersRef.current = [];
+
+    // Remove layers and sources
+    if (map.getLayer(FIXED_LINE_LAYER)) map.removeLayer(FIXED_LINE_LAYER);
+    if (map.getSource(FIXED_LINE_SOURCE)) map.removeSource(FIXED_LINE_SOURCE);
+    if (map.getLayer(TEMP_LINE_LAYER)) map.removeLayer(TEMP_LINE_LAYER);
+    if (map.getSource(TEMP_LINE_SOURCE)) map.removeSource(TEMP_LINE_SOURCE);
+
+    // Remove moving popup
+    if (movingPopupRef.current) {
+      movingPopupRef.current.remove();
+      movingPopupRef.current = null;
+    }
+  }
+
+  fixedPointsRef.current = [];
+  setIsMeasuring(false);
+};
 
 const handleFileProcessing = (data: any) => {
   if (Array.isArray(data)) {
@@ -1103,6 +1381,11 @@ const handleFileProcessing = (data: any) => {
               </button>
             </div>
           )}
+
+<div className="absolute bottom-48 right-4 z-10 flex flex-col space-y-2">
+        <button onClick={startMeasuring} className="map-button">Start Measuring</button>
+        <button onClick={deleteMeasurement} className="map-button">Delete Measurement</button>
+      </div>
     
           {/* Legend for Visibility Colors */}
           <div className="map-legend">

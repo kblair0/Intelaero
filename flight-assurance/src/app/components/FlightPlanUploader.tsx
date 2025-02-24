@@ -121,7 +121,7 @@ function parseKMLFile(kmlText: string): import("../context/FlightPlanContext").F
   const kmlDom = parser?.parseFromString(kmlText, "application/xml");
   const geojsonResult = toGeoJSON.kml(kmlDom) as GeoJSON.FeatureCollection;
 
-  let lineStringCoords = [];
+  let lineStringCoords: [number, number, number][] = [];
   let name = "KML Flight Path";
 
   for (const feature of geojsonResult.features) {
@@ -150,11 +150,21 @@ function parseKMLFile(kmlText: string): import("../context/FlightPlanContext").F
           originalAltitudes: lineStringCoords.map((c) => c[2]),
           altitudeModes: Array(lineStringCoords.length).fill("absolute"),
           rawCommands: Array(lineStringCoords.length).fill(16),
+          // Create a default waypoint for each coordinate
+          waypoints: lineStringCoords.map((coord, index) => ({
+            index,
+            altitudeMode: "absolute",
+            originalAltitude: coord[2],
+            commandType: 16,
+            frame: 0,
+            params: [],
+          })),
         },
       },
     ],
   };
 }
+
 
 function parseGeoJSONFile(geojsonText: string): import("../context/FlightPlanContext").FlightPlanData {
   const geojsonResult = JSON.parse(geojsonText) as GeoJSON.FeatureCollection;
@@ -165,12 +175,32 @@ function parseGeoJSONFile(geojsonText: string): import("../context/FlightPlanCon
   const flightFeature = geojsonResult.features.find((f) => f.geometry?.type === "LineString");
   if (!flightFeature) throw new Error("No valid flight path found in GeoJSON.");
 
+  // Ensure coordinates are treated as [number, number, number][]
+  const coordinates = flightFeature.geometry.coordinates as [number, number, number][];
+
+  // Augment flightFeature properties with default arrays and a waypoints array.
+  flightFeature.properties = {
+    ...flightFeature.properties,
+    originalAltitudes: coordinates.map((c) => c[2]),
+    altitudeModes: Array(coordinates.length).fill("absolute"),
+    rawCommands: Array(coordinates.length).fill(16),
+    waypoints: coordinates.map((coord, index) => ({
+      index,
+      altitudeMode: "absolute",
+      originalAltitude: coord[2],
+      commandType: 16,
+      frame: 0,
+      params: [],
+    })),
+  };
+
   return {
     type: "FeatureCollection",
-    properties: { homePosition: inferHomePosition(flightFeature.geometry.coordinates) },
+    properties: { homePosition: inferHomePosition(coordinates) },
     features: [flightFeature],
   };
 }
+
 
 function inferHomePosition(coordinates: [number, number, number][]) {
   if (!coordinates.length) return null;

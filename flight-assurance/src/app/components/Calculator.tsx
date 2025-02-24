@@ -127,6 +127,16 @@ const Calculator: React.FC = () => {
                             <p className="text-xs text-indigo-600">Est. Flight Time</p>
                             <p className="text-sm font-medium text-indigo-700">{metrics.flightPlanEstimatedTime}</p>
                         </div>
+                        <div className="p-2 bg-teal-50 rounded border border-teal-100">
+                        <p className="text-xs text-teal-600">Remaining Time</p>
+                        <p className="text-sm font-medium text-teal-700">{metrics.remainingTime}</p>
+                        </div>
+                        <div className="p-2 bg-blue-50 rounded border border-blue-100">
+                            <p className="text-xs text-blue-600">Total Endurance</p>
+                            <p className="text-sm font-medium text-blue-700">
+                            {metrics.totalEndurance}
+                            </p>
+                        </div>
                     </div>
                 </div>
 
@@ -134,6 +144,12 @@ const Calculator: React.FC = () => {
                 <div>
                     <h5 className="text-xs font-medium text-gray-700 mb-2">Battery Analysis</h5>
                     <div className="grid grid-cols-2 gap-2">
+                     <div className="p-2 bg-green-50 rounded border border-green-100">
+                            <p className="text-xs text-green-600">Available Capacity</p>
+                            <p className="text-sm font-medium text-green-700">
+                            {metrics.availableBatteryCapacity} mAh
+                            </p>
+                        </div>
                         <div className={`p-2 rounded border ${
                             metrics.isFeasible 
                                 ? 'bg-green-50 border-green-100' 
@@ -146,12 +162,19 @@ const Calculator: React.FC = () => {
                                 metrics.isFeasible ? 'text-green-700' : 'text-red-700'
                             }`}>{metrics.expectedBatteryConsumption} mAh</p>
                         </div>
-                        <div className="p-2 bg-yellow-50 rounded border border-yellow-100">
-                            <p className="text-xs text-yellow-600">Reserve Amount</p>
+                            <div className="p-2 bg-yellow-50 rounded border border-yellow-100">
+                            <p className="text-xs text-yellow-600">Remaining Capacity</p>
                             <p className="text-sm font-medium text-yellow-700">
+                                {metrics.remainingCapacity} mAh
+                            </p>
+                            </div>
+                            <div className="p-2 bg-orange-50 rounded border border-orange-100">
+                            <p className="text-xs text-orange-600">Reserve Amount</p>
+                            <p className="text-sm font-medium text-orange-700">
                                 {(parseFloat(config.batteryCapacity) * (parseFloat(config.batteryReserveReq) / 100)).toFixed(0)} mAh
                             </p>
                         </div>
+
                     </div>
                 </div>
 

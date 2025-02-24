@@ -60,14 +60,6 @@ const MapSidePanel: React.FC<MapSidePanelProps> = ({
         </div>
       </div>
       
-      {/* Mobile backdrop */}
-      {isExpanded && (
-        <div
-          className="fixed inset-0 bg-black/10 backdrop-blur-[2px] lg:hidden"
-          onClick={onToggle}
-          aria-hidden="true"
-        />
-      )}
     </div>
   );
 };

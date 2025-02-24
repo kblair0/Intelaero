@@ -18,6 +18,7 @@ import {
 } from "chart.js";
 import { CheckCircle, XCircle } from "lucide-react";
 import { useFlightPlanContext } from "../context/FlightPlanContext";
+import * as turf from "@turf/turf"; // <-- Added to compute distances
 
 // Register the required chart components (if not already registered globally)
 ChartJS.register(
@@ -88,17 +89,23 @@ const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }
     ],
   };
 
-  const waypointAnnotations = (flightPlan.waypointDistances || []).reduce(
-    (acc, distance, idx) => {
-      const waypoint = flightPlan.features?.[0]?.properties?.waypoints?.[idx];
-      const labelContent = waypoint
-        ? `WP ${idx + 1}: ${waypoint.altitudeMode} (${waypoint.originalAltitude} m)`
-        : `WP ${idx + 1}`;
-      acc[`waypoint_${idx}`] = {
+  // Update: Use the originalCoordinates to compute cumulative distances
+  const originalCoords = flightPlan.features?.[0]?.properties?.originalCoordinates || [];
+  let cumulativeDistance = 0;
+  const waypointAnnotations = originalCoords.map((coord, idx) => {
+    if (idx > 0) {
+      cumulativeDistance += turf.distance(originalCoords[idx - 1], coord, { units: "kilometers" });
+    }
+    const waypoint = flightPlan.features?.[0]?.properties?.waypoints?.[idx];
+    const labelContent = waypoint
+      ? `WP ${idx + 1}: ${waypoint.altitudeMode} (${waypoint.originalAltitude} m)`
+      : `WP ${idx + 1}`;
+    return {
+      [`waypoint_${idx}`]: {
         type: "line",
         mode: "vertical",
         scaleID: "x",
-        value: distance * 100,
+        value: cumulativeDistance * 100,
         borderColor: "rgba(0, 0, 0, 0.6)",
         borderWidth: 1,
         label: {
@@ -110,13 +117,9 @@ const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }
           color: "#fff",
           font: { size: 10 },
         },
-      };
-      return acc;
-    },
-    {} as Record<string, any>
-  );
-  
-
+      },
+    };
+  }).reduce((acc, cur) => ({ ...acc, ...cur }), {});
 
   const chartOptions = {
     responsive: true,
