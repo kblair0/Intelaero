@@ -8,9 +8,6 @@ import TerrainClearancePopup from "./TerrainClearancePopup";
 import ObstacleAssessment from "./ObstacleAssessment";
 import { MapRef } from "./Map";
 import { trackEventWithForm as trackEvent } from "./tracking/tracking";
-import ELOSGridAnalysis from "./ELOSGridAnalysis";
-import { MAP_LAYERS } from "./LayerManager";
-
 
 interface PlanVerificationProps {
   mapRef: React.RefObject<MapRef>;
@@ -455,17 +452,6 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
         <div className="flex items-center gap-2 p-2 bg-blue-100 text-blue-700 rounded">
           <Loader className="w-5 h-5 animate-spin" />
           <span className="text-sm">Analyzing flight plan...</span>
-        </div>
-      )}
-
-      {/* Auto analysis indicator */}
-      {autoAnalysisRunning && (
-        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 bg-white/95 backdrop-blur-sm border border-gray-200 px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 z-50 animate-slide-down">
-<Loader className="w-5 h-5 animate-spin text-yellow-400" />
-          <div className="flex flex-col">
-            <span className="font-medium text-gray-900">Analysing</span>
-            <span className="text-sm text-gray-500">This may take a few moments...</span>
-          </div>
         </div>
       )}
  

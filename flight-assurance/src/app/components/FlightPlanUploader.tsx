@@ -62,7 +62,7 @@ function parseQGCFile(content: string): import("../context/FlightPlanContext").F
     if (parts.length < 12) continue;
 
     const index = parseInt(parts[0], 10);
-    const current = parseInt(parts[1], 10);
+    const _current = parseInt(parts[1], 10);
     const frame = parseInt(parts[2], 10);
     const command = parseInt(parts[3], 10);
     const params = parts.slice(4, 8).map(parseFloat);
@@ -285,7 +285,7 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded 
     <div className="flex-1 bg-white shadow-lg p-6 rounded-lg border border-gray-200">
       <h3 className="text-lg font-bold text-black">📁 Upload Your Flight Plan</h3>
       <p className="text-sm text-gray-600">
-        Upload a <strong>.waypoints</strong>, <strong>.geojson</strong>, or <strong>.kml</strong> file to analyze your drone's flight path.
+        Upload a <strong>.waypoints</strong>, <strong>.geojson</strong>, or <strong>.kml</strong> file to analyze your drone&apos;s flight path.
       </p>
 
       <div

@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 // components/map.tsx
 // /* eslint-disable @typescript-eslint/no-unused-vars */
@@ -18,7 +19,8 @@ import FlightLogUploader from "./ULGLogUploader";
 import ELOSGridAnalysis from "./ELOSGridAnalysis";
 import { layerManager, MAP_LAYERS } from "./LayerManager";
 import "../globals.css";
-
+import { ProgressBar } from "./ProgressBar";
+import { Loader } from "lucide-react";
 
 // Contexts
 import { useLocation } from "../context/LocationContext";
@@ -134,11 +136,7 @@ const Map = forwardRef<MapRef, MapProps>(
       setDistance,
     } = useFlightPlanContext();
 
-    //measuring tool
-    const FIXED_LINE_SOURCE = 'fixed-line-source';
-    const TEMP_LINE_SOURCE = 'temp-line-source';
-    const FIXED_LINE_LAYER = 'fixed-line-layer';
-    const TEMP_LINE_LAYER = 'temp-line-layer';
+
 
     const [totalDistance, setTotalDistance] = useState<number>(0);
     const lineRef = useRef<GeoJSON.FeatureCollection | null>(null);
@@ -151,12 +149,19 @@ const Map = forwardRef<MapRef, MapProps>(
     const { metrics } = useFlightConfiguration();
     const [resolvedGeoJSON, setResolvedGeoJSON] = useState<GeoJSON.FeatureCollection | null>(null);
     const terrainLoadedRef = useRef<boolean>(false);
+    const [elosProgressDisplay, setElosProgressDisplay] = useState(0);
     
     //measuirng tool
     const [isMeasuring, setIsMeasuring] = useState(false);
     const fixedPointsRef = useRef<[number, number][]>([]);
     const markersRef = useRef<mapboxgl.Marker[]>([]);
     const movingPopupRef = useRef<mapboxgl.Popup | null>(null);
+    const FIXED_LINE_SOURCE = 'fixed-line-source';
+    const TEMP_LINE_SOURCE = 'temp-line-source';
+    const FIXED_LINE_LAYER = 'fixed-line-layer';
+    const TEMP_LINE_LAYER = 'temp-line-layer';
+    const abortControllerRef = useRef<AbortController | null>(null);
+
 
 
     const queryTerrainElevation = useCallback(async (
@@ -190,17 +195,17 @@ const Map = forwardRef<MapRef, MapProps>(
         throw error;
       }
     }, [mapRef]);
+    //process flightplan
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => {
       if (!contextFlightPlan || contextFlightPlan.processed) {
         return;
       }
-    
       const processFlightPlan = async () => {
         try {
           if (!mapRef.current) {
             throw new Error("Map not initialized");
           }
-    
           // Fit the map to the flight plan bounds
           const coordinates = contextFlightPlan.features[0].geometry.coordinates;
           console.log("Initial Coordinates:", coordinates);
@@ -221,33 +226,46 @@ const Map = forwardRef<MapRef, MapProps>(
             padding: 50,
             duration: 0,
           });
-    
           await new Promise((resolve) => setTimeout(resolve, 2000));
-    
           console.log("Starting Flight Plan Processing:", { inputPlan: contextFlightPlan });
           const newPlan: FlightPlanData = structuredClone(contextFlightPlan);
           const homePosition = newPlan.properties.homePosition;
           const homeTerrainElev = await queryTerrainElevation([homePosition.longitude, homePosition.latitude]);
-    
           // Determine home altitude using the takeoff command logic
           const homeWaypoint = newPlan.features[0].properties.waypoints.find((wp) => wp.index === 0);
-          const homeAltitudeMode = homeWaypoint ? homeWaypoint.altitudeMode : "absolute";
+          const takeoffWp = newPlan.features[0].properties.waypoints.find(wp => wp.commandType === 22 && wp.frame === 10);
           let resolvedHomeAlt: number;
           const hasTakeoff = newPlan.features[0].properties.rawCommands.some((cmd) => cmd === 22);
-          if (hasTakeoff) {
-            resolvedHomeAlt = homeTerrainElev + homePosition.altitude;
+
+          if (hasTakeoff && takeoffWp) {
+            // For terrain mode, store the raw AGL offset (e.g. 60 m)
+            const rawOffset = takeoffWp.originalAltitude;
+            resolvedHomeAlt = homeTerrainElev + rawOffset; // (For reference, not stored)
+            if (homeWaypoint) {
+              homeWaypoint.altitudeMode = "terrain";
+              // Store only the raw AGL offset instead of the resolved absolute altitude
+              homeWaypoint.originalAltitude = rawOffset;
+            }
+            // Update the home coordinate altitude to the raw offset.
+            // Later, during densification, the correct terrain elevation will be added.
+            const homeCoordIndex = newPlan.features[0].properties.waypoints[0].index;
+            newPlan.features[0].geometry.coordinates[homeCoordIndex][2] = rawOffset;
           } else {
-            resolvedHomeAlt =
-              homeAltitudeMode === "relative" ? homeTerrainElev + homePosition.altitude : homePosition.altitude;
+            const homeAltitudeMode = homeWaypoint ? homeWaypoint.altitudeMode : "absolute";
+            resolvedHomeAlt = homeAltitudeMode === "relative" 
+              ? homeTerrainElev + homePosition.altitude 
+              : homePosition.altitude;
+            if (homeWaypoint) {
+              homeWaypoint.originalAltitude = homePosition.altitude;
+            }
           }
-    
+          
+
           let totalDistance = 0;
           let waypointDistances: number[] = [];
-    
           // ---- TASK 1: Include All Waypoints (including home) ----
           const allWaypoints = newPlan.features[0].properties.waypoints;
           const flightWaypoints = allWaypoints; // Include all waypoints, including index 0
-    
           // ---- TASK 2: Segment Flight Waypoints by Altitude Mode ----
           const segments: { waypoint: typeof flightWaypoints[0]; coordinate: [number, number, number] }[][] = [];
           let currentSegment: { waypoint: typeof flightWaypoints[0]; coordinate: [number, number, number] }[] = [];
@@ -269,24 +287,22 @@ const Map = forwardRef<MapRef, MapProps>(
           if (currentSegment.length > 0) {
             segments.push(currentSegment);
           }
-    
+
           // ---- TASK 3: Process Each Segment and Merge ----
           const processedFlightCoords: [number, number, number][] = [];
           const originalProcessedCoords: [number, number, number][] = []; // New array for original waypoints
-    
+
           // Process each flight segment, including home waypoint
           for (const segment of segments) {
             const segmentMode = segment[0].waypoint.altitudeMode;
             const segmentCoords = segment.map(item => item.coordinate);
-    
+
             if (segmentMode === "terrain") {
               const densifiedSegment = await densifyTerrainSegment(segmentCoords);
               processedFlightCoords.push(...densifiedSegment);
-              // Store original waypoints with resolved altitudes
+              // Store original waypoints with their absolute altitudes (no re-adding terrain)
               for (let i = 0; i < segmentCoords.length; i++) {
-                const [lon, lat, origAlt] = segmentCoords[i];
-                const terrainElev = await queryTerrainElevation([lon, lat]);
-                const resolvedAlt = terrainElev + origAlt; // Terrain mode: add to terrain elevation
+                const [lon, lat, resolvedAlt] = segmentCoords[i]; // Use pre-resolved altitude
                 originalProcessedCoords.push([lon, lat, resolvedAlt]);
               }
             } else {
@@ -318,7 +334,7 @@ const Map = forwardRef<MapRef, MapProps>(
               originalProcessedCoords.push(...processedSegment); // Same as processed for non-terrain
             }
           }
-    
+
           // ---- TASK 4: Recalculate Distances ----
           let cumulative = 0;
           waypointDistances = [0];
@@ -331,7 +347,7 @@ const Map = forwardRef<MapRef, MapProps>(
             waypointDistances.push(cumulative);
           }
           totalDistance = cumulative;
-    
+
           // ---- TASK 5: Update Flight Plan Context ----
           const processedFlightPlan: FlightPlanData = {
             ...newPlan,
@@ -357,7 +373,7 @@ const Map = forwardRef<MapRef, MapProps>(
             totalDistance,
             processed: true,
           };
-    
+
           setContextFlightPlan(processedFlightPlan);
           setDistance(totalDistance);
           setResolvedGeoJSON(processedFlightPlan);
@@ -366,10 +382,9 @@ const Map = forwardRef<MapRef, MapProps>(
           setError("Failed to process flight plan. Please try again.");
         }
       };
-    
+
       processFlightPlan();
     }, [contextFlightPlan, queryTerrainElevation, setContextFlightPlan, setDistance, setError]);
-  
 
     const addGeoJSONToMap = useCallback(
       (geojson: GeoJSON.FeatureCollection) => {
@@ -508,59 +523,53 @@ const Map = forwardRef<MapRef, MapProps>(
    * Densify a segment of flight coordinates in terrain mode.
    * This function takes an array of coordinates ([lon, lat, alt]) that belong to a terrain segment,
    * builds a 2D LineString, and samples points every 10 meters along the segment.
-   * For each sampled point, it linearly interpolates the original altitude between segment endpoints,
-   * queries the terrain elevation, and returns a densified coordinate with the resolved altitude.
-   *
-   * @param segmentCoords - An array of [lon, lat, alt] for the segment.
-   * @returns A promise resolving to a densified array of [lon, lat, resolvedAlt] coordinates.
    */
-  async function densifyTerrainSegment(
-    segmentCoords: [number, number, number][]
-  ): Promise<[number, number, number][]> {
-    if (segmentCoords.length < 2) return segmentCoords;
-    
-    // Build a 2D LineString from the segment (ignoring altitude)
-    const coords2D = segmentCoords.map(coord => [coord[0], coord[1]]);
-    const line = turf.lineString(coords2D);
-    
-    // Compute cumulative distances (in meters) along the segment
-    const cumDistances: number[] = [0];
-    for (let i = 1; i < segmentCoords.length; i++) {
-      const segmentDist = turf.distance(segmentCoords[i - 1], segmentCoords[i], { units: "meters" });
-      cumDistances.push(cumDistances[i - 1] + segmentDist);
-    }
-    const totalLength = cumDistances[cumDistances.length - 1];
-    
-    const densified: [number, number, number][] = [];
-    // Sample every 10 meters along the line
-    for (let d = 0; d <= totalLength; d += 10) {
-      const pt = turf.along(line, d, { units: "meters" });
-      const [lon, lat] = pt.geometry.coordinates;
-      
-      // Interpolate the original altitude (AGL offset) along the segment
-      let interpAlt = segmentCoords[0][2];
-      if (d <= cumDistances[0]) {
-        interpAlt = segmentCoords[0][2];
-      } else if (d >= cumDistances[cumDistances.length - 1]) {
-        interpAlt = segmentCoords[segmentCoords.length - 1][2];
-      } else {
-        for (let i = 0; i < cumDistances.length - 1; i++) {
-          if (d >= cumDistances[i] && d <= cumDistances[i + 1]) {
-            const fraction = (d - cumDistances[i]) / (cumDistances[i + 1] - cumDistances[i]);
-            interpAlt = segmentCoords[i][2] + fraction * (segmentCoords[i + 1][2] - segmentCoords[i][2]);
-            break;
-          }
+      async function densifyTerrainSegment(segmentCoords: [number, number, number][]): Promise<[number, number, number][]> {
+        if (segmentCoords.length < 2) return segmentCoords;
+        
+        // Build a 2D LineString (ignoring altitude)
+        const coords2D = segmentCoords.map(coord => [coord[0], coord[1]]);
+        const line = turf.lineString(coords2D);
+        
+        // Compute cumulative distances along the segment in meters
+        const cumDistances: number[] = [0];
+        for (let i = 1; i < segmentCoords.length; i++) {
+          const segmentDist = turf.distance(segmentCoords[i - 1], segmentCoords[i], { units: "meters" });
+          cumDistances.push(cumDistances[i - 1] + segmentDist);
         }
+        const totalLength = cumDistances[cumDistances.length - 1];
+        
+        const densified: [number, number, number][] = [];
+        // Sample every 10 meters along the line
+        for (let d = 0; d <= totalLength; d += 10) {
+          const pt = turf.along(line, d, { units: "meters" });
+          const [lon, lat] = pt.geometry.coordinates;
+          
+          // Interpolate the raw offset from segmentCoords (these are raw AGL values for terrain mode)
+          let interpOffset = segmentCoords[0][2]; // default to the first point's offset
+          if (d <= cumDistances[0]) {
+            interpOffset = segmentCoords[0][2];
+          } else if (d >= cumDistances[cumDistances.length - 1]) {
+            interpOffset = segmentCoords[segmentCoords.length - 1][2];
+          } else {
+            for (let i = 0; i < cumDistances.length - 1; i++) {
+              if (d >= cumDistances[i] && d <= cumDistances[i + 1]) {
+                const fraction = (d - cumDistances[i]) / (cumDistances[i + 1] - cumDistances[i]);
+                interpOffset = segmentCoords[i][2] + fraction * (segmentCoords[i + 1][2] - segmentCoords[i][2]);
+                break;
+              }
+            }
+          }
+          
+          // Query the current terrain elevation at this location and add the raw offset to compute the absolute altitude
+          const terrainElev = await queryTerrainElevation([lon, lat]);
+          const resolvedAlt = terrainElev + interpOffset;
+          densified.push([lon, lat, resolvedAlt]);
+        }
+        return densified;
       }
+     
       
-      // Query the current terrain elevation at this location
-      const terrainElev = await queryTerrainElevation([lon, lat]);
-      const resolvedAlt = terrainElev + interpAlt;
-      densified.push([lon, lat, resolvedAlt]);
-    }
-    return densified;
-  }
-
 
     useEffect(() => {
       if (lineRef.current && metrics.availableBatteryCapacity > 0) {
@@ -610,6 +619,8 @@ const Map = forwardRef<MapRef, MapProps>(
   const toggleLayerVisibility = useCallback((layerId: string) => {
     return layerManager.toggleLayerVisibility(layerId);
   }, []);
+
+  // useImperativeHandle exposes map control methods (such as adding GeoJSON, running analysis, and toggling layers)
   useImperativeHandle(
     ref,
     () => ({
@@ -628,6 +639,10 @@ const Map = forwardRef<MapRef, MapProps>(
           throw new Error("Analysis component not initialized");
         }
   
+        // **SHOW OVERLAY BEFORE ANALYSIS STARTS**
+        setIsAnalyzing(true);
+        setElosProgressDisplay(0);
+  
         try {
           if (options && "mergedAnalysis" in options) {
             // Merged analysis (user-triggered)
@@ -636,9 +651,7 @@ const Map = forwardRef<MapRef, MapProps>(
               options.stations
             );
             if (mapRef.current.getLayer(MAP_LAYERS.MERGED_VISIBILITY)) {
-              console.log(
-                "[runElosAnalysis] Removing existing merged analysis layer."
-              );
+              console.log("[runElosAnalysis] Removing existing merged analysis layer.");
               mapRef.current.removeLayer(MAP_LAYERS.MERGED_VISIBILITY);
               mapRef.current.removeSource(MAP_LAYERS.MERGED_VISIBILITY);
             }
@@ -656,47 +669,55 @@ const Map = forwardRef<MapRef, MapProps>(
             );
             const layerId = `${options.markerType}-grid-layer`;
             if (mapRef.current.getLayer(layerId)) {
-              console.log(
-                "[runElosAnalysis] Removing existing marker-based analysis layer:",
-                layerId
-              );
+              console.log("[runElosAnalysis] Removing existing marker-based analysis layer:", layerId);
               mapRef.current.removeLayer(layerId);
               mapRef.current.removeSource(layerId);
             }
-            await elosGridRef.current.runAnalysis({
-              markerOptions: {
-                markerType: options.markerType,
-                location: options.location,
-                range: options.range,
+            await elosGridRef.current.runAnalysis(
+              {
+                markerOptions: {
+                  markerType: options.markerType,
+                  location: options.location,
+                  range: options.range,
+                },
               },
-            });
+              (progress: number) => {
+                // **UPDATE PROGRESS STATE DURING ANALYSIS**
+                setElosProgressDisplay(progress);
+              }
+            );
             console.log("[runElosAnalysis] Marker-based analysis complete.");
           } else {
             // Flight path analysis (automatic)
-            console.log(
-              "[runElosAnalysis] Running flight path analysis (automatic) with no options."
-            );
+            console.log("[runElosAnalysis] Running flight path analysis (automatic) with no options.");
             if (mapRef.current.getLayer(MAP_LAYERS.ELOS_GRID)) {
-              console.log(
-                "[runElosAnalysis] Removing existing ELOS grid analysis layer."
-              );
+              console.log("[runElosAnalysis] Removing existing ELOS grid analysis layer.");
               mapRef.current.removeLayer(MAP_LAYERS.ELOS_GRID);
               mapRef.current.removeSource(MAP_LAYERS.ELOS_GRID);
             }
-            await elosGridRef.current.runAnalysis();
+            await elosGridRef.current.runAnalysis(
+              undefined,
+              (progress: number) => {
+                // **UPDATE PROGRESS STATE FOR FLIGHT PATH ANALYSIS**
+                setElosProgressDisplay(progress);
+              }
+            );
             console.log("[runElosAnalysis] Flight path analysis complete.");
           }
         } catch (error) {
           console.error("[runElosAnalysis] Analysis error:", error);
           throw error;
+        } finally {
+          // **HIDE THE OVERLAY AFTER ANALYSIS FINISHES**
+          setIsAnalyzing(false);
         }
       },
       getMap: () => mapRef.current,
       toggleLayerVisibility,
     }),
-    [addGeoJSONToMap, toggleLayerVisibility ]
+    [addGeoJSONToMap, toggleLayerVisibility]
   );
-  
+ 
 
     // Map initialization
     useEffect(() => {
@@ -1327,6 +1348,17 @@ const handleFileProcessing = (data: any) => {
       }
     };
 
+    const stopAnalysisHandler = () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      // Optionally, reset the progress
+      setElosProgressDisplay(0);
+      // Hide the overlay
+      setIsAnalyzing(false);
+    };
+    
+
     return (
       <div className="relative">
         {/* Map container with buttons, legend, etc. */}
@@ -1334,30 +1366,51 @@ const handleFileProcessing = (data: any) => {
           ref={mapContainerRef}
           style={{ height: "100vh", width: "100%" }}
         >
+          {/* Progress Bar Overlay */}
+          {isAnalyzing && (
+          <div className="fixed top-4 left-1/2 transform -translate-x-1/2 bg-white/95 backdrop-blur-sm border border-gray-200 px-4 py-2 rounded-lg shadow-lg flex flex-col gap-3 z-50 animate-slide-down min-w-[150px]">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <Loader className="w-5 h-5 animate-spin text-yellow-400" />
+                <div className="flex flex-col">
+                  <span className="font-medium text-gray-900">Analysing</span>
+                  <span className="text-sm text-gray-500">
+                    This may take a few moments... {Math.round(elosProgressDisplay)}%
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={stopAnalysisHandler}
+                className="bg-red-500 hover:bg-red-600 text-white px-2 py-0.5 rounded text-xs"
+              >
+                Stop
+              </button>
+            </div>
+            <div className="relative mt-2 w-full">
+              <ProgressBar progress={Math.round(elosProgressDisplay)} />
+            </div>
+          </div>
+        )}
+
+          {/* Add Ground Station, Observer, and Repeater Buttons */}
           <div className="absolute top-4 right-4 z-10 flex flex-col space-y-2">
             <button
               onClick={addGroundStation}
-              className={`map-button ground-station-icon ${isAnalyzing ? "opacity-50" : ""}`}
-              disabled={isAnalyzing}
+              className="map-button ground-station-icon"
             >
               Add Ground Station 📡
-              {isAnalyzing && <span className="ml-2">•••</span>}
             </button>
             <button
               onClick={addObserver}
-              className={`map-button observer-icon ${isAnalyzing ? "opacity-50" : ""}`}
-              disabled={isAnalyzing}
+              className="map-button observer-icon"
             >
               Add Observer 🔭
-              {isAnalyzing && <span className="ml-2">•••</span>}
             </button>
             <button
               onClick={addRepeater}
-              className={`map-button repeater-icon ${isAnalyzing ? "opacity-50" : ""}`}
-              disabled={isAnalyzing}
+              className="map-button repeater-icon"
             >
               Add Repeater ⚡️
-              {isAnalyzing && <span className="ml-2">•••</span>}
             </button>
           </div>
     
@@ -1381,11 +1434,12 @@ const handleFileProcessing = (data: any) => {
               </button>
             </div>
           )}
-
-<div className="absolute bottom-48 right-4 z-10 flex flex-col space-y-2">
-        <button onClick={startMeasuring} className="map-button">Start Measuring</button>
-        <button onClick={deleteMeasurement} className="map-button">Delete Measurement</button>
-      </div>
+    
+          {/* Measurement Buttons */}
+          <div className="absolute bottom-48 right-4 z-10 flex flex-col space-y-2">
+          <button onClick={startMeasuring} className="map-button">Start Measuring</button>
+          <button onClick={deleteMeasurement} className="map-button">Delete Measurement</button>
+          </div>
     
           {/* Legend for Visibility Colors */}
           <div className="map-legend">

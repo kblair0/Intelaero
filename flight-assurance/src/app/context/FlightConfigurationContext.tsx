@@ -41,7 +41,7 @@ const formatFlightTime = (timeInMinutes: number): string => {
 };
 
 export const FlightConfigurationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { flightPlan, distance: flightPlanDistance } = useFlightPlanContext();
+  const { distance: flightPlanDistance } = useFlightPlanContext();
   
   const [config, setConfig] = useState<ConfigState>({
     batteryCapacity: "28000",
@@ -128,8 +128,7 @@ const calculateMetrics = useCallback(() => {
   config.dischargeRate, 
   config.assumedSpeed, 
   config.batteryReserveReq,
-  flightPlanDistance, 
-  flightPlan
+  flightPlanDistance,
 ]);
 
 
