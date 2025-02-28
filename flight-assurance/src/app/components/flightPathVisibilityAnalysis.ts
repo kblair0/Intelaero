@@ -134,7 +134,7 @@ export async function analyzeFlightPathVisibility(
         lng: s.location.lng,
         elevation: s.location.elevation
       },
-      offset: s.config.elevationOffset
+      offset: s.elevationOffset
     }))
   });
 

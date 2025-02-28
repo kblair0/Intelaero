@@ -58,7 +58,14 @@ interface AnalysisResults {
 
 const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
   // Get location data from LocationContext
-  const { gcsLocation, observerLocation, repeaterLocation } = useLocation();
+  const { 
+    gcsLocation, 
+    observerLocation, 
+    repeaterLocation,
+    gcsElevationOffset,
+    observerElevationOffset,
+    repeaterElevationOffset 
+  } = useLocation();
   const { flightPlan } = useFlightPlanContext();
   const isFlightPlanLoaded = flightPlan !== null && Object.keys(flightPlan).length > 0;
   const [mergedResults, setMergedResults] = useState<AnalysisResults | null>(null);   
@@ -212,8 +219,22 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
       return;
     }
     
-    const sourceOffset = markerConfigs[sourceStation].elevationOffset;
-    const targetOffset = markerConfigs[targetStation].elevationOffset;
+    const sourceOffset = (() => {
+      switch (sourceStation) {
+        case 'gcs': return gcsElevationOffset;
+        case 'observer': return observerElevationOffset;
+        case 'repeater': return repeaterElevationOffset;
+        default: throw new Error(`Unknown station type: ${sourceStation}`);
+      }
+    })();
+    const targetOffset = (() => {
+      switch (targetStation) {
+        case 'gcs': return gcsElevationOffset;
+        case 'observer': return observerElevationOffset;
+        case 'repeater': return repeaterElevationOffset;
+        default: throw new Error(`Unknown station type: ${targetStation}`);
+      }
+    })();
     
     const effective1: [number, number, number] = [
       source.lng,
@@ -340,8 +361,22 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
       return;
     }
   
-    const sourceOffset = markerConfigs[sourceStation].elevationOffset;
-    const targetOffset = markerConfigs[targetStation].elevationOffset;
+    const sourceOffset = (() => {
+      switch (sourceStation) {
+        case 'gcs': return gcsElevationOffset;
+        case 'observer': return observerElevationOffset;
+        case 'repeater': return repeaterElevationOffset;
+        default: throw new Error(`Unknown station type: ${sourceStation}`);
+      }
+    })();
+    const targetOffset = (() => {
+      switch (targetStation) {
+        case 'gcs': return gcsElevationOffset;
+        case 'observer': return observerElevationOffset;
+        case 'repeater': return repeaterElevationOffset;
+        default: throw new Error(`Unknown station type: ${targetStation}`);
+      }
+    })();
   
     const effective1: [number, number, number] = [
       source.lng,
@@ -673,38 +708,38 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
       setError("Map or flight plan not initialized");
       return;
     }
-
-    // Get all station locations from context
+  
     const stationLocations = {
       gcs: gcsLocation,
       observer: observerLocation,
       repeater: repeaterLocation
     };
-
-    // Check if at least one station is placed
+  
     const hasStations = Object.values(stationLocations).some(location => location !== null);
     if (!hasStations) {
       setError("Please place at least one station on the map");
       return;
     }
-
+  
+    const elevationOffsets = {
+      gcs: gcsElevationOffset,
+      observer: observerElevationOffset,
+      repeater: repeaterElevationOffset
+    };
+  
     try {
       setIsAnalyzing(true);
-
-      // Run the visibility analysis
       const result = await analyzeFlightPathVisibility(
         mapRef.current.getMap()!,
         flightPlan,
         stationLocations,
-        markerConfigs
+        elevationOffsets
       );
-
-      // Add the visibility layer to the map
+  
       addVisibilityLayer(mapRef.current.getMap()!, result.segments!);
-
-
+  
       setResults({
-        cells: [], // Keep existing cells if any
+        cells: [],
         stats: {
           visibleCells: Math.round(result.stats.visibleLength),
           totalCells: Math.round(result.stats.totalLength),
@@ -717,15 +752,13 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
           coveragePercentage: result.stats.coveragePercentage
         }
       });
-
-      // Log the coverage statistics
+  
       console.log("Flight Path Visibility Analysis Results:", {
         totalLength: `${(result.stats.totalLength / 1000).toFixed(2)} km`,
         visibleLength: `${(result.stats.visibleLength / 1000).toFixed(2)} km`,
         coveragePercentage: `${result.stats.coveragePercentage.toFixed(1)}%`,
         analysisTime: `${(result.stats.analysisTime / 1000).toFixed(2)} seconds`
       });
-
     } catch (error) {
       console.error("Flight path visibility analysis failed:", error);
       setError(error instanceof Error ? error.message : "Analysis failed");
