@@ -64,7 +64,11 @@ export async function analyzeFlightPathVisibility(
     observer: LocationData | null;
     repeater: LocationData | null;
   },
-  markerConfigs: MarkerConfigs,
+  elevationOffsets: {
+    gcs: number;
+    observer: number;
+    repeater: number;
+  },
   sampleInterval: number = 10
 ): Promise<FlightPathVisibilityResult> {
   const startTime = performance.now();
@@ -113,14 +117,13 @@ export async function analyzeFlightPathVisibility(
 
   // Get available stations
   const availableStations = Object.entries(stations)
-    .filter(([, location]): location is [string, NonNullable<LocationData>] => 
-      location !== null
-    )
-    .map(([type, location]) => ({
-      type: type as 'gcs' | 'observer' | 'repeater',
-      location,
-      config: markerConfigs[type as keyof MarkerConfigs]
-    }));
+  .filter(([, location]) => location !== null)
+  .map(([type, location]) => ({
+    type: type as 'gcs' | 'observer' | 'repeater',
+    location,
+    elevationOffset: elevationOffsets[type as 'gcs' | 'observer' | 'repeater']
+  }));
+
 
   console.log('Available stations for analysis:', {
     count: availableStations.length,
@@ -168,10 +171,10 @@ export async function analyzeFlightPathVisibility(
       // Log heights every 10th sample
       if (sampleCount % 10 === 0) {
         const terrainHeight = map.queryTerrainElevation([lng, lat]) || 0;
-        
-        // Log heights for each station
-        for (const { type, location, config } of availableStations) {
-          const stationHeight = (location.elevation || 0) + config.elevationOffset;
+
+        // Log heights for each station using elevationOffsets from context
+        for (const { type, location, elevationOffset } of availableStations) {
+          const stationHeight = (location.elevation || 0) + elevationOffset;
           const heightAnalysisPoint = {
             sampleIndex: sampleCount,
             distance: distance,
@@ -186,6 +189,7 @@ export async function analyzeFlightPathVisibility(
             stationAnalysis.samples.push(heightAnalysisPoint);
           }
         }
+
       }
 
       if (sampleCount % 100 === 0) {
@@ -197,14 +201,14 @@ export async function analyzeFlightPathVisibility(
         });
       }
 
-
-      // Check visibility from any station
+      // Check visibility from any station using elevationOffsets from context
       let isVisibleFromAnyStation = false;
-      for (const { location, config } of availableStations) {
+      for (const { location, elevationOffset } of availableStations) {
+        const stationHeight = (location.elevation || 0) + elevationOffset;
         const stationPoint: [number, number, number] = [
           location.lng,
           location.lat,
-          (location.elevation || 0) + config.elevationOffset
+          stationHeight,
         ];
 
         if (await checkLineOfSight(map, stationPoint, samplePoint)) {
@@ -212,6 +216,7 @@ export async function analyzeFlightPathVisibility(
           break;
         }
       }
+
 
       samples.push({
         point: samplePoint,

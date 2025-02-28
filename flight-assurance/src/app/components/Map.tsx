@@ -1,8 +1,9 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-// components/map.tsx
 // /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+// components/map.tsx
 "use client";
 import React, {
   useEffect,
@@ -107,7 +108,6 @@ const Map = forwardRef<MapRef, MapProps>(
     },
     ref
   ) => {
-    // Add context hooks
     const {
       gcsLocation,
       setGcsLocation,
@@ -115,7 +115,14 @@ const Map = forwardRef<MapRef, MapProps>(
       setObserverLocation,
       repeaterLocation,
       setRepeaterLocation,
+      gcsElevationOffset,
+      setGcsElevationOffset,
+      observerElevationOffset,
+      setObserverElevationOffset,
+      repeaterElevationOffset,
+      setRepeaterElevationOffset,
     } = useLocation();
+    
     const { config } = useFlightConfiguration();
 
     const {
@@ -162,7 +169,10 @@ const Map = forwardRef<MapRef, MapProps>(
     const TEMP_LINE_LAYER = 'temp-line-layer';
     const abortControllerRef = useRef<AbortController | null>(null);
 
-
+    // marker offset holders for context
+    const gcsMarkerRef = useRef<mapboxgl.Marker | null>(null);
+    const observerMarkerRef = useRef<mapboxgl.Marker | null>(null);
+    const repeaterMarkerRef = useRef<mapboxgl.Marker | null>(null);
 
     const queryTerrainElevation = useCallback(async (
       coordinates: [number, number],
@@ -206,6 +216,13 @@ const Map = forwardRef<MapRef, MapProps>(
           if (!mapRef.current) {
             throw new Error("Map not initialized");
           }
+
+          // Reset analysis layers before processing new plan
+          layerManager.removeLayer(MAP_LAYERS.ELOS_GRID);
+          layerManager.removeLayer(MAP_LAYERS.GCS_GRID);
+          layerManager.removeLayer(MAP_LAYERS.OBSERVER_GRID);
+          layerManager.removeLayer(MAP_LAYERS.REPEATER_GRID);
+          layerManager.removeLayer(MAP_LAYERS.MERGED_VISIBILITY);
           // Fit the map to the flight plan bounds
           const coordinates = contextFlightPlan.features[0].geometry.coordinates;
           console.log("Initial Coordinates:", coordinates);
@@ -388,126 +405,111 @@ const Map = forwardRef<MapRef, MapProps>(
 
     const addGeoJSONToMap = useCallback(
       (geojson: GeoJSON.FeatureCollection) => {
-        if (mapRef?.current && geojson.type === "FeatureCollection") {
-          const features = geojson.features.filter(
-            (f) => f.geometry.type === "LineString"
-          );
-
-          features.forEach((feature, idx) => {
-            const layerId = `line-${idx}`;
-
-            // Clean up existing layers
-            if (mapRef?.current?.getSource(layerId)) {
-              mapRef?.current.removeLayer(layerId);
-              mapRef?.current.removeSource(layerId);
-            }
-
-            // Using MSL altitudes directly from coordinates
-            const coordinates = feature.geometry.coordinates;
-
-            // Store altitude information in feature properties
-            feature.properties = {
-              ...feature.properties,
-              altitudes: coordinates.map((coord) => coord[2]),
-              // Original data already preserved in properties
-            };
-
-            // Create the line
-            const validCoordinates = coordinates.map(([lng, lat, alt]) => [
-              lng,
-              lat,
-              alt,
-            ]);
-
-            // Calculate distance...
-            const line = turf.lineString(validCoordinates);
-            const totalDistance = turf.length(line, { units: "kilometers" });
-            setTotalDistance(totalDistance);
-
-            // Add to map...
-            mapRef?.current?.addSource(layerId, {
-              type: "geojson",
-              data: feature,
-              lineMetrics: true,
-            });
-
-            mapRef?.current?.addLayer({
+        if (!mapRef?.current || geojson.type !== "FeatureCollection") return;
+    
+        const features = geojson.features.filter(
+          (f) => f.geometry.type === "LineString"
+        );
+    
+        features.forEach((feature, idx) => {
+          const layerId = `line-${idx}`;
+    
+          // Clean up existing layers using LayerManager
+          layerManager.removeLayer(layerId);
+    
+          // Using MSL altitudes directly from coordinates
+          const coordinates = feature.geometry.coordinates;
+    
+          // Store altitude information in feature properties
+          feature.properties = {
+            ...feature.properties,
+            altitudes: coordinates.map((coord) => coord[2]),
+          };
+    
+          // Create the line
+          const validCoordinates = coordinates.map(([lng, lat, alt]) => [
+            lng,
+            lat,
+            alt,
+          ]);
+    
+          // Calculate distance
+          const line = turf.lineString(validCoordinates);
+          const totalDistance = turf.length(line, { units: "kilometers" });
+          setTotalDistance(totalDistance);
+    
+          // Add to map via LayerManager
+          layerManager.addLayer(
+            layerId,
+            { type: "geojson", data: feature, lineMetrics: true },
+            {
               id: layerId,
               type: "line",
               source: layerId,
-              layout: {
-                "line-join": "round",
-                "line-cap": "round",
-              },
-              paint: {
-                "line-width": 2,
-                "line-color": "#FFFF00",
-                "line-opacity": 1,
-              },
-            });
-
-            // Fit bounds to line
-            const bounds = coordinates.reduce(
-              (acc, coord) => {
-                const [lng, lat] = coord;
-                acc[0] = Math.min(acc[0], lng);
-                acc[1] = Math.min(acc[1], lat);
-                acc[2] = Math.max(acc[2], lng);
-                acc[3] = Math.max(acc[3], lat);
-                return acc;
-              },
-              [Infinity, Infinity, -Infinity, -Infinity] as number[]
-            );
-
-            mapRef?.current?.fitBounds(
-              bounds as [number, number, number, number],
-              {
-                padding: 50,
-                duration: 1000,
-                pitch: 70,
-                zoom: 12.5,
-              }
-            );
-
-            const startCoord = coordinates[0];
-            if (startMarkerRef.current) {
-              startMarkerRef.current.setLngLat([startCoord[0], startCoord[1]]);
-            } else {
-              if (mapRef.current) {
-                const newStartMarker = new mapboxgl.Marker({ color: "green" })
-                  .setLngLat([startCoord[0], startCoord[1]])
-                  .setPopup(
-                    new mapboxgl.Popup({ closeButton: false }).setHTML(
-                      '<strong style="color: black; bg-white;">Start</strong>'
-                    )
-                  )
-                  .addTo(mapRef?.current);
-                newStartMarker.togglePopup();
-                startMarkerRef.current = newStartMarker;
-              }
+              layout: { "line-join": "round", "line-cap": "round" },
+              paint: { "line-width": 2, "line-color": "#FFFF00", "line-opacity": 1 },
             }
-
-            const endCoord = coordinates[coordinates.length - 1];
-            if (endMarkerRef.current) {
-              endMarkerRef.current.setLngLat([endCoord[0], endCoord[1]]);
-            } else {
-              if (mapRef.current) {
-                const newEndMarker = new mapboxgl.Marker({ color: "red" })
-                  .setLngLat([endCoord[0], endCoord[1]])
-                  .setPopup(
-                    new mapboxgl.Popup({ closeButton: false }).setHTML(
-                      '<strong style="color: black; bg-white;">Finish</strong>'
-                    )
-                  )
-                  .addTo(mapRef?.current);
-                newEndMarker.togglePopup();
-                endMarkerRef.current = newEndMarker;
-              }
+          );
+    
+          // Fit bounds to line
+          const bounds = coordinates.reduce(
+            (acc, coord) => {
+              const [lng, lat] = coord;
+              acc[0] = Math.min(acc[0], lng);
+              acc[1] = Math.min(acc[1], lat);
+              acc[2] = Math.max(acc[2], lng);
+              acc[3] = Math.max(acc[3], lat);
+              return acc;
+            },
+            [Infinity, Infinity, -Infinity, -Infinity] as number[]
+          );
+    
+          mapRef.current.fitBounds(
+            bounds as [number, number, number, number],
+            {
+              padding: 50,
+              duration: 1000,
+              pitch: 70,
+              zoom: 12.5,
             }
-
-            lineRef.current = geojson;
-          });
-        }
+          );
+    
+          // Start marker
+          const startCoord = coordinates[0];
+          if (startMarkerRef.current) {
+            startMarkerRef.current.setLngLat([startCoord[0], startCoord[1]]);
+          } else {
+            const newStartMarker = new mapboxgl.Marker({ color: "green" })
+              .setLngLat([startCoord[0], startCoord[1]])
+              .setPopup(
+                new mapboxgl.Popup({ closeButton: false }).setHTML(
+                  '<strong style="color: black; bg-white;">Start</strong>'
+                )
+              )
+              .addTo(mapRef.current);
+            newStartMarker.togglePopup();
+            startMarkerRef.current = newStartMarker;
+          }
+    
+          // End marker
+          const endCoord = coordinates[coordinates.length - 1];
+          if (endMarkerRef.current) {
+            endMarkerRef.current.setLngLat([endCoord[0], endCoord[1]]);
+          } else {
+            const newEndMarker = new mapboxgl.Marker({ color: "red" })
+              .setLngLat([endCoord[0], endCoord[1]])
+              .setPopup(
+                new mapboxgl.Popup({ closeButton: false }).setHTML(
+                  '<strong style="color: black; bg-white;">Finish</strong>'
+                )
+              )
+              .addTo(mapRef.current);
+            newEndMarker.togglePopup();
+            endMarkerRef.current = newEndMarker;
+          }
+    
+          lineRef.current = geojson;
+        });
       },
       [mapRef]
     );
@@ -639,22 +641,21 @@ const Map = forwardRef<MapRef, MapProps>(
           throw new Error("Analysis component not initialized");
         }
   
-        // **SHOW OVERLAY BEFORE ANALYSIS STARTS**
         setIsAnalyzing(true);
         setElosProgressDisplay(0);
   
         try {
           if (options && "mergedAnalysis" in options) {
-            // Merged analysis (user-triggered)
-            console.log(
-              "[runElosAnalysis] Running merged analysis with stations:",
-              options.stations
-            );
-            if (mapRef.current.getLayer(MAP_LAYERS.MERGED_VISIBILITY)) {
-              console.log("[runElosAnalysis] Removing existing merged analysis layer.");
-              mapRef.current.removeLayer(MAP_LAYERS.MERGED_VISIBILITY);
-              mapRef.current.removeSource(MAP_LAYERS.MERGED_VISIBILITY);
-            }
+            // Merged analysis
+            console.log("[runElosAnalysis] Running merged analysis with stations:", options.stations);
+            // Remove existing merged analysis layer
+            layerManager.removeLayer(MAP_LAYERS.MERGED_VISIBILITY);
+                    
+            // Remove individual station analysis layers
+            layerManager.removeLayer(MAP_LAYERS.GCS_GRID);
+            layerManager.removeLayer(MAP_LAYERS.OBSERVER_GRID);
+            layerManager.removeLayer(MAP_LAYERS.REPEATER_GRID);
+
             const results = await elosGridRef.current.runMergedAnalysis({
               stations: options.stations,
               mergedAnalysis: true,
@@ -662,17 +663,10 @@ const Map = forwardRef<MapRef, MapProps>(
             console.log("[runElosAnalysis] Merged analysis complete.");
             return results;
           } else if (options) {
-            // Marker-based analysis (user-triggered)
-            console.log(
-              "[runElosAnalysis] Running marker-based analysis with options:",
-              options
-            );
+            // Marker-based analysis
+            console.log("[runElosAnalysis] Running marker-based analysis with options:", options);
             const layerId = `${options.markerType}-grid-layer`;
-            if (mapRef.current.getLayer(layerId)) {
-              console.log("[runElosAnalysis] Removing existing marker-based analysis layer:", layerId);
-              mapRef.current.removeLayer(layerId);
-              mapRef.current.removeSource(layerId);
-            }
+            layerManager.removeLayer(layerId); // Centralized cleanup
             await elosGridRef.current.runAnalysis(
               {
                 markerOptions: {
@@ -681,35 +675,29 @@ const Map = forwardRef<MapRef, MapProps>(
                   range: options.range,
                 },
               },
-              (progress: number) => {
-                // **UPDATE PROGRESS STATE DURING ANALYSIS**
-                setElosProgressDisplay(progress);
-              }
+              (progress: number) => setElosProgressDisplay(progress)
             );
             console.log("[runElosAnalysis] Marker-based analysis complete.");
           } else {
-            // Flight path analysis (automatic)
-            console.log("[runElosAnalysis] Running flight path analysis (automatic) with no options.");
-            if (mapRef.current.getLayer(MAP_LAYERS.ELOS_GRID)) {
-              console.log("[runElosAnalysis] Removing existing ELOS grid analysis layer.");
-              mapRef.current.removeLayer(MAP_LAYERS.ELOS_GRID);
-              mapRef.current.removeSource(MAP_LAYERS.ELOS_GRID);
-            }
+            // Flight path analysis
+            console.log("[runElosAnalysis] Running flight path analysis (automatic).");
+            layerManager.removeLayer(MAP_LAYERS.ELOS_GRID); // Centralized cleanup
             await elosGridRef.current.runAnalysis(
               undefined,
-              (progress: number) => {
-                // **UPDATE PROGRESS STATE FOR FLIGHT PATH ANALYSIS**
-                setElosProgressDisplay(progress);
-              }
+              (progress: number) => setElosProgressDisplay(progress)
             );
             console.log("[runElosAnalysis] Flight path analysis complete.");
           }
         } catch (error) {
           console.error("[runElosAnalysis] Analysis error:", error);
+          layerManager.removeLayer(MAP_LAYERS.ELOS_GRID);
+          layerManager.removeLayer(MAP_LAYERS.GCS_GRID);
+          layerManager.removeLayer(MAP_LAYERS.OBSERVER_GRID);
+          layerManager.removeLayer(MAP_LAYERS.REPEATER_GRID);
+          layerManager.removeLayer(MAP_LAYERS.MERGED_VISIBILITY);
           throw error;
         } finally {
-          // **HIDE THE OVERLAY AFTER ANALYSIS FINISHES**
-          setIsAnalyzing(false);
+        setIsAnalyzing(false);
         }
       },
       getMap: () => mapRef.current,
@@ -811,7 +799,7 @@ const Map = forwardRef<MapRef, MapProps>(
           const point = [e.lngLat.lng, e.lngLat.lat];
           if (fixedPointsRef.current.length === 0) {
             fixedPointsRef.current.push(point);
-            const marker = new mapboxgl.Marker({ color: '#800080' }) // Purple color
+            const marker = new mapboxgl.Marker({ color: '#800080' })
               .setLngLat(point)
               .setPopup(new mapboxgl.Popup({ closeButton: false, className: 'measure-popup' })
                 .setHTML('<div>Start</div>'))
@@ -832,7 +820,7 @@ const Map = forwardRef<MapRef, MapProps>(
               features: [lineFeature],
             });
     
-            const marker = new mapboxgl.Marker({ color: '#800080' }) // Purple color
+            const marker = new mapboxgl.Marker({ color: '#800080' })
               .setLngLat(point)
               .setPopup(new mapboxgl.Popup({ closeButton: false, className: 'measure-popup' })
                 .setHTML(`<div>${distance.toFixed(2)} km</div>`))
@@ -876,27 +864,13 @@ const Map = forwardRef<MapRef, MapProps>(
       const onDblClick = (e: mapboxgl.MapMouseEvent) => {
         e.preventDefault();
         if (fixedPointsRef.current.length > 0) {
-          setIsMeasuring(false);
-          map.getSource(TEMP_LINE_SOURCE).setData({ type: 'FeatureCollection', features: [] });
-          if (movingPopupRef.current) {
-            movingPopupRef.current.remove();
-            movingPopupRef.current = null;
-          }
+          deleteMeasurement(); // Reuse cleanup logic
         }
       };
     
       const onRightClick = (e: mapboxgl.MapMouseEvent) => {
-        e.preventDefault(); // Prevent the default context menu
-        // Reset measurement state without exiting measuring mode
-        markersRef.current.forEach(marker => marker.remove());
-        markersRef.current = [];
-        fixedPointsRef.current = [];
-        map.getSource(FIXED_LINE_SOURCE).setData({ type: 'FeatureCollection', features: [] });
-        map.getSource(TEMP_LINE_SOURCE).setData({ type: 'FeatureCollection', features: [] });
-        if (movingPopupRef.current) {
-          movingPopupRef.current.remove();
-          movingPopupRef.current = null;
-        }
+        e.preventDefault();
+        deleteMeasurement(); // Reuse cleanup logic
       };
     
       map.on('click', onClick);
@@ -971,64 +945,71 @@ async function fetchTerrainElevation(lng: number, lat: number): Promise<number> 
   }
 }
 
-
+//measurement tool on map
 const startMeasuring = () => {
-  if (!mapRef.current || !terrainLoadedRef.current) return; // Ensure map and terrain are loaded
+  if (!mapRef.current || !terrainLoadedRef.current) return;
   deleteMeasurement();
   setIsMeasuring(true);
 
   const map = mapRef.current;
-  if (!map.getSource(FIXED_LINE_SOURCE)) {
-    map.addSource(FIXED_LINE_SOURCE, {
-      type: 'geojson',
-      data: { type: 'FeatureCollection', features: [] },
-    });
-    map.addLayer({
-      id: FIXED_LINE_LAYER,
+  layerManager.addLayer(
+    'fixed-line-layer',
+    { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
+    {
+      id: 'fixed-line-layer',
       type: 'line',
-      source: FIXED_LINE_SOURCE,
+      source: 'fixed-line-source', // Explicitly set in layer config
       paint: { 'line-color': '#0000FF', 'line-width': 2 },
-    });
-  }
+    },
+    'fixed-line-source'
+  );
 
-  if (!map.getSource(TEMP_LINE_SOURCE)) {
-    map.addSource(TEMP_LINE_SOURCE, {
-      type: 'geojson',
-      data: { type: 'FeatureCollection', features: [] },
-    });
-    map.addLayer({
-      id: TEMP_LINE_LAYER,
+  layerManager.addLayer(
+    'temp-line-layer',
+    { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
+    {
+      id: 'temp-line-layer',
       type: 'line',
-      source: TEMP_LINE_SOURCE,
+      source: 'temp-line-source', // Explicitly set in layer config
       paint: { 'line-color': '#0000FF', 'line-width': 2, 'line-dasharray': [2, 2] },
-    });
-  }
+    },
+    'temp-line-source'
+  );
 };
 
 const deleteMeasurement = () => {
   if (mapRef.current) {
     const map = mapRef.current;
-
-    // Remove markers and their popups
     markersRef.current.forEach(marker => marker.remove());
     markersRef.current = [];
-
-    // Remove layers and sources
-    if (map.getLayer(FIXED_LINE_LAYER)) map.removeLayer(FIXED_LINE_LAYER);
-    if (map.getSource(FIXED_LINE_SOURCE)) map.removeSource(FIXED_LINE_SOURCE);
-    if (map.getLayer(TEMP_LINE_LAYER)) map.removeLayer(TEMP_LINE_LAYER);
-    if (map.getSource(TEMP_LINE_SOURCE)) map.removeSource(TEMP_LINE_SOURCE);
-
-    // Remove moving popup
+    layerManager.removeLayer(FIXED_LINE_LAYER);
+    layerManager.removeLayer(TEMP_LINE_LAYER);
     if (movingPopupRef.current) {
       movingPopupRef.current.remove();
       movingPopupRef.current = null;
     }
   }
-
   fixedPointsRef.current = [];
   setIsMeasuring(false);
 };
+
+const handleResetMap = () => {
+  // Remove marker-related analysis layers
+  layerManager.removeLayer(MAP_LAYERS.GCS_GRID);
+  layerManager.removeLayer(MAP_LAYERS.OBSERVER_GRID);
+  layerManager.removeLayer(MAP_LAYERS.REPEATER_GRID);
+  layerManager.removeLayer(MAP_LAYERS.MERGED_VISIBILITY);
+  layerManager.removeLayer(MAP_LAYERS.ELOS_GRID);
+
+  // Remove measurement layers
+  layerManager.removeLayer(FIXED_LINE_LAYER);
+  layerManager.removeLayer(TEMP_LINE_LAYER);
+
+  deleteMeasurement();
+};
+
+// In the JSX:
+<button onClick={handleResetMap} className="map-button">Reset Map</button>
 
 const handleFileProcessing = (data: any) => {
   if (Array.isArray(data)) {
@@ -1048,7 +1029,6 @@ const handleFileProcessing = (data: any) => {
   }
 };
 
-
     // Map Marker Popup Implementation
     const createMarkerPopup = (
       markerType: "gcs" | "observer" | "repeater",
@@ -1056,18 +1036,15 @@ const handleFileProcessing = (data: any) => {
       onDelete: () => void
     ) => {
       const popupDiv = document.createElement("div");
-      const currentElevation = initialElevation;
-    
       const styles = {
         container: "padding: 8px; min-width: 200px;",
         header:
           "display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;",
         deleteBtn:
           "background: #e53e3e; color: white; border: none; padding: 2px 4px; border-radius: 4px; cursor: pointer; font-size: 10px;",
-        section: "margin-bottom: 8px;",
         label: "color: #4a5568; font-size: 12px; display: block; margin-bottom: 4px;",
         value: "color: #1a202c; font-size: 12px; font-weight: 500;",
-              };
+      };
     
       const markerInfo = {
         gcs: { icon: "📡", title: "GCS", color: "#3182ce" },
@@ -1076,8 +1053,17 @@ const handleFileProcessing = (data: any) => {
       };
     
       const { icon, title } = markerInfo[markerType];
-      const offset = markerConfigs[markerType].elevationOffset;
-      const stationElevation = currentElevation + offset;
+    
+      // Use elevation offset from LocationContext
+      const elevationOffset =
+        markerType === "gcs"
+          ? gcsElevationOffset
+          : markerType === "observer"
+          ? observerElevationOffset
+          : repeaterElevationOffset;
+    
+      // Calculate the effective station elevation
+      const stationElevation = initialElevation + elevationOffset;
     
       popupDiv.innerHTML = `
         <div class="popup-container" style="${styles.container}">
@@ -1094,13 +1080,13 @@ const handleFileProcessing = (data: any) => {
           <!-- Ground Elevation -->
           <div style="margin-bottom: 8px;">
             <label style="${styles.label}">Ground Elevation:</label>
-            <span style="${styles.value}">${currentElevation.toFixed(1)} m ASL</span>
+            <span style="${styles.value}">${initialElevation.toFixed(1)} m ASL</span>
           </div>
     
-          <!-- Elevation Offset -->
+          <!-- Elevation Offset (Read-only) -->
           <div style="margin-bottom: 8px;">
             <label style="${styles.label}">Elevation Offset:</label>
-            <span style="${styles.value}">${offset.toFixed(1)} m</span>
+            <span style="${styles.value}">${elevationOffset.toFixed(1)} m</span>
           </div>
     
           <!-- Station Elevation -->
@@ -1110,86 +1096,21 @@ const handleFileProcessing = (data: any) => {
           </div>
         </div>
       `;
-
-      // Add event handlers
-      const rangeInput = popupDiv.querySelector(`#${markerType}-range`);
-      const rangeValue = popupDiv.querySelector(`#${markerType}-range-value`);
-      const offsetInput = popupDiv.querySelector(`#${markerType}-offset`);
-      const analyzeButton = popupDiv.querySelector(`#${markerType}-analyze`);
-    
-      // Range input handler
-      if (rangeInput && rangeValue) {
-        rangeInput.addEventListener("input", (e) => {
-          const value = (e.target as HTMLInputElement).value;
-          rangeValue.textContent = `${value}m`;
-          setMarkerConfig(markerType, { gridRange: Number(value) });
-        });
-      }
-    
-      // Offset input handler
-      if (offsetInput) {
-        offsetInput.addEventListener("change", (e) => {
-          const value = Number((e.target as HTMLInputElement).value);
-          setMarkerConfig(markerType, { elevationOffset: value });
-        });
-      }
-    
-      // Analysis button handler
-      if (analyzeButton) {
-        analyzeButton.addEventListener("click", async () => {
-          if (isAnalyzing) return;
-    
-          const currentLoc =
-            markerType === "gcs"
-              ? gcsLocation
-              : markerType === "observer"
-              ? observerLocation
-              : repeaterLocation;
-    
-          if (currentLoc && elosGridRef.current) {
-            setIsAnalyzing(true);
-            try {
-              await elosGridRef.current.runAnalysis({
-                markerOptions: {
-                  markerType,
-                  location: currentLoc,
-                  range: markerConfigs[markerType].gridRange,
-                },
-              });
-            } catch (error) {
-              console.error("Analysis failed:", error);
-              if (error instanceof Error) {
-                setError(error.message);
-              } else {
-                setError(String(error));
-              }
-            } finally {
-              setIsAnalyzing(false);
-            }
-          }
-        });
-      }
     
       // Add delete button handler
       popupDiv
         .querySelector(`#delete-${markerType}-btn`)
         ?.addEventListener("click", () => {
-          const layerId = `${markerType}-grid-layer`;
-          if (mapRef.current?.getLayer(layerId)) {
-            layerManager.toggleLayerVisibility(layerId);
-          }
           onDelete();
         });
     
       return new mapboxgl.Popup({ closeButton: false }).setDOMContent(popupDiv);
     };
     
-
     //Add Markers //GCS Marker
-    // Update addGroundStation
     const addGroundStation = async () => {
       if (!mapRef.current) return;
-    
+      
       const center = mapRef.current.getCenter();
       try {
         const elevation = await queryTerrainElevation([center.lng, center.lat]);
@@ -1199,20 +1120,22 @@ const handleFileProcessing = (data: any) => {
           elevation: elevation,
         };
         console.log("GCS Initial Location:", initialLocation);
-    
+      
         setGcsLocation(initialLocation);
-    
+      
         const gcsMarker = new mapboxgl.Marker({ color: "blue", draggable: true })
           .setLngLat(center)
           .addTo(mapRef.current);
-    
+      
+        // Use the updated createMarkerPopup function
         const popup = createMarkerPopup("gcs", elevation, () => {
           gcsMarker.remove();
           setGcsLocation(null);
         });
-    
+      
         gcsMarker.setPopup(popup).togglePopup();
-    
+      
+        // On dragend, update the location using the context
         gcsMarker.on("dragend", async () => {
           const lngLat = gcsMarker.getLngLat();
           try {
@@ -1223,12 +1146,16 @@ const handleFileProcessing = (data: any) => {
               elevation: newElevation,
             };
             setGcsLocation(location);
-    
-            const popup = createMarkerPopup("gcs", newElevation, () => {
+            // Clean up outdated analysis layers
+            layerManager.removeLayer(MAP_LAYERS.MERGED_VISIBILITY);
+            layerManager.removeLayer(MAP_LAYERS.GCS_GRID);
+      
+            // Recreate popup with updated elevation
+            const newPopup = createMarkerPopup("gcs", newElevation, () => {
               gcsMarker.remove();
               setGcsLocation(null);
             });
-            gcsMarker.setPopup(popup).togglePopup();
+            gcsMarker.setPopup(newPopup).togglePopup();
           } catch (error) {
             console.error("Error updating GCS elevation:", error);
           }
@@ -1238,7 +1165,7 @@ const handleFileProcessing = (data: any) => {
       }
     };
     
-    // Update addObserver (similar changes)
+    // Update addObserver 
     const addObserver = async () => {
       if (!mapRef.current) return;
     
@@ -1261,11 +1188,13 @@ const handleFileProcessing = (data: any) => {
           .setLngLat(center)
           .addTo(mapRef.current);
     
+        // Store the marker reference
+        observerMarkerRef.current = observerMarker;
+    
         const popup = createMarkerPopup("observer", elevation, () => {
           observerMarker.remove();
           setObserverLocation(null);
         });
-    
         observerMarker.setPopup(popup).togglePopup();
     
         observerMarker.on("dragend", async () => {
@@ -1278,12 +1207,14 @@ const handleFileProcessing = (data: any) => {
               elevation: newElevation,
             };
             setObserverLocation(location);
+            layerManager.removeLayer(MAP_LAYERS.MERGED_VISIBILITY);
+            layerManager.removeLayer(MAP_LAYERS.OBSERVER_GRID);
     
-            const popup = createMarkerPopup("observer", newElevation, () => {
+            const newPopup = createMarkerPopup("observer", newElevation, () => {
               observerMarker.remove();
               setObserverLocation(null);
             });
-            observerMarker.setPopup(popup).togglePopup();
+            observerMarker.setPopup(newPopup).togglePopup();
           } catch (error) {
             console.error("Error updating Observer elevation:", error);
           }
@@ -1293,7 +1224,6 @@ const handleFileProcessing = (data: any) => {
       }
     };
     
-    // Update addRepeater (similar changes)
     const addRepeater = async () => {
       if (!mapRef.current) return;
     
@@ -1316,11 +1246,13 @@ const handleFileProcessing = (data: any) => {
           .setLngLat(center)
           .addTo(mapRef.current);
     
+        // Store the marker reference
+        repeaterMarkerRef.current = repeaterMarker;
+    
         const popup = createMarkerPopup("repeater", elevation, () => {
           repeaterMarker.remove();
           setRepeaterLocation(null);
         });
-    
         repeaterMarker.setPopup(popup).togglePopup();
     
         repeaterMarker.on("dragend", async () => {
@@ -1333,12 +1265,14 @@ const handleFileProcessing = (data: any) => {
               elevation: newElevation,
             };
             setRepeaterLocation(location);
+            layerManager.removeLayer(MAP_LAYERS.MERGED_VISIBILITY);
+            layerManager.removeLayer(MAP_LAYERS.REPEATER_GRID);
     
-            const popup = createMarkerPopup("repeater", newElevation, () => {
+            const newPopup = createMarkerPopup("repeater", newElevation, () => {
               repeaterMarker.remove();
               setRepeaterLocation(null);
             });
-            repeaterMarker.setPopup(popup).togglePopup();
+            repeaterMarker.setPopup(newPopup).togglePopup();
           } catch (error) {
             console.error("Error updating Repeater elevation:", error);
           }
@@ -1348,13 +1282,58 @@ const handleFileProcessing = (data: any) => {
       }
     };
 
+    // update marker/station popup for context data
+    useEffect(() => {
+      if (gcsMarkerRef.current && gcsLocation && gcsLocation.elevation !== null) {
+        const updatedPopup = createMarkerPopup("gcs", gcsLocation.elevation, () => {
+          gcsMarkerRef.current?.remove();
+          setGcsLocation(null);
+        });
+        gcsMarkerRef.current.setPopup(updatedPopup);
+        if (gcsMarkerRef.current.getPopup()?.isOpen()) {
+          gcsMarkerRef.current.getPopup()?.setDOMContent(updatedPopup.getElement());
+        }
+      }
+    }, [gcsElevationOffset, gcsLocation]);
+    
+    useEffect(() => {
+      if (observerMarkerRef.current && observerLocation && observerLocation.elevation !== null) {
+        const updatedPopup = createMarkerPopup("observer", observerLocation.elevation, () => {
+          observerMarkerRef.current?.remove();
+          setObserverLocation(null);
+        });
+        observerMarkerRef.current.setPopup(updatedPopup);
+        if (observerMarkerRef.current.getPopup()?.isOpen()) {
+          observerMarkerRef.current.getPopup()?.setDOMContent(updatedPopup.getElement());
+        }
+      }
+    }, [observerElevationOffset, observerLocation]);
+    
+    useEffect(() => {
+      if (repeaterMarkerRef.current && repeaterLocation && repeaterLocation.elevation !== null) {
+        const updatedPopup = createMarkerPopup("repeater", repeaterLocation.elevation, () => {
+          repeaterMarkerRef.current?.remove();
+          setRepeaterLocation(null);
+        });
+        repeaterMarkerRef.current.setPopup(updatedPopup);
+        if (repeaterMarkerRef.current.getPopup()?.isOpen()) {
+          repeaterMarkerRef.current.getPopup()?.setDOMContent(updatedPopup.getElement());
+        }
+      }
+    }, [repeaterElevationOffset, repeaterLocation]);
+    
+    
     const stopAnalysisHandler = () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
+        abortControllerRef.current = null;
       }
-      // Optionally, reset the progress
+      layerManager.removeLayer(MAP_LAYERS.ELOS_GRID);
+      layerManager.removeLayer(MAP_LAYERS.GCS_GRID);
+      layerManager.removeLayer(MAP_LAYERS.OBSERVER_GRID);
+      layerManager.removeLayer(MAP_LAYERS.REPEATER_GRID);
+      layerManager.removeLayer(MAP_LAYERS.MERGED_VISIBILITY);
       setElosProgressDisplay(0);
-      // Hide the overlay
       setIsAnalyzing(false);
     };
     
@@ -1374,7 +1353,7 @@ const handleFileProcessing = (data: any) => {
                 <Loader className="w-5 h-5 animate-spin text-yellow-400" />
                 <div className="flex flex-col">
                   <span className="font-medium text-gray-900">Analysing</span>
-                  <span className="text-sm text-gray-500">
+                  <span className="text-gray-500">
                     This may take a few moments... {Math.round(elosProgressDisplay)}%
                   </span>
                 </div>
@@ -1394,24 +1373,10 @@ const handleFileProcessing = (data: any) => {
 
           {/* Add Ground Station, Observer, and Repeater Buttons */}
           <div className="absolute top-4 right-4 z-10 flex flex-col space-y-2">
-            <button
-              onClick={addGroundStation}
-              className="map-button ground-station-icon"
-            >
-              Add Ground Station 📡
-            </button>
-            <button
-              onClick={addObserver}
-              className="map-button observer-icon"
-            >
-              Add Observer 🔭
-            </button>
-            <button
-              onClick={addRepeater}
-              className="map-button repeater-icon"
-            >
-              Add Repeater ⚡️
-            </button>
+            <button onClick={addGroundStation} className="map-button ground-station-icon">Add Ground Station 📡</button>
+            <button onClick={addObserver} className="map-button observer-icon">Add Observer 🔭</button>
+            <button onClick={addRepeater} className="map-button repeater-icon">Add Repeater ⚡️</button>
+            <button onClick={handleResetMap} className="map-button">Reset Map</button>
           </div>
     
           {/* Analysis Status Indicator */}

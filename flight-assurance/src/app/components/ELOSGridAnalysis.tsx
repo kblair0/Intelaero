@@ -11,6 +11,7 @@ import type {
   GridCell, 
   AnalysisResults 
 } from '../context/LOSAnalysisContext';
+import { useLocation } from '../context/LocationContext';
 
 // Enhanced type definitions for 2D and 3D coordinates
 type Coordinates2D = [number, number];
@@ -90,17 +91,21 @@ const generatePointsAlongLine = (
 const ELOSGridAnalysis = forwardRef<ELOSGridAnalysisRef, Props>((props, ref) => {
     const { map, flightPath, onError, onSuccess } = props;
     const layerCreatedRef = useRef<boolean>(false);
-
     
     const {
       gridSize,
       elosGridRange,
       isAnalyzing,
-      markerConfigs,
       setIsAnalyzing,
       setResults,
       setError
     } = useLOSAnalysis();
+
+    const {
+      gcsElevationOffset,
+      observerElevationOffset,
+      repeaterElevationOffset,
+    } = useLocation();
 
     const abortControllerRef = useRef<AbortController | null>(null);
     const workerRef = useRef<Worker | null>(null);
@@ -864,12 +869,11 @@ const runMergedAnalysis = useCallback(async (
   const startTime = performance.now();
 
   try {
-    // Validate input.
     if (options.stations.length < 2) {
       throw new Error('At least two stations are required for merged analysis');
     }
 
-    // Instead of generating bounds externally, call generateUnifiedGrid directly.
+    // Generate unified grid using the current gridSize and elosGridRange
     const grid = await generateUnifiedGrid(
       gridSize,
       options.stations.map(s => ({
@@ -883,7 +887,12 @@ const runMergedAnalysis = useCallback(async (
       grid,
       options.stations.map(s => ({
         location: s.location,
-        elevation: (s.location.elevation ?? 0) + s.config.elevationOffset,
+        elevation: (s.location.elevation ?? 0) +
+          (s.type === 'gcs'
+            ? gcsElevationOffset
+            : s.type === 'observer'
+            ? observerElevationOffset
+            : repeaterElevationOffset),
         range: elosGridRange
       })),
       abortControllerRef.current?.signal
@@ -912,64 +921,72 @@ const runMergedAnalysis = useCallback(async (
     console.error('Error in merged analysis:', error);
     throw error;
   }
-}, [gridSize, computeMergedVisibility, visualizeGrid]);
+}, [gridSize, computeMergedVisibility, visualizeGrid, gcsElevationOffset, observerElevationOffset, repeaterElevationOffset]);
   
-  const analyzeFromPoint = useCallback(async (
-    cells: GridCell[],
-    markerOptions: AnalysisOptions['markerOptions']
-  ): Promise<AnalysisResults> => {
-    const startTime = performance.now();
-    const results: GridCell[] = [];
-    let visibleCellCount = 0;
-    let totalVisibility = 0;
+const analyzeFromPoint = useCallback(async (
+  cells: GridCell[],
+  markerOptions: AnalysisOptions['markerOptions']
+): Promise<AnalysisResults> => {
+  const startTime = performance.now();
+  const results: GridCell[] = [];
+  let visibleCellCount = 0;
+  let totalVisibility = 0;
 
-    // Get the elevation offset from markerConfigs
-    const stationOffset = markerConfigs[markerOptions.markerType].elevationOffset;
-    
-    // Add offset to station's base elevation
-    const stationElevation = (markerOptions.location.elevation ?? 0) + stationOffset;
-    
-    // Process cells in chunks
-    const chunkSize = 50;
-    for (let i = 0; i < cells.length; i += chunkSize) {
-      const chunk = cells.slice(i, i + chunkSize);
-      const processedChunk = await Promise.all(
-        chunk.map(async (cell) => {
-          const center = turf.center(cell.geometry);
-          
-          const isVisible = await checkLineOfSight(
-            [markerOptions.location.lng, markerOptions.location.lat, stationElevation],
-            [...center.geometry.coordinates, cell.properties.elevation ?? 0]
-          );
+  // Instead of reading markerConfigs, get the offset from LocationContext:
+  let stationOffset = 0;
+  if (markerOptions.markerType === 'gcs') {
+    stationOffset = gcsElevationOffset;
+  } else if (markerOptions.markerType === 'observer') {
+    stationOffset = observerElevationOffset;
+  } else if (markerOptions.markerType === 'repeater') {
+    stationOffset = repeaterElevationOffset;
+  }
+  
+  // Add offset to station's base elevation
+  const stationElevation = (markerOptions.location.elevation ?? 0) + stationOffset;
+  
+  // Process cells in chunks
+  const chunkSize = 50;
+  for (let i = 0; i < cells.length; i += chunkSize) {
+    const chunk = cells.slice(i, i + chunkSize);
+    const processedChunk = await Promise.all(
+      chunk.map(async (cell) => {
+        const center = turf.center(cell.geometry);
+        
+        const isVisible = await checkLineOfSight(
+          [markerOptions.location.lng, markerOptions.location.lat, stationElevation],
+          [...center.geometry.coordinates, cell.properties.elevation ?? 0]
+        );
 
-          if (isVisible) visibleCellCount++;
-          const visibility = isVisible ? 100 : 0;
-          totalVisibility += visibility;
+        if (isVisible) visibleCellCount++;
+        const visibility = isVisible ? 100 : 0;
+        totalVisibility += visibility;
 
-          return {
-            ...cell,
-            properties: {
-              ...cell.properties,
-              visibility,
-              fullyVisible: isVisible,
-            },
-          };
-        })
-      );
+        return {
+          ...cell,
+          properties: {
+            ...cell.properties,
+            visibility,
+            fullyVisible: isVisible,
+          },
+        };
+      })
+    );
 
-      results.push(...processedChunk);
-    }
+    results.push(...processedChunk);
+  }
 
-    return {
-      cells: results,
-      stats: {
-        totalCells: cells.length,
-        visibleCells: visibleCellCount,
-        averageVisibility: totalVisibility / cells.length,
-        analysisTime: performance.now() - startTime,
-      },
-    };
-  }, [checkLineOfSight, markerConfigs]);
+  return {
+    cells: results,
+    stats: {
+      totalCells: cells.length,
+      visibleCells: visibleCellCount,
+      averageVisibility: totalVisibility / cells.length,
+      analysisTime: performance.now() - startTime,
+    },
+  };
+}, [checkLineOfSight, gcsElevationOffset, observerElevationOffset, repeaterElevationOffset]);
+
 
   // Main analysis function with progress callback
 const runAnalysis = useCallback(

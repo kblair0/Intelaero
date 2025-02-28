@@ -165,7 +165,6 @@ function parseKMLFile(kmlText: string): import("../context/FlightPlanContext").F
   };
 }
 
-
 function parseGeoJSONFile(geojsonText: string): import("../context/FlightPlanContext").FlightPlanData {
   const geojsonResult = JSON.parse(geojsonText) as GeoJSON.FeatureCollection;
 
@@ -201,7 +200,6 @@ function parseGeoJSONFile(geojsonText: string): import("../context/FlightPlanCon
   };
 }
 
-
 function inferHomePosition(coordinates: [number, number, number][]) {
   if (!coordinates.length) return null;
   const [lon, lat, alt] = coordinates[0];
@@ -224,9 +222,10 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded 
     setFileUploadStatus("uploading");
 
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       try {
         if (reader.result) {
+          // Parse the file locally for flight plan analysis
           let flightData;
           if (fileExtension === "waypoints") {
             flightData = parseQGCFile(reader.result as string);
@@ -238,11 +237,27 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded 
 
           const newFlightPlan = { ...flightData, processed: false };
           setFlightPlan(newFlightPlan);
-          setFileUploadStatus("processed");
-
           if (onPlanUploaded) {
             onPlanUploaded(newFlightPlan);
           }
+
+          // Now, send the file to your backend for Google Drive upload
+          const payload = {
+            fileName: file.name,
+            fileContent: reader.result,
+            fileExtension,
+          };
+
+          const response = await fetch("/api/uploadFlightPlan", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+          if (!response.ok) {
+            throw new Error("Drive upload failed");
+          }
+          setFileUploadStatus("processed");
         }
       } catch (error) {
         console.error("Error processing file:", error);
@@ -270,7 +285,6 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded 
       const newFlightPlan = { ...processedData, processed: false };
 
       setFlightPlan(newFlightPlan);
-
       if (onPlanUploaded) {
         onPlanUploaded(newFlightPlan);
       }

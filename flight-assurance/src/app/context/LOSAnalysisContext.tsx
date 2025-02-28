@@ -2,6 +2,8 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 
 // ======== Type Definitions ========
+
+// GridCell, AnalysisStats, and AnalysisResults remain unchanged
 export interface GridCell {
   id: string;
   geometry: GeoJSON.Polygon;
@@ -34,8 +36,9 @@ export interface FlightPathVisibilityResults {
 }
 
 // Marker Configuration Types
+// Note: Elevation offset has been removed from marker configurations
+// because elevation is now managed via LocationContext.
 export interface MarkerConfig {
-  elevationOffset: number;
   gridRange: number;
 }
 
@@ -76,7 +79,6 @@ interface LOSAnalysisContextType {
 
 // ======== Default Values ========
 const DEFAULT_MARKER_CONFIG: MarkerConfig = {
-  elevationOffset: 3,
   gridRange: 500,
 };
 
@@ -102,7 +104,7 @@ export function LOSAnalysisProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [autoAnalysisRunning, setAutoAnalysisRunning] = useState<boolean>(false);
 
-  // Marker Configuration Handler
+  // Marker Configuration Handler (now only updates gridRange)
   const handleMarkerConfigUpdate = (
     markerType: keyof MarkerConfigs,
     config: Partial<MarkerConfig>

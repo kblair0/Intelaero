@@ -1,6 +1,5 @@
-"use client";
-
-import React from "react";
+import React, { useEffect } from "react";
+import { useLocation } from "../context/LocationContext";
 import { LocationData } from "../components/Map";
 
 interface StationCardProps {
@@ -8,9 +7,9 @@ interface StationCardProps {
   location: LocationData;
   markerConfig: {
     gridRange: number;
-    elevationOffset: number;
+    // elevationOffset is no longer used from props
   };
-  onChangeConfig: (field: "gridRange" | "elevationOffset", value: number) => void;
+  onChangeConfig: (field: "gridRange", value: number) => void;
   onAnalyze: () => void;
   layerVisibility: boolean;
   toggleLayerVisibility: () => void;
@@ -25,6 +24,32 @@ const StationCard: React.FC<StationCardProps> = ({
   layerVisibility,
   toggleLayerVisibility,
 }) => {
+  // Retrieve elevation offsets and their setters from LocationContext
+  const {
+    gcsElevationOffset,
+    setGcsElevationOffset,
+    observerElevationOffset,
+    setObserverElevationOffset,
+    repeaterElevationOffset,
+    setRepeaterElevationOffset,
+  } = useLocation();
+
+  // Determine the correct elevation offset based on station type
+  const elevationOffset =
+    stationType === "gcs"
+      ? gcsElevationOffset
+      : stationType === "observer"
+      ? observerElevationOffset
+      : repeaterElevationOffset;
+
+  // Map station type to its corresponding setter
+  const setElevationOffset =
+    stationType === "gcs"
+      ? setGcsElevationOffset
+      : stationType === "observer"
+      ? setObserverElevationOffset
+      : setRepeaterElevationOffset;
+
   // Define icons, titles, and color schemes for each station type.
   const icons: Record<typeof stationType, string> = {
     gcs: "📡",
@@ -38,12 +63,17 @@ const StationCard: React.FC<StationCardProps> = ({
     repeater: "Repeater Station",
   };
 
-  // Customize colors as needed.
   const colors: Record<typeof stationType, string> = {
     gcs: "blue",
     observer: "green",
     repeater: "red",
   };
+
+  // Calculate the station elevation using the updated offset from context.
+  const stationElevation = location && location.elevation !== null 
+    ? location.elevation + elevationOffset 
+    : 0;
+
   return (
     <article className="bg-white p-2 rounded shadow flex flex-col gap-2 w-full text-xs">
       {/* Header Section */}
@@ -75,7 +105,8 @@ const StationCard: React.FC<StationCardProps> = ({
         <strong className="mr-1">Loc:</strong>
         {location ? (
           <span>
-            {location.lat.toFixed(3)}, {location.lng.toFixed(3)} | {location.elevation?.toFixed(0)}m
+            {location.lat.toFixed(3)}, {location.lng.toFixed(3)} |{" "}
+            {location.elevation?.toFixed(0)}m
           </span>
         ) : (
           <span className="text-gray-400">Not set</span>
@@ -106,13 +137,13 @@ const StationCard: React.FC<StationCardProps> = ({
         <div className="w-20">
           <label htmlFor={`elev-${stationType}`} className="flex justify-between">
             <span>Elev:</span>
-            <span>{markerConfig.elevationOffset}m</span>
+            <span>{elevationOffset}m</span>
           </label>
           <input
             id={`elev-${stationType}`}
             type="number"
-            value={markerConfig.elevationOffset}
-            onChange={(e) => onChangeConfig("elevationOffset", Number(e.target.value))}
+            value={elevationOffset}
+            onChange={(e) => setElevationOffset(Number(e.target.value))}
             className="w-full border rounded h-5 p-0 !text-[12px] leading-tight"
           />
         </div>
@@ -128,9 +159,6 @@ const StationCard: React.FC<StationCardProps> = ({
       </div>
     </article>
   );
-  
-  
-  
 };
 
 export default StationCard;
