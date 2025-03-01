@@ -51,7 +51,7 @@ export interface MapProps {
   onShowTickChange?: (value: boolean) => void;
   onTotalDistanceChange?: (distance: number) => void;
   onDataProcessed?: (data: { averageDraw: number; phaseData: any[] }) => void;
-  onPlanUploaded?: (data: GeoJSON.FeatureCollection) => void;
+  onPlanUploaded?: (flightData: FlightPlanData, resetMap: () => void) => void;
 }
 
 interface ELOSGridAnalysisRef {

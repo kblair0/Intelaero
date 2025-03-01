@@ -431,24 +431,45 @@ const { getRootProps, getInputProps } = useDropzone({
   onDrop,
 });
 
-  const loadExampleGeoJSON = async () => {
-    try {
-      const response = await fetch("/example.geojson");
-      const rawData = await response.json();
+const loadExampleGeoJSON = async () => {
+  try {
+    const response = await fetch("/example.geojson");
+    const rawData = await response.json();
 
-      const processedData = parseGeoJSONFile(JSON.stringify(rawData));
-      const newFlightPlan = { ...processedData, processed: false };
+    const processedData = parseGeoJSONFile(JSON.stringify(rawData));
+    const newFlightPlan = { ...processedData, processed: false };
 
-      setFlightPlan(newFlightPlan);
-      if (onPlanUploaded) {
-        onPlanUploaded(newFlightPlan);
-      }
-      setFileUploadStatus("processed");
-    } catch (error) {
-      console.error("Error loading example GeoJSON:", error);
-      setFileUploadStatus("error");
+    setFlightPlan(newFlightPlan);
+    if (onPlanUploaded && mapRef?.current) {
+      onPlanUploaded(newFlightPlan, () => {
+        const map = mapRef.current!.getMap();
+        if (map) {
+          // Hide old flight path
+          mapRef.current!.toggleLayerVisibility("line-0");
+
+          // Remove analysis layers
+          ["ELOS_GRID", "GCS_GRID", "OBSERVER_GRID", "REPEATER_GRID", "MERGED_VISIBILITY"].forEach(layer => {
+            if (map.getSource(layer)) {
+              mapRef.current!.toggleLayerVisibility(layer);
+            }
+          });
+
+          // Remove markers
+          map.getStyle().layers?.forEach(layer => {
+            if (layer.id.startsWith("marker")) {
+              map.removeLayer(layer.id);
+              map.removeSource(layer.id);
+            }
+          });
+        }
+      });
     }
-  };
+    setFileUploadStatus("processed");
+  } catch (error) {
+    console.error("Error loading example GeoJSON:", error);
+    setFileUploadStatus("error");
+  }
+};
 
   return (
     <div className="flex-1 bg-white shadow-lg p-6 rounded-lg border border-gray-200">
