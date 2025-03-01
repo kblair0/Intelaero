@@ -22,6 +22,8 @@ import { layerManager, MAP_LAYERS } from "./LayerManager";
 import "../globals.css";
 import { ProgressBar } from "./ProgressBar";
 import { Loader } from "lucide-react";
+import MapboxLayerHandler from "./MapboxLayerHandler";
+
 
 // Contexts
 import { useLocation } from "../context/LocationContext";
@@ -391,7 +393,7 @@ const Map = forwardRef<MapRef, MapProps>(
               padding: 50,
               duration: 1000,
               pitch: 70,
-              zoom: 12.5,
+              zoom: 10.5,
             }
           );
     
@@ -634,7 +636,7 @@ const Map = forwardRef<MapRef, MapProps>(
         try {
           const map = new mapboxgl.Map({
             container: mapContainerRef.current,
-            style: "mapbox://styles/mapbox-map-design/ckhqrf2tz0dt119ny6azh975y",
+            style: "mapbox://styles/intelaero/cm7pqu42s000601svdp7m3h0b",
             center: [0, 0],
             zoom: 2.5,
             projection: "globe",
@@ -655,8 +657,7 @@ const Map = forwardRef<MapRef, MapProps>(
                 exaggeration: 1.5,
               });
     
-              // Add the sky layer
-              map.addLayer({
+             /* map.addLayer({
                 id: "sky",
                 type: "sky",
                 paint: {
@@ -664,7 +665,7 @@ const Map = forwardRef<MapRef, MapProps>(
                   "sky-atmosphere-sun": [0.0, 90.0],
                   "sky-atmosphere-sun-intensity": 15,
                 },
-              });
+              }); */
     
               // Wait for both style and DEM
               Promise.all([
@@ -1297,6 +1298,7 @@ const handleFileProcessing = (data: any) => {
             <button onClick={addGroundStation} className="map-button ground-station-icon">Add Ground Station 📡</button>
             <button onClick={addObserver} className="map-button observer-icon">Add Observer 🔭</button>
             <button onClick={addRepeater} className="map-button repeater-icon">Add Repeater ⚡️</button>
+          
             <button onClick={handleResetMap} className="map-button">Reset Map</button>
           </div>
     
@@ -1326,6 +1328,7 @@ const handleFileProcessing = (data: any) => {
           <button onClick={startMeasuring} className="map-button">Start Measuring</button>
           <button onClick={deleteMeasurement} className="map-button">Delete Measurement</button>
           </div>
+
     
           {/* Legend for Visibility Colors */}
           <div className="map-legend">
@@ -1356,21 +1359,25 @@ const handleFileProcessing = (data: any) => {
         </div>
     
         {mapRef.current && (
-          <ELOSGridAnalysis
-            ref={elosGridRef}
-            map={mapRef.current}
-            flightPath={resolvedGeoJSON}
-            elosGridRange={contextGridRange}
-            onError={(error) => {
-              console.error("ELOS Analysis error:", error);
-              setError(error.message);
-            }}
-            onSuccess={(result) => {
-              console.log("ELOS Analysis completed:", result);
-              setResults(result);
-            }}
-          />
-        )}
+  <>
+    <ELOSGridAnalysis
+      ref={elosGridRef}
+      map={mapRef.current}
+      flightPath={resolvedGeoJSON}
+      elosGridRange={contextGridRange}
+      onError={(error) => {
+        console.error("ELOS Analysis error:", error);
+        setError(error.message);
+      }}
+      onSuccess={(result) => {
+        console.log("ELOS Analysis completed:", result);
+        setResults(result);
+      }}
+    />
+    <MapboxLayerHandler map={mapRef.current} />
+  </>
+)}
+
       </div>
     );
   }
