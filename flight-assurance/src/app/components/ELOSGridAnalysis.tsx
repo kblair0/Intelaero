@@ -932,7 +932,7 @@ const analyzeFromPoint = useCallback(async (
   let visibleCellCount = 0;
   let totalVisibility = 0;
 
-  // Instead of reading markerConfigs, get the offset from LocationContext:
+  // get the offset from LocationContext:
   let stationOffset = 0;
   if (markerOptions.markerType === 'gcs') {
     stationOffset = gcsElevationOffset;

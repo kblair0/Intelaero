@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from "react";
-import { CheckCircle, XCircle, Loader, ChevronDown, ChevronRight, Battery, Radio, Mountain } from "lucide-react";
+import { CheckCircle, XCircle, Loader, ChevronDown, ChevronRight, Battery, Radio, GripVertical, Mountain } from "lucide-react";
 import { useFlightPlanContext } from "../context/FlightPlanContext";
 import { useObstacleAnalysis } from "../context/ObstacleAnalysisContext";
 import { useFlightConfiguration } from "../context/FlightConfigurationContext";
@@ -45,19 +45,16 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
   const { flightPlan } = useFlightPlanContext();
   const { metrics } = useFlightConfiguration();
   const { analysisData, setAnalysisData } = useObstacleAnalysis();
-  const {
-    results: losResults,
-    autoAnalysisRunning,
-    setAutoAnalysisRunning
-  } = useLOSAnalysis();
+  const { results: losResults, autoAnalysisRunning, setAutoAnalysisRunning } = useLOSAnalysis();
   
   const [expandedSection, setExpandedSection] = useState<string | null>("basic");
   const [showTerrainPopup, setShowTerrainPopup] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [zeroAltitudePoints, setZeroAltitudePoints] = useState<WaypointCoordinate[]>([]);
   const [duplicateWaypoints, setDuplicateWaypoints] = useState<WaypointCoordinate[]>([]);
+  const [kmzTakeoffWarning, setKmzTakeoffWarning] = useState<string | null>(null);
 
-  //Auto Analysis on Flightplan Upload States
+  // Auto Analysis on Flightplan Upload States
   const elosGridRef = useRef<ELOSGridAnalysisRef>(null);
   const [terrainAnalysisComplete, setTerrainAnalysisComplete] = useState(false);
   const [gridAnalysisTriggered, setGridAnalysisTriggered] = useState(false);
@@ -81,9 +78,14 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
     return analysisData.distances[index];
   };
 
-  // Check for zero altitude points
+  // Check for zero altitude points and KMZ takeoff height
   useEffect(() => {
-    if (!flightPlan) return;
+    if (!flightPlan) {
+      setZeroAltitudePoints([]);
+      setKmzTakeoffWarning(null);
+      return;
+    }
+
     const zeroPoints: WaypointCoordinate[] = [];
     flightPlan.features.forEach((feature: FlightPlanFeature) => {
       feature.geometry.coordinates.forEach((coord: number[], index: number) => {
@@ -93,6 +95,21 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
       });
     });
     setZeroAltitudePoints(zeroPoints);
+
+    // KMZ-specific takeoff height check
+    const isKmz = flightPlan.properties.metadata?.distance !== undefined; // Rough check for .kmz (metadata.distance is KMZ-specific)
+    if (isKmz) {
+      const mode = flightPlan.features[0].properties.waypoints[0].altitudeMode;
+      const takeoffHeight = (flightPlan.properties.config as any)?.takeoffHeight || 0;
+      const homeAltitude = flightPlan.properties.homePosition.altitude;
+      if ((mode === "terrain" || mode === "relative") && takeoffHeight === 0 && homeAltitude === 0) {
+        setKmzTakeoffWarning("Warning: Takeoff security height missing in terrain or relative mission; home altitude is 0m.");
+      } else {
+        setKmzTakeoffWarning(null);
+      }
+    } else {
+      setKmzTakeoffWarning(null);
+    }
   }, [flightPlan]);
 
   // Check for duplicate waypoints
@@ -125,6 +142,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
   
     const hasZeroAltitudes = zeroAltitudePoints.length > 0;
     const hasDuplicates = duplicateWaypoints.length > 0;
+    const hasKmzTakeoffIssue = kmzTakeoffWarning !== null;
   
     let heightCheckStatus: "success" | "error" | "loading" = "loading";
     let heightCheckContent: React.ReactNode = (
@@ -156,7 +174,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
     }
   
     const overallStatus: VerificationSection["status"] =
-      hasZeroAltitudes || hasDuplicates || (analysisData && heightCheckStatus === "error")
+      hasZeroAltitudes || hasDuplicates || hasKmzTakeoffIssue || (analysisData && heightCheckStatus === "error")
         ? "error"
         : analysisData
         ? "success"
@@ -170,19 +188,28 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
       subSections: [
         {
           title: "Zero Altitude Check",
-          content: hasZeroAltitudes ? (
-            <div className="text-sm text-red-600">
-              Found {zeroAltitudePoints.length} zero altitude points:
-              {zeroAltitudePoints.map((point, idx) => (
-                <div key={idx} className="ml-2">
-                  • Waypoint {point.index + 1}: (
-                  {point.coord.map((v) => v.toFixed(2)).join(", ")})
+          content: (
+            <div>
+              {hasZeroAltitudes ? (
+                <div className="text-sm text-red-600">
+                  Found {zeroAltitudePoints.length} zero altitude points:
+                  {zeroAltitudePoints.map((point, idx) => (
+                    <div key={idx} className="ml-2">
+                      • Waypoint {point.index + 1}: (
+                      {point.coord.map((v) => v.toFixed(2)).join(", ")})
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-sm text-green-600">
-              ✓ All waypoints have valid altitudes
+              ) : (
+                <div className="text-sm text-green-600">
+                  ✓ All waypoints have valid altitudes
+                </div>
+              )}
+              {hasKmzTakeoffIssue && (
+                <div className="text-sm text-yellow-600 mt-2">
+                  ⚠️ {kmzTakeoffWarning}
+                </div>
+              )}
             </div>
           )
         },
@@ -209,7 +236,6 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
           )
         }
       ],
-  
       actions: (
         <div className="flex flex-col gap-2 mt-3">
           <button
@@ -454,7 +480,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
           <span className="text-sm">Analyzing flight plan...</span>
         </div>
       )}
- 
+  
       {/* Hidden ObstacleAssessment/ELOS Grid analysis Component for background processing */}
       <div className="hidden">
         <ObstacleAssessment
@@ -464,24 +490,16 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
             console.log("ObstacleAssessment onDataProcessed fired", data);
             setAnalysisData(data);
             setIsAnalyzing(false);
-            // Mark terrain analysis as complete (this flag triggers grid analysis via a separate effect)
             setTerrainAnalysisComplete(true);
           }}
         />
       </div>
 
-      {/* Render the rest of your sections */}
+      {/* Render sections */}
       {sections.map((section) => (
-        <div
-          key={section.id}
-          className="border rounded-lg bg-white shadow-sm overflow-hidden"
-        >
+        <div key={section.id} className="border rounded-lg bg-white shadow-sm overflow-hidden">
           <button
-            onClick={() =>
-              setExpandedSection(
-                expandedSection === section.id ? null : section.id
-              )
-            }
+            onClick={() => setExpandedSection(expandedSection === section.id ? null : section.id)}
             className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50"
           >
             <div className="flex items-center gap-3">
@@ -502,9 +520,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
             <div className="px-4 py-3 bg-gray-50 border-t space-y-4">
               {section.subSections?.map((subSection, index) => (
                 <div key={index} className="space-y-2">
-                  <h4 className="font-medium text-gray-700">
-                    {subSection.title}
-                  </h4>
+                  <h4 className="font-medium text-gray-700">{subSection.title}</h4>
                   {subSection.content}
                 </div>
               ))}

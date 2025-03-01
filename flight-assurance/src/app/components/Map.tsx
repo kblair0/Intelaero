@@ -205,201 +205,122 @@ const Map = forwardRef<MapRef, MapProps>(
         throw error;
       }
     }, [mapRef]);
-    //process flightplan
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
+    //Processing of flight plan
     useEffect(() => {
-      if (!contextFlightPlan || contextFlightPlan.processed) {
-        return;
-      }
+      if (!contextFlightPlan || contextFlightPlan.properties?.processed || !mapRef.current) return;
+    
       const processFlightPlan = async () => {
         try {
-          if (!mapRef.current) {
-            throw new Error("Map not initialized");
-          }
-
-          // Reset analysis layers before processing new plan
-          layerManager.removeLayer(MAP_LAYERS.ELOS_GRID);
-          layerManager.removeLayer(MAP_LAYERS.GCS_GRID);
-          layerManager.removeLayer(MAP_LAYERS.OBSERVER_GRID);
-          layerManager.removeLayer(MAP_LAYERS.REPEATER_GRID);
-          layerManager.removeLayer(MAP_LAYERS.MERGED_VISIBILITY);
-          // Fit the map to the flight plan bounds
+          // Reset analysis layers
+          ["ELOS_GRID", "GCS_GRID", "OBSERVER_GRID", "REPEATER_GRID", "MERGED_VISIBILITY"].forEach(layer =>
+            layerManager.removeLayer(layer)
+          );
+    
+          // Fit map to bounds
           const coordinates = contextFlightPlan.features[0].geometry.coordinates;
-          console.log("Initial Coordinates:", coordinates);
-          if (coordinates.length < 2) {
-            console.warn("Flight plan has fewer than 2 coordinates. Skipping distance calculation.");
-          }
           const bounds = coordinates.reduce(
-            (acc, coord) => {
-              acc[0] = Math.min(acc[0], coord[0]);
-              acc[1] = Math.min(acc[1], coord[1]);
-              acc[2] = Math.max(acc[2], coord[0]);
-              acc[3] = Math.max(acc[3], coord[1]);
-              return acc;
-            },
+            (acc, [lon, lat]) => [
+              Math.min(acc[0], lon),
+              Math.min(acc[1], lat),
+              Math.max(acc[2], lon),
+              Math.max(acc[3], lat),
+            ],
             [Infinity, Infinity, -Infinity, -Infinity]
           );
-          mapRef.current.fitBounds(bounds as [number, number, number, number], {
-            padding: 50,
-            duration: 0,
-          });
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-          console.log("Starting Flight Plan Processing:", { inputPlan: contextFlightPlan });
+          mapRef.current.fitBounds(bounds as [number, number, number, number], { padding: 50, duration: 0 });
+          await new Promise(resolve => setTimeout(resolve, 2000));
+    
           const newPlan: FlightPlanData = structuredClone(contextFlightPlan);
-          const homePosition = newPlan.properties.homePosition;
-          const homeTerrainElev = await queryTerrainElevation([homePosition.longitude, homePosition.latitude]);
-          // Determine home altitude using the takeoff command logic
-          const homeWaypoint = newPlan.features[0].properties.waypoints.find((wp) => wp.index === 0);
-          const takeoffWp = newPlan.features[0].properties.waypoints.find(wp => wp.commandType === 22 && wp.frame === 10);
-          let resolvedHomeAlt: number;
-          const hasTakeoff = newPlan.features[0].properties.rawCommands.some((cmd) => cmd === 22);
-
-          if (hasTakeoff && takeoffWp) {
-            // For terrain mode, store the raw AGL offset (e.g. 60 m)
-            const rawOffset = takeoffWp.originalAltitude;
-            resolvedHomeAlt = homeTerrainElev + rawOffset; // (For reference, not stored)
-            if (homeWaypoint) {
-              homeWaypoint.altitudeMode = "terrain";
-              // Store only the raw AGL offset instead of the resolved absolute altitude
-              homeWaypoint.originalAltitude = rawOffset;
+          const homeTerrainElev = await queryTerrainElevation([
+            newPlan.properties.homePosition.longitude,
+            newPlan.properties.homePosition.latitude,
+          ]);
+    
+          // Helper function to resolve altitude
+          const resolveAltitude = async (
+            wp: WaypointData,
+            coord: [number, number, number],
+            homeElev: number
+          ): Promise<number> => {
+            const [lon, lat, origAlt] = coord;
+            const terrainElev = wp.altitudeMode === "terrain" || wp.altitudeMode === "relative" 
+              ? await queryTerrainElevation([lon, lat]) 
+              : homeElev;
+            switch (wp.altitudeMode) {
+              case "terrain": return terrainElev + origAlt;
+              case "relative": return terrainElev + origAlt;
+              case "absolute": return origAlt;
+              default: return origAlt;
             }
-            // Update the home coordinate altitude to the raw offset.
-            // Later, during densification, the correct terrain elevation will be added.
-            const homeCoordIndex = newPlan.features[0].properties.waypoints[0].index;
-            newPlan.features[0].geometry.coordinates[homeCoordIndex][2] = rawOffset;
-          } else {
-            const homeAltitudeMode = homeWaypoint ? homeWaypoint.altitudeMode : "absolute";
-            resolvedHomeAlt = homeAltitudeMode === "relative" 
-              ? homeTerrainElev + homePosition.altitude 
-              : homePosition.altitude;
-            if (homeWaypoint) {
-              homeWaypoint.originalAltitude = homePosition.altitude;
-            }
-          }
-          
-
-          let totalDistance = 0;
-          let waypointDistances: number[] = [];
-          // ---- TASK 1: Include All Waypoints (including home) ----
-          const allWaypoints = newPlan.features[0].properties.waypoints;
-          const flightWaypoints = allWaypoints; // Include all waypoints, including index 0
-          // ---- TASK 2: Segment Flight Waypoints by Altitude Mode ----
-          const segments: { waypoint: typeof flightWaypoints[0]; coordinate: [number, number, number] }[][] = [];
-          let currentSegment: { waypoint: typeof flightWaypoints[0]; coordinate: [number, number, number] }[] = [];
-          for (let i = 0; i < flightWaypoints.length; i++) {
-            const wp = flightWaypoints[i];
-            const coord = newPlan.features[0].geometry.coordinates[wp.index];
-            if (!coord) continue;
-            if (currentSegment.length === 0) {
-              currentSegment.push({ waypoint: wp, coordinate: coord });
-            } else {
-              if (wp.altitudeMode === currentSegment[currentSegment.length - 1].waypoint.altitudeMode) {
-                currentSegment.push({ waypoint: wp, coordinate: coord });
-              } else {
-                segments.push(currentSegment);
-                currentSegment = [{ waypoint: wp, coordinate: coord }];
-              }
-            }
-          }
-          if (currentSegment.length > 0) {
-            segments.push(currentSegment);
-          }
-
-          // ---- TASK 3: Process Each Segment and Merge ----
-          const processedFlightCoords: [number, number, number][] = [];
-          const originalProcessedCoords: [number, number, number][] = []; // New array for original waypoints
-
-          // Process each flight segment, including home waypoint
-          for (const segment of segments) {
-            const segmentMode = segment[0].waypoint.altitudeMode;
-            const segmentCoords = segment.map(item => item.coordinate);
-
-            if (segmentMode === "terrain") {
-              const densifiedSegment = await densifyTerrainSegment(segmentCoords);
-              processedFlightCoords.push(...densifiedSegment);
-              // Store original waypoints with their absolute altitudes (no re-adding terrain)
-              for (let i = 0; i < segmentCoords.length; i++) {
-                const [lon, lat, resolvedAlt] = segmentCoords[i]; // Use pre-resolved altitude
-                originalProcessedCoords.push([lon, lat, resolvedAlt]);
-              }
-            } else {
-              const processedSegment: [number, number, number][] = [];
-              for (let i = 0; i < segmentCoords.length; i++) {
-                const [lon, lat, origAlt] = segmentCoords[i];
-                const terrainElev = await queryTerrainElevation([lon, lat]);
-                let resolvedAlt = origAlt;
-                switch (segment[i].waypoint.altitudeMode) {
-                  case "relative":
-                    resolvedAlt = homeTerrainElev + origAlt;
-                    break;
-                  case "absolute":
-                    resolvedAlt = origAlt;
-                    break;
-                  case "terrain":
-                    resolvedAlt = terrainElev + origAlt;
-                    break;
-                  default:
-                    resolvedAlt = origAlt;
-                }
-                // Special case for home waypoint (index 0)
-                if (segment[i].waypoint.index === 0) {
-                  resolvedAlt = resolvedHomeAlt; // Use the resolved home altitude
-                }
-                processedSegment.push([lon, lat, resolvedAlt]);
-              }
-              processedFlightCoords.push(...processedSegment);
-              originalProcessedCoords.push(...processedSegment); // Same as processed for non-terrain
-            }
-          }
-
-          // ---- TASK 4: Recalculate Distances ----
-          let cumulative = 0;
-          waypointDistances = [0];
-          for (let i = 1; i < processedFlightCoords.length; i++) {
-            const segmentLine = turf.lineString([
-              processedFlightCoords[i - 1].slice(0, 2),
-              processedFlightCoords[i].slice(0, 2)
-            ]);
-            cumulative += turf.length(segmentLine, { units: "kilometers" });
-            waypointDistances.push(cumulative);
-          }
-          totalDistance = cumulative;
-
-          // ---- TASK 5: Update Flight Plan Context ----
-          const processedFlightPlan: FlightPlanData = {
-            ...newPlan,
-            properties: {
-              ...newPlan.properties,
-              homePosition: {
-                ...homePosition,
-                altitude: resolvedHomeAlt,
-              },
-            },
-            features: [{
-              ...newPlan.features[0],
-              geometry: {
-                ...newPlan.features[0].geometry,
-                coordinates: processedFlightCoords // Densified coordinates for map
-              },
-              properties: {
-                ...newPlan.features[0].properties,
-                originalCoordinates: originalProcessedCoords // Original waypoints with resolved altitudes
-              }
-            }],
-            waypointDistances,
-            totalDistance,
-            processed: true,
           };
-
-          setContextFlightPlan(processedFlightPlan);
+    
+          // Process waypoints and coordinates
+          const waypoints = newPlan.features[0].properties.waypoints;
+          const segments: { waypoint: typeof waypoints[0]; coordinate: [number, number, number] }[][] = [];
+          let currentSegment: { waypoint: typeof waypoints[0]; coordinate: [number, number, number] }[] = [];
+    
+          waypoints.forEach(wp => {
+            const coord = newPlan.features[0].geometry.coordinates[wp.index];
+            if (!coord) return;
+            const item = { waypoint: wp, coordinate: coord };
+            if (currentSegment.length && wp.altitudeMode !== currentSegment[currentSegment.length - 1].waypoint.altitudeMode) {
+              segments.push(currentSegment);
+              currentSegment = [item];
+            } else {
+              currentSegment.push(item);
+            }
+          });
+          if (currentSegment.length) segments.push(currentSegment);
+    
+          const processedCoords: [number, number, number][] = [];
+          const originalCoords: [number, number, number][] = [];
+    
+          for (const segment of segments) {
+            const coords = segment.map(item => item.coordinate);
+            if (segment[0].waypoint.altitudeMode === "terrain") {
+              const densified = await densifyTerrainSegment(coords);
+              processedCoords.push(...densified);
+              for (const { waypoint, coordinate } of segment) {
+                const resolvedAlt = await resolveAltitude(waypoint, coordinate, homeTerrainElev);
+                originalCoords.push([coordinate[0], coordinate[1], resolvedAlt]);
+              }
+            } else {
+              for (const { waypoint, coordinate } of segment) {
+                const resolvedAlt = await resolveAltitude(waypoint, coordinate, homeTerrainElev);
+                const newCoord = [coordinate[0], coordinate[1], resolvedAlt] as [number, number, number];
+                processedCoords.push(newCoord);
+                originalCoords.push(newCoord);
+              }
+            }
+          }
+    
+          // Calculate distances
+          let totalDistance = 0;
+          const waypointDistances = [0];
+          for (let i = 1; i < processedCoords.length; i++) {
+            const segmentLine = turf.lineString([processedCoords[i - 1].slice(0, 2), processedCoords[i].slice(0, 2)]);
+            totalDistance += turf.length(segmentLine, { units: "kilometers" });
+            waypointDistances.push(totalDistance);
+          }
+    
+          // Update context
+          newPlan.properties.homePosition.altitude = await resolveAltitude(waypoints[0], coordinates[0], homeTerrainElev);
+          newPlan.properties.totalDistance = totalDistance;
+          newPlan.properties.processed = true;
+          newPlan.features[0].geometry.coordinates = processedCoords;
+          newPlan.features[0].properties.originalCoordinates = originalCoords;
+          newPlan.waypointDistances = waypointDistances;
+    
+          setContextFlightPlan(newPlan);
           setDistance(totalDistance);
-          setResolvedGeoJSON(processedFlightPlan);
+          setResolvedGeoJSON(newPlan);
         } catch (error) {
           console.error("Error processing flight plan:", error);
           setError("Failed to process flight plan. Please try again.");
         }
       };
-
+    
       processFlightPlan();
     }, [contextFlightPlan, queryTerrainElevation, setContextFlightPlan, setDistance, setError]);
 

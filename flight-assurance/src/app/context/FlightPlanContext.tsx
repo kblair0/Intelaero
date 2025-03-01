@@ -1,66 +1,49 @@
+// FlightPlanContext.tsx
 import React, { createContext, useState, useContext } from "react";
 
 /**
- * Data structure for a single waypoint, preserving raw fields from QGC:
- *   - index: waypoint index in the mission
- *   - altitudeMode: "relative" (AGL), "terrain", or "absolute" (MSL)
- *   - originalAltitude: the altitude value as read from the .waypoints file
- *   - commandType: MAVLink command type (e.g., 16 = NAV_WAYPOINT, 22 = TAKEOFF, etc.)
- *   - frame: the raw MAV_FRAME (0, 3, 10, etc.)
- *   - params: array of param1..param4 from the QGC file
+ * WaypointData with unified altitude mode
  */
 export interface WaypointData {
   index: number;
-  altitudeMode: "relative" | "terrain" | "absolute";
-  originalAltitude: number;
-  commandType: number;
-  frame: number;
-  params: number[];
+  altitudeMode: "terrain" | "relative" | "absolute"; // Single source of truth for altitude interpretation
+  originalAltitude: number; // Raw altitude from file
+  commandType?: number; // Optional for MAVLink compatibility (e.g., .waypoints)
+  frame?: number; // Optional for MAVLink compatibility
 }
 
 /**
- * Each feature in our flight plan can store:
- *   - geometry with raw [lon, lat, alt] from the QGC file
- *   - waypoint details in properties.waypoints
+ * FlightPlanFeature with simplified properties
  */
 export interface FlightPlanFeature extends GeoJSON.Feature {
   type: "Feature";
   geometry: {
     type: "LineString";
-    // Raw altitudes directly from the QGC file (not yet resolved or corrected)
-    coordinates: [number, number, number][];
+    coordinates: [number, number, number][]; // [lon, lat, alt]
   };
   properties: {
-    name: string;
-    // Entire array of altitudes, matching coordinates
-    originalAltitudes: number[];
-    // The altitude modes for each waypoint (optional but can be useful)
-    altitudeModes: WaypointData["altitudeMode"][];
-    // The raw MAVLink command types
-    rawCommands: number[];
-    // Detailed waypoint data
-    waypoints: WaypointData[];
-    originalCoordinates?: [number, number, number][];
+    waypoints: WaypointData[]; // Waypoint details
+    originalCoordinates?: [number, number, number][]; // Post-processed original waypoints
   };
 }
 
 /**
- * Main FlightPlanData extends GeoJSON.FeatureCollection with:
- *   - properties containing home position
- *   - a features[] array of flight plan segments (usually just 1 for a single route)
+ * FlightPlanData with streamlined top-level properties
  */
 export interface FlightPlanData extends GeoJSON.FeatureCollection {
   properties: {
     homePosition: {
-      latitude: number;
       longitude: number;
+      latitude: number;
       altitude: number;
     };
+    config?: { [key: string]: any }; // Flexible mission settings (e.g., takeoffHeight, speed from KMZ)
+    metadata?: { [key: string]: any }; // Flexible audit data (e.g., timestamps, distance)
+    totalDistance?: number; // Total flight path length
+    processed?: boolean; // Processing state
   };
   features: FlightPlanFeature[];
-  waypointDistances?: number[];
-  totalDistance?: number;
-  processed?: boolean;
+  waypointDistances?: number[]; // Cumulative distances
 }
 
 /**
@@ -80,14 +63,16 @@ export const FlightPlanProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [distance, setDistance] = useState<number | null>(null);
 
   const updateFlightPlan = (data: FlightPlanData) => {
-    setFlightPlanState((prev) => {
-      // Merge previous state if it exists (preserve resolved altitudes)
-      return {
-        ...prev,
-        ...data,
-        processed: data.processed ?? prev?.processed ?? false, // Ensure processed flag is set properly
-      };
-    });
+    setFlightPlanState((prev) => ({
+      ...prev,
+      ...data,
+      properties: {
+        ...prev?.properties,
+        ...data.properties,
+        processed: data.properties?.processed ?? prev?.properties?.processed ?? false,
+      },
+    }));
+    setDistance(data.properties?.totalDistance ?? null);
   };
 
   return (

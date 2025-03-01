@@ -1,23 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2" xmlns:wpml="http://www.dji.com/wpmz/1.0.6">
   <Document>
-    <wpml:createTime>1739333350826</wpml:createTime>
-    <wpml:updateTime>1739334220619</wpml:updateTime>
+    <wpml:createTime>1730329841659</wpml:createTime>
+    <wpml:updateTime>1730329985757</wpml:updateTime>
     <wpml:missionConfig>
       <wpml:flyToWaylineMode>safely</wpml:flyToWaylineMode>
       <wpml:finishAction>goHome</wpml:finishAction>
       <wpml:exitOnRCLost>executeLostAction</wpml:exitOnRCLost>
       <wpml:executeRCLostAction>goBack</wpml:executeRCLostAction>
-      <wpml:takeOffSecurityHeight>60</wpml:takeOffSecurityHeight>
-      <wpml:takeOffRefPoint>-24.997279,152.177817,0.000000</wpml:takeOffRefPoint>
-      <wpml:globalTransitionalSpeed>12</wpml:globalTransitionalSpeed>
+      <wpml:takeOffSecurityHeight>20</wpml:takeOffSecurityHeight>
+      <wpml:takeOffRefPoint>-24.989313,151.960353,28.200000</wpml:takeOffRefPoint>
+      <wpml:globalTransitionalSpeed>10</wpml:globalTransitionalSpeed>
       <wpml:droneInfo>
         <wpml:droneEnumValue>77</wpml:droneEnumValue>
         <wpml:droneSubEnumValue>0</wpml:droneSubEnumValue>
       </wpml:droneInfo>
       <wpml:payloadInfo>
         <wpml:payloadEnumValue>67</wpml:payloadEnumValue>
-        <wpml:payloadSubEnumValue>0</wpml:payloadSubEnumValue>
+        <wpml:payloadSubEnumValue>2</wpml:payloadSubEnumValue>
         <wpml:payloadPositionIndex>0</wpml:payloadPositionIndex>
       </wpml:payloadInfo>
     </wpml:missionConfig>
@@ -27,12 +27,9 @@
       <wpml:waylineCoordinateSysParam>
         <wpml:coordinateMode>WGS84</wpml:coordinateMode>
         <wpml:heightMode>relativeToStartPoint</wpml:heightMode>
-        <wpml:globalShootHeight>45</wpml:globalShootHeight>
-        <wpml:surfaceFollowModeEnable>1</wpml:surfaceFollowModeEnable>
-        <wpml:isRealtimeSurfaceFollow>1</wpml:isRealtimeSurfaceFollow>
-        <wpml:surfaceRelativeHeight>45</wpml:surfaceRelativeHeight>
+        <wpml:globalShootHeight>20</wpml:globalShootHeight>
       </wpml:waylineCoordinateSysParam>
-      <wpml:autoFlightSpeed>9</wpml:autoFlightSpeed>
+      <wpml:autoFlightSpeed>1.5</wpml:autoFlightSpeed>
       <Placemark>
         <wpml:caliFlightEnable>0</wpml:caliFlightEnable>
         <wpml:elevationOptimizeEnable>1</wpml:elevationOptimizeEnable>
@@ -43,29 +40,26 @@
         <wpml:shootType>distance</wpml:shootType>
         <wpml:direction>160</wpml:direction>
         <wpml:margin>0</wpml:margin>
-        <wpml:efficiencyFlightModeEnable>0</wpml:efficiencyFlightModeEnable>
         <wpml:overlap>
           <wpml:orthoLidarOverlapH>80</wpml:orthoLidarOverlapH>
-          <wpml:orthoLidarOverlapW>80</wpml:orthoLidarOverlapW>
+          <wpml:orthoLidarOverlapW>70</wpml:orthoLidarOverlapW>
           <wpml:orthoCameraOverlapH>80</wpml:orthoCameraOverlapH>
-          <wpml:orthoCameraOverlapW>80</wpml:orthoCameraOverlapW>
+          <wpml:orthoCameraOverlapW>70</wpml:orthoCameraOverlapW>
         </wpml:overlap>
         <Polygon>
           <outerBoundaryIs>
             <LinearRing>
               <coordinates>
-                152.176628039712,-24.9975500395712,0
-                152.176820397945,-24.9970834409311,0
-                152.177830793527,-24.9966805098155,0
-                152.178164771195,-24.9973841782889,0
-                152.178016864062,-24.997997636699,0
-                152.177116885818,-24.9978226878061,0
+                151.960554928058,-24.9898279319902,0
+                151.960846850619,-24.9896955038897,0
+                151.960095290321,-24.9884054914866,0
+                151.959792475661,-24.9885807021349,0
               </coordinates>
             </LinearRing>
           </outerBoundaryIs>
         </Polygon>
-        <wpml:ellipsoidHeight>45</wpml:ellipsoidHeight>
-        <wpml:height>45</wpml:height>
+        <wpml:ellipsoidHeight>20</wpml:ellipsoidHeight>
+        <wpml:height>20</wpml:height>
       </Placemark>
       <wpml:payloadParam>
         <wpml:payloadPositionIndex>0</wpml:payloadPositionIndex>
@@ -74,7 +68,7 @@
         <wpml:samplingRate>240000</wpml:samplingRate>
         <wpml:scanningMode>nonRepetitive</wpml:scanningMode>
         <wpml:modelColoringEnable>0</wpml:modelColoringEnable>
-        <wpml:imageFormat>visable</wpml:imageFormat>
+        <wpml:imageFormat>visable,ir</wpml:imageFormat>
       </wpml:payloadParam>
     </Folder>
   </Document>

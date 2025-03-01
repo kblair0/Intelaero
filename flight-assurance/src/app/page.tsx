@@ -26,7 +26,7 @@ const HomeContent = () => {
   const [activePanel, setActivePanel] = useState<"energy" | "los" | null>(null);
   const [showUploader, setShowUploader] = useState(false);
   const [logoVisible, setLogoVisible] = useState(true);
-  const { flightPlan } = useFlightPlanContext();
+  const { flightPlan, setFlightPlan } = useFlightPlanContext();
 
   const togglePanel = (panel: "energy" | "los") => {
     setActivePanel(activePanel === panel ? null : panel);
@@ -92,6 +92,11 @@ const HomeContent = () => {
                     </div>
                     <FlightPlanUploader
                       onClose={() => setShowUploader(false)}
+                      mapRef={mapRef}
+                      onPlanUploaded={(flightData, resetMap) => {
+                        resetMap(); // Reset map before setting new plan
+                        setFlightPlan(flightData);
+                      }}
                     />
                   </div>
                 </div>
