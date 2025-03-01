@@ -20,6 +20,7 @@ import { ObstacleAnalysisProvider } from "./context/ObstacleAnalysisContext";
 import MapSidePanel from "./components/MapSidePanel";
 import { Battery, Radio, GripVertical, X } from "lucide-react";
 import { trackEventWithForm as trackEvent } from "./components/tracking/tracking";
+import WelcomePitch from "./components/WelcomePitch";
 
 const HomeContent = () => {
   const mapRef = useRef<MapRef>(null);
@@ -150,14 +151,19 @@ const HomeContent = () => {
           {/* Plan Verification Section - Fixed Width */}
           <div className="w-80 h-full shrink-0">
             <Card className="h-full rounded-l-xl">
-              <div className="space-y-4 h-full">
+              <div className="space-y-4 h-full flex flex-col">
                 <h3 className="text-lg font-semibold text-gray-900">
                   Plan Verification
                 </h3>
-                <PlanVerification 
-                  mapRef={mapRef} 
-                  onTogglePanel={togglePanel} 
-                />
+                <div className="flex-1 overflow-y-auto">
+                  <PlanVerification 
+                    mapRef={mapRef} 
+                    onTogglePanel={togglePanel} 
+                  />
+                  <div className="mt-4">
+                    <WelcomePitch />
+                  </div>
+                </div>
               </div>
             </Card>
           </div>
