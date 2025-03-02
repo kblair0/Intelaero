@@ -1,10 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
-import React from "react";
+import React, { useRef } from "react";
 import { createPortal } from "react-dom";
 import { Line } from "react-chartjs-2";
 import { useObstacleAnalysis } from "../context/ObstacleAnalysisContext";
-import annotationPlugin from "chartjs-plugin-annotation";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -21,7 +20,7 @@ import { useFlightPlanContext } from "../context/FlightPlanContext";
 import * as turf from "@turf/turf"; // <-- Added to compute distances
 import zoomPlugin from 'chartjs-plugin-zoom';
 
-// Register the required chart components (if not already registered globally)
+// Register the required chart components (without annotation plugin)
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -31,7 +30,6 @@ ChartJS.register(
   Tooltip,
   Legend,
   Filler,
-  annotationPlugin,
   zoomPlugin
 );
 
@@ -40,6 +38,29 @@ interface TerrainClearancePopupProps {
 }
 
 const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }) => {
+  // Create ref for the chart
+  const chartRef = useRef<any>(null);
+  
+  // Custom close handler to properly clean up the chart before unmounting
+  const handleClose = () => {
+    // Check if chart exists and destroy it
+    if (chartRef.current) {
+      const chart = chartRef.current;
+      try {
+        if (chart && chart.options) {
+          // Disable animations to prevent animation callbacks during destroy
+          chart.options.animation = false;
+          chart.update('none');
+        }
+      } catch (e) {
+        console.log("Error cleaning up chart:", e);
+      }
+    }
+    
+    // Call the original onClose
+    onClose();
+  };
+  
   // Retrieve obstacle analysis data (for altitude, clearance, etc.)
   const { analysisData } = useObstacleAnalysis();
   // Retrieve the processed flight plan (which now includes waypointDistances, totalDistance, etc.)
@@ -91,40 +112,10 @@ const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }
     ],
   };
 
-  // Update: Use the originalCoordinates to compute cumulative distances
-  const originalCoords = flightPlan.features?.[0]?.properties?.originalCoordinates || [];
-  let cumulativeDistance = 0;
-  const waypointAnnotations = originalCoords.map((coord, idx) => {
-    if (idx > 0) {
-      cumulativeDistance += turf.distance(originalCoords[idx - 1], coord, { units: "kilometers" });
-    }
-    const waypoint = flightPlan.features?.[0]?.properties?.waypoints?.[idx];
-    const labelContent = waypoint
-      ? `WP ${idx + 1}: ${waypoint.altitudeMode} (${waypoint.originalAltitude} m)`
-      : `WP ${idx + 1}`;
-    return {
-      [`waypoint_${idx}`]: {
-        type: "line",
-        mode: "vertical",
-        scaleID: "x",
-        value: cumulativeDistance * 100,
-        borderColor: "rgba(0, 0, 0, 0.6)",
-        borderWidth: 1,
-        label: {
-          enabled: true,
-          content: labelContent,
-          position: "center",
-          rotation: -90,
-          backgroundColor: "rgba(0,0,0,0.7)",
-          color: "#fff",
-          font: { size: 10 },
-        },
-      },
-    };
-  }).reduce((acc, cur) => ({ ...acc, ...cur }), {});
-
+  // Chart options without annotation plugin
   const chartOptions = {
     responsive: true,
+    maintainAspectRatio: false,
     interaction: {
       mode: "index" as const,
       intersect: false,
@@ -164,38 +155,6 @@ const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }
           },
         },
       },
-      annotation: {
-        animations: {
-          numbers: {
-            properties: ["x", "y"],
-            type: "number",
-          },
-        },
-        annotations: {
-          ...waypointAnnotations,
-          clearanceLine: {
-            type: "line",
-            borderColor: "rgba(128, 128, 128, 0.8)",
-            borderWidth: 2,
-            display: false,
-            enter: (ctx: any) => {
-              if (ctx.chart.tooltip?.dataPoints?.length === 2) {
-                return true;
-              }
-              return false;
-            },
-            leave: () => false,
-            value: (ctx: any) => {
-              const tooltip = ctx.chart.tooltip;
-              if (tooltip?.dataPoints?.length === 2) {
-                return tooltip.dataPoints[0].parsed.x;
-              }
-              return 0;
-            },
-            scaleID: "x",
-          },
-        },
-      },
       zoom: {
         zoom: {
           wheel: {
@@ -226,21 +185,6 @@ const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }
         },
       },
     },
-    onHover: (event: any, elements: any[], chart: any) => {
-      const tooltip = chart.tooltip;
-      if (tooltip?.dataPoints?.length === 2) {
-        const xValue = tooltip.dataPoints[0].parsed.x;
-        const yLow = tooltip.dataPoints[0].parsed.y;
-        const yHigh = tooltip.dataPoints[1].parsed.y;
-        const clearanceLine = chart.options.plugins.annotation.annotations.clearanceLine;
-        clearanceLine.display = true;
-        clearanceLine.yMin = yLow;
-        clearanceLine.yMax = yHigh;
-        clearanceLine.xMin = xValue;
-        clearanceLine.xMax = xValue;
-        chart.update("none");
-      }
-    },
   };
   
 
@@ -250,8 +194,8 @@ const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }
         {/* Popup Header */}
         <div className="flex justify-between items-center mb-2">
           <h2 className="text-xl font-semibold">Terrain Clearance Analysis</h2>
-          <button 
-            onClick={onClose} 
+          <button
+            onClick={handleClose}
             className="text-gray-500 hover:text-gray-700 focus:outline-none"
           >
             Close
@@ -260,8 +204,12 @@ const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }
         <p className="text-sm text-gray-600 mb-4">Use mouse wheel to zoom, drag to pan.</p>
 
         {/* Chart Section */}
-        <div className="mb-4">
-          <Line data={chartData} options={chartOptions} />
+        <div className="mb-4 terrain-clearance-chart" style={{ height: "400px" }}>
+          <Line 
+            data={chartData} 
+            options={chartOptions} 
+            ref={chartRef}
+          />
         </div>
 
         {/* Flight Plan Statistics Section */}

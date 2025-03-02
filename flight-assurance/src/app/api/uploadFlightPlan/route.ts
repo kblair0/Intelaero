@@ -112,12 +112,12 @@ function parseQGCFile(content: string): FlightPlanData {
     features: [feature]
   };
 }
-
-// KML Parser using togeojson (Note: on server use, replace 'window' with a global fallback)
 function parseKMLFile(kmlText: string): FlightPlanData {
   const parser = new DOMParser();
   const kmlDom = parser.parseFromString(kmlText, "application/xml");
-const geojsonResult = (globalThis as { togeojson?: { kml: (doc: Document) => GeoJSON.FeatureCollection } }).togeojson?.kml(kmlDom) as GeoJSON.FeatureCollection;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const geojsonResult = (window as any).togeojson?.kml(kmlDom) as GeoJSON.FeatureCollection;
+
 
 
   let lineStringCoords: [number, number, number][] = [];

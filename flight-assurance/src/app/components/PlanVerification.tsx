@@ -1,3 +1,4 @@
+"use client";
 import React, { useState, useEffect } from "react";
 import { CheckCircle, XCircle, Loader, ChevronDown, ChevronRight, Battery, Radio, Mountain } from "lucide-react";
 import { useFlightPlanContext } from "../context/FlightPlanContext";
@@ -5,10 +6,13 @@ import { useObstacleAnalysis } from "../context/ObstacleAnalysisContext";
 import { useFlightConfiguration } from "../context/FlightConfigurationContext";
 import { useLOSAnalysis } from "../context/LOSAnalysisContext";
 import { ObstacleAnalysisOutput } from "../context/ObstacleAnalysisContext";
-import TerrainClearancePopup from "./TerrainClearancePopup";
-import ObstacleAssessment from "./ObstacleAssessment";
+import dynamic from "next/dynamic"; // Import dynamic from Next.js
 import { MapRef } from "./Map";
 import { trackEventWithForm as trackEvent } from "./tracking/tracking";
+
+// Dynamically load components that use browser APIs
+const ObstacleAssessment = dynamic(() => import("./ObstacleAssessment"), { ssr: false });
+const TerrainClearancePopup = dynamic(() => import("./TerrainClearancePopup"), { ssr: false });
 
 interface PlanVerificationProps {
   mapRef: React.RefObject<MapRef>;
@@ -237,7 +241,9 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
           <button
             onClick={() => {
               trackEvent("airspace_request_click", { panel: "basic" });
-              window.alert("Coming Soon!");
+              if (typeof window !== "undefined") {
+                window.alert("Coming Soon!");
+              }
             }}
             className="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 transition-colors"
           >
@@ -246,7 +252,9 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
           <button
             onClick={() => {
               trackEvent("insert_weather_click", { panel: "weather" });
-              window.alert("Coming Soon!");
+              if (typeof window !== "undefined") {
+                window.alert("Coming Soon!");
+              }
             }}
             className="px-3 py-1 bg-green-500 text-white text-sm rounded hover:bg-green-600 transition-colors"
           >
@@ -432,7 +440,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
     };
   };
 
-  // Combine all sections, including the new Regulatory Check section
+  // Combine all sections
   const sections = [
     getBasicChecks(),
     getEnergyAnalysis(),
@@ -455,16 +463,15 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
     }
   };
 
-  // Auto terrain analysis on flight plan upload
+  // Auto terrain analysis on flight plan upload (guarded)
   useEffect(() => {
-    if (flightPlan && mapRef.current?.getMap()) {   
+    if (flightPlan && mapRef.current?.getMap() && typeof window !== "undefined") {   
       const event = new CustomEvent("triggerTerrainAnalysis");
       window.dispatchEvent(event);
       console.log("triggerTerrainAnalysis event dispatched.");
     }
   }, [flightPlan, mapRef]);
- 
-
+  
   return (
     <div className="flex flex-col gap-2">
       {/* Show a loading indicator when analysis is running */}
@@ -477,14 +484,13 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
   
       {/* Hidden ObstacleAssessment/ELOS Grid analysis Component for background processing */}
       <div className="hidden">
-      <ObstacleAssessment
+        <ObstacleAssessment
           flightPlan={flightPlan}
           map={mapRef.current?.getMap() || null}
           onDataProcessed={async (data: ObstacleAnalysisOutput) => {
             console.log("ObstacleAssessment onDataProcessed fired", data);
             setAnalysisData(data);
             setIsAnalyzing(false);
-
           }}
         />
       </div>
@@ -535,7 +541,9 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
                     <button
                       onClick={() => {
                         trackEvent("powerlines_request_click", { panel: "terrain" });
-                        window.alert("Coming Soon!");
+                        if (typeof window !== "undefined") {
+                          window.alert("Coming Soon!");
+                        }
                       }}
                       className="mt-2 flex items-center gap-2 px-3 py-1.5 bg-green-500 text-white text-sm rounded-md hover:bg-green-600 transition-colors"
                     >
