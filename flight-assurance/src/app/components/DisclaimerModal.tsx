@@ -1,12 +1,15 @@
+"use client";
 import { useState, useEffect } from 'react';
 
 const DisclaimerModal = () => {
   const [isOpen, setIsOpen] = useState(true);
 
   const handleAccept = () => {
+    console.log("Accept button clicked");
     setIsOpen(false);
     localStorage.setItem('disclaimerAccepted', 'true');
   };
+  
 
   useEffect(() => {
     const hasAccepted = localStorage.getItem('disclaimerAccepted');

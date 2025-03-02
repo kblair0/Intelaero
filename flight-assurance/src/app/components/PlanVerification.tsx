@@ -1,9 +1,10 @@
-import React, { useRef, useState, useEffect } from "react";
-import { CheckCircle, XCircle, Loader, ChevronDown, ChevronRight, Battery, Radio, GripVertical, Mountain } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { CheckCircle, XCircle, Loader, ChevronDown, ChevronRight, Battery, Radio, Mountain } from "lucide-react";
 import { useFlightPlanContext } from "../context/FlightPlanContext";
 import { useObstacleAnalysis } from "../context/ObstacleAnalysisContext";
 import { useFlightConfiguration } from "../context/FlightConfigurationContext";
 import { useLOSAnalysis } from "../context/LOSAnalysisContext";
+import { ObstacleAnalysisOutput } from "../context/ObstacleAnalysisContext";
 import TerrainClearancePopup from "./TerrainClearancePopup";
 import ObstacleAssessment from "./ObstacleAssessment";
 import { MapRef } from "./Map";
@@ -45,7 +46,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
   const { flightPlan } = useFlightPlanContext();
   const { metrics } = useFlightConfiguration();
   const { analysisData, setAnalysisData } = useObstacleAnalysis();
-  const { results: losResults, autoAnalysisRunning, setAutoAnalysisRunning } = useLOSAnalysis();
+  const { results: losResults } = useLOSAnalysis();
   
   const [expandedSection, setExpandedSection] = useState<string | null>("basic");
   const [showTerrainPopup, setShowTerrainPopup] = useState(false);
@@ -54,16 +55,10 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
   const [duplicateWaypoints, setDuplicateWaypoints] = useState<WaypointCoordinate[]>([]);
   const [kmzTakeoffWarning, setKmzTakeoffWarning] = useState<string | null>(null);
 
-  // Auto Analysis on Flightplan Upload States
-  const elosGridRef = useRef<ELOSGridAnalysisRef>(null);
-  const [terrainAnalysisComplete, setTerrainAnalysisComplete] = useState(false);
-  const [gridAnalysisTriggered, setGridAnalysisTriggered] = useState(false);
-  
   // Reset analysis state when a new flight plan is loaded
   useEffect(() => {
     if (flightPlan) {
-      setTerrainAnalysisComplete(false);
-      setGridAnalysisTriggered(false);
+      // Reset any analysis state if needed
     }
   }, [flightPlan]);
 
@@ -97,10 +92,11 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
     setZeroAltitudePoints(zeroPoints);
 
     // KMZ-specific takeoff height check
-    const isKmz = flightPlan.properties.metadata?.distance !== undefined; // Rough check for .kmz (metadata.distance is KMZ-specific)
+    const isKmz = flightPlan.properties.metadata?.distance !== undefined; // Rough check for .kmz
     if (isKmz) {
       const mode = flightPlan.features[0].properties.waypoints[0].altitudeMode;
-      const takeoffHeight = (flightPlan.properties.config as any)?.takeoffHeight || 0;
+      // Replace 'any' with unknown if you have a better type for config
+      const takeoffHeight = (flightPlan.properties.config as unknown as { takeoffHeight?: number })?.takeoffHeight || 0;
       const homeAltitude = flightPlan.properties.homePosition.altitude;
       if ((mode === "terrain" || mode === "relative") && takeoffHeight === 0 && homeAltitude === 0) {
         setKmzTakeoffWarning("Warning: Takeoff security height missing in terrain or relative mission; home altitude is 0m.");
@@ -261,8 +257,6 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
     };
   };
   
-  
-    
   // Energy analysis section
   const getEnergyAnalysis = (): VerificationSection => {
     if (!flightPlan) {
@@ -461,7 +455,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
     }
   };
 
-  //auto terrin analysis on flightplan upload a
+  // Auto terrain analysis on flight plan upload
   useEffect(() => {
     if (flightPlan && mapRef.current?.getMap()) {   
       const event = new CustomEvent("triggerTerrainAnalysis");
@@ -483,14 +477,14 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
   
       {/* Hidden ObstacleAssessment/ELOS Grid analysis Component for background processing */}
       <div className="hidden">
-        <ObstacleAssessment
+      <ObstacleAssessment
           flightPlan={flightPlan}
           map={mapRef.current?.getMap() || null}
-          onDataProcessed={async (data) => {
+          onDataProcessed={async (data: ObstacleAnalysisOutput) => {
             console.log("ObstacleAssessment onDataProcessed fired", data);
             setAnalysisData(data);
             setIsAnalyzing(false);
-            setTerrainAnalysisComplete(true);
+
           }}
         />
       </div>

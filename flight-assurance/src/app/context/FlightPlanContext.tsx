@@ -10,7 +10,22 @@ export interface WaypointData {
   originalAltitude: number; // Raw altitude from file
   commandType?: number; // Optional for MAVLink compatibility (e.g., .waypoints)
   frame?: number; // Optional for MAVLink compatibility
+  params?: number[];
 }
+
+export interface FlightPlanConfig {
+  takeoffHeight?: number;
+  speed?: number;
+  finishAction?: string;
+}
+
+export interface FlightPlanMetadata {
+  created?: number;
+  updated?: number;
+  distance?: number;
+  processed: boolean;
+}
+
 
 /**
  * FlightPlanFeature with simplified properties
@@ -37,8 +52,8 @@ export interface FlightPlanData extends GeoJSON.FeatureCollection {
       latitude: number;
       altitude: number;
     };
-    config?: { [key: string]: any }; // Flexible mission settings (e.g., takeoffHeight, speed from KMZ)
-    metadata?: { [key: string]: any }; // Flexible audit data (e.g., timestamps, distance)
+    config?: FlightPlanConfig;
+    metadata?: FlightPlanMetadata;
     totalDistance?: number; // Total flight path length
     processed?: boolean; // Processing state
   };

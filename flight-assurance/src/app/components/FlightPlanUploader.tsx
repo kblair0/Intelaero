@@ -175,8 +175,8 @@ async function parseKMZFile(file: File): Promise<import("../context/FlightPlanCo
   console.log("KMZ contents:", fileNames);
   
   // Check for files either at root or in wpmz/ directory
-  let templateFile = zip.file("template.kml") || zip.file("wpmz/template.kml");
-  let waylinesFile = zip.file("waylines.wpml") || zip.file("wpmz/waylines.wpml");
+  const templateFile = zip.file("template.kml") || zip.file("wpmz/template.kml");
+  const waylinesFile = zip.file("waylines.wpml") || zip.file("wpmz/waylines.wpml");
   
   if (templateFile && waylinesFile) {
     // Process as DJI format
@@ -240,7 +240,8 @@ async function parseKMZFile(file: File): Promise<import("../context/FlightPlanCo
     
     // Process waypoints
     const coordinates: [number, number, number][] = [];
-    const waypoints: any[] = [];
+    const waypoints: import("../context/FlightPlanContext").WaypointData[] = [];
+
     
     placemarks.forEach((pm, index) => {
       // Get coordinates
@@ -349,7 +350,7 @@ const onDrop = async (acceptedFiles: File[]) => {
       flightData = await parseKMZFile(file);
     } else {
       const reader = new FileReader();
-      flightData = await new Promise((resolve, reject) => {
+      flightData = await new Promise<import("../context/FlightPlanContext").FlightPlanData>((resolve, reject) => {
         reader.onload = () => {
           try {
             const result = reader.result as string;
@@ -364,6 +365,7 @@ const onDrop = async (acceptedFiles: File[]) => {
         reader.onerror = () => reject(new Error("Failed to read file"));
         reader.readAsText(file);
       });
+      
     }
 
     const newFlightPlan = {
@@ -475,7 +477,7 @@ const loadExampleGeoJSON = async () => {
     <div className="flex-1 bg-white shadow-lg p-6 rounded-lg border border-gray-200">
       <h3 className="text-lg font-bold text-black">📁 Upload Your Flight Plan</h3>
       <p className="text-sm text-gray-600">
-        Upload a <strong>.waypoints</strong>, <strong>.geojson</strong>, <strong>.kml</strong>, or <strong>.kmz</strong> file to analyze your drone's flight path.
+        Upload a <strong>.waypoints</strong>, <strong>.geojson</strong>, <strong>.kml</strong>, or <strong>.kmz</strong> file to analyze your drone&apos;s flight path.
       </p>
 
       <div

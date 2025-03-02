@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, {} from "react";
 import { useLocation } from "../context/LocationContext";
 import { LocationData } from "../components/Map";
 
@@ -68,11 +68,6 @@ const StationCard: React.FC<StationCardProps> = ({
     observer: "green",
     repeater: "red",
   };
-
-  // Calculate the station elevation using the updated offset from context.
-  const stationElevation = location && location.elevation !== null 
-    ? location.elevation + elevationOffset 
-    : 0;
 
   return (
     <article className="bg-white p-2 rounded shadow flex flex-col gap-2 w-full text-xs">

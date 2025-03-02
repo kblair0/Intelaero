@@ -2,7 +2,6 @@
 import * as turf from '@turf/turf';
 import mapboxgl from 'mapbox-gl';
 import { LocationData } from '../components/Map';
-import { MarkerConfigs } from '../context/LOSAnalysisContext';
 import { FlightPlanData } from '../context/FlightPlanContext';
 
 export interface VisibilitySegment {

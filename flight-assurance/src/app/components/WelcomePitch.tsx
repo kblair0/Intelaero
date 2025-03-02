@@ -2,27 +2,23 @@
 import React from "react";
 import Image from "next/image";
 
-interface WelcomePitchProps {
-  onGetStarted: () => void;
-}
-
-const WelcomePitch: React.FC<WelcomePitchProps> = ({ onGetStarted }) => {
+const WelcomePitch: React.FC = () => {
   return (
     <>
-<div className=" p-4 rounded-lg shadow-lg border border-gray-300">
-  <h1
-    className="text-xl font-bold mb-2 text-yellow-500"
-    style={{
-      textShadow:
-        "-1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff",
-    }}
-  >
-    Mission Assurance for Drones
-  </h1>
-  <p className="text-sm mb-2 text-yellow-500">
-    Deliver More, Worry Less.
-  </p>
-  <ul className="list-none space-y-1 mb-2 text-sm">
+      <div className="p-4 rounded-lg shadow-lg border border-gray-300">
+        <h1
+          className="text-xl font-bold mb-2 text-yellow-500"
+          style={{
+            textShadow:
+              "-1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff",
+          }}
+        >
+          Mission Assurance for Drones
+        </h1>
+        <p className="text-sm mb-2 text-yellow-500">
+          Deliver More, Worry Less.
+        </p>
+        <ul className="list-none space-y-1 mb-2 text-sm">
           <li className="flex items-center gap-1">
             <span>📍</span>
             Advanced 3D Flight Path Obstacle Assessment

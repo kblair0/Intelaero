@@ -4,6 +4,7 @@ import { google } from 'googleapis';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { DOMParser } from 'xmldom';
+import type { FlightPlanData, WaypointData, FlightPlanFeature } from '../context/FlightPlanContext';
 
 // Resolve the current directory (for ES modules)
 const __filename = fileURLToPath(import.meta.url);
@@ -24,17 +25,25 @@ const drive = google.drive({ version: 'v3', auth });
 
 // ----- Parser Implementations -----
 
+// Define an interface for the home position handler in the QGC parser.
+interface HomeHandler {
+  homePosition: { latitude: number; longitude: number; altitude: number; };
+  takeoffAltitude: number | null;
+  processWaypoint: (index: number, command: number, alt: number, lat: number, lon: number) => void;
+  getHomePosition: () => { latitude: number; longitude: number; altitude: number; };
+}
+
 // QGC .waypoints Parser
-function parseQGCFile(content: string): any {
+function parseQGCFile(content: string): FlightPlanData {
   const lines = content.trim().split("\n");
 
   if (!lines[0].includes("QGC WPL 110")) {
     throw new Error("Invalid .waypoints file. Missing QGC WPL 110 header.");
   }
 
-  const homeHandler = { 
+  const homeHandler: HomeHandler = { 
     homePosition: { latitude: 0, longitude: 0, altitude: 0 },
-    takeoffAltitude: null as number | null,
+    takeoffAltitude: null,
     processWaypoint(index: number, command: number, alt: number, lat: number, lon: number) {
       if (index === 0) {
         this.homePosition = { latitude: lat, longitude: lon, altitude: alt };
@@ -50,7 +59,7 @@ function parseQGCFile(content: string): any {
     }
   };
 
-  const waypoints: any[] = [];
+  const waypoints: WaypointData[] = [];
   const coordinates: [number, number, number][] = [];
 
   for (let i = 1; i < lines.length; i++) {
@@ -85,30 +94,31 @@ function parseQGCFile(content: string): any {
     throw new Error("Flight plan must contain at least 2 valid coordinates.");
   }
 
+  const feature: FlightPlanFeature = {
+    type: "Feature",
+    geometry: { type: "LineString", coordinates },
+    properties: {
+      name: "Drone Flight Path",
+      originalAltitudes: coordinates.map(c => c[2]),
+      altitudeModes: waypoints.map(w => w.altitudeMode),
+      rawCommands: waypoints.map(w => w.commandType),
+      waypoints,
+    }
+  };
+
   return {
     type: "FeatureCollection",
     properties: { homePosition },
-    features: [{
-      type: "Feature",
-      geometry: { type: "LineString", coordinates },
-      properties: {
-        name: "Drone Flight Path",
-        originalAltitudes: coordinates.map(c => c[2]),
-        altitudeModes: waypoints.map(w => w.altitudeMode),
-        rawCommands: waypoints.map(w => w.commandType),
-        waypoints,
-      }
-    }]
+    features: [feature]
   };
 }
 
-// KML Parser using @mapbox/togeojson
-function parseKMLFile(kmlText: string): any {
-  // Create a DOMParser instance if not already available
+// KML Parser using togeojson (Note: on server use, replace 'window' with a global fallback)
+function parseKMLFile(kmlText: string): FlightPlanData {
   const parser = new DOMParser();
   const kmlDom = parser.parseFromString(kmlText, "application/xml");
-  // Convert KML to GeoJSON using toGeoJSON library
-  const geojsonResult = (window as any).togeojson?.kml(kmlDom) as GeoJSON.FeatureCollection;
+const geojsonResult = (globalThis as { togeojson?: { kml: (doc: Document) => GeoJSON.FeatureCollection } }).togeojson?.kml(kmlDom) as GeoJSON.FeatureCollection;
+
 
   let lineStringCoords: [number, number, number][] = [];
   let name = "KML Flight Path";
@@ -123,36 +133,39 @@ function parseKMLFile(kmlText: string): any {
 
   if (!lineStringCoords.length) throw new Error("No LineString geometry found in KML");
 
+  const feature: FlightPlanFeature = {
+    type: "Feature",
+    geometry: { type: "LineString", coordinates: lineStringCoords },
+    properties: {
+      name,
+      originalAltitudes: lineStringCoords.map(c => c[2]),
+      altitudeModes: Array(lineStringCoords.length).fill("absolute"),
+      rawCommands: Array(lineStringCoords.length).fill(16),
+      waypoints: lineStringCoords.map((coord, index) => ({
+        index,
+        altitudeMode: "absolute",
+        originalAltitude: coord[2],
+        commandType: 16,
+        frame: 0,
+        params: [],
+      })),
+    }
+  };
+
   return {
     type: "FeatureCollection",
     properties: { homePosition: inferHomePosition(lineStringCoords) },
-    features: [{
-      type: "Feature",
-      geometry: { type: "LineString", coordinates: lineStringCoords },
-      properties: {
-        name,
-        originalAltitudes: lineStringCoords.map(c => c[2]),
-        altitudeModes: Array(lineStringCoords.length).fill("absolute"),
-        rawCommands: Array(lineStringCoords.length).fill(16),
-        waypoints: lineStringCoords.map((coord, index) => ({
-          index,
-          altitudeMode: "absolute",
-          originalAltitude: coord[2],
-          commandType: 16,
-          frame: 0,
-          params: [],
-        })),
-      }
-    }]
+    features: [feature]
   };
 }
 
 // GeoJSON Parser
-function parseGeoJSONFile(geojsonText: string): any {
+function parseGeoJSONFile(geojsonText: string): FlightPlanData {
   const geojsonResult = JSON.parse(geojsonText) as GeoJSON.FeatureCollection;
   if (!geojsonResult.features || geojsonResult.features.length === 0) {
     throw new Error("Invalid GeoJSON: No features found.");
   }
+
   const flightFeature = geojsonResult.features.find(f => f.geometry?.type === "LineString");
   if (!flightFeature) throw new Error("No valid flight path found in GeoJSON.");
 
@@ -175,7 +188,7 @@ function parseGeoJSONFile(geojsonText: string): any {
   return {
     type: "FeatureCollection",
     properties: { homePosition: inferHomePosition(coordinates) },
-    features: [flightFeature],
+    features: [flightFeature as FlightPlanFeature],
   };
 }
 
@@ -191,7 +204,7 @@ export async function POST(request: Request) {
   try {
     const { fileName, fileContent, fileExtension } = await request.json();
 
-    // If you're in development mode, skip the upload.
+    // In development mode, skip the upload.
     if (process.env.NODE_ENV === 'development') {
       console.log("Localhost environment detected - skipping Drive upload.");
       return NextResponse.json({
@@ -200,7 +213,8 @@ export async function POST(request: Request) {
       });
     }
 
-    let processedData: any;
+    let processedData: FlightPlanData;
+
     if (fileExtension === 'kml') {
       processedData = parseKMLFile(fileContent);
     } else if (fileExtension === 'geojson') {
@@ -230,10 +244,8 @@ export async function POST(request: Request) {
       message: 'Upload successful!',
       file: driveResponse.data,
     });
-  } catch (error: any) {
-    console.error('Upload failed:', error.response ? error.response.data : error);
-    return NextResponse.json({ message: 'Upload failed', error: error.toString() }, { status: 500 });
+  } catch (error: unknown) {
+    console.error('Upload failed:', error);
+    return NextResponse.json({ message: 'Upload failed', error: String(error) }, { status: 500 });
   }
 }
-
-  
