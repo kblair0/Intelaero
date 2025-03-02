@@ -20,40 +20,37 @@ import { CheckCircle, XCircle } from "lucide-react";
 import { useFlightPlanContext } from "../context/FlightPlanContext";
 import * as turf from "@turf/turf";
 
-// Define a custom plugin to draw waypoint markers at the bottom of the chart
+// Custom plugin to render waypoint markers and labels at the chart bottom
 const waypointLabelsPlugin = {
   id: "waypointLabelsPlugin",
   afterDraw: (chart: any, args: any, options: any) => {
-    const { ctx, chartArea: { top, bottom }, scales: { x } } = chart;
-    if (!options || !options.waypoints) return;
+    const { ctx, chartArea: { bottom }, scales: { x } } = chart;
+    if (!options?.waypoints) return;
+    
     ctx.save();
     ctx.font = options.font || "10px sans-serif";
     ctx.fillStyle = options.textColor || "#000";
     ctx.textAlign = options.textAlign || "center";
     ctx.textBaseline = options.textBaseline || "bottom";
 
-    // Define marker height and label offset
-    const markerHeight = options.markerHeight || 10; // marker is 10px high
-    const labelOffset = options.labelOffset || 5; // label is drawn 5px above marker
+    const markerHeight = options.markerHeight || 10;
+    const labelOffset = options.labelOffset || 5;
 
     options.waypoints.forEach((wp: any) => {
-      // Get the pixel for the x value
       const xPos = x.getPixelForValue(wp.value);
-      // Draw short vertical marker at the bottom of the chart
       ctx.beginPath();
       ctx.moveTo(xPos, bottom);
       ctx.lineTo(xPos, bottom - markerHeight);
       ctx.strokeStyle = options.lineColor || "rgba(0,0,0,0.6)";
       ctx.lineWidth = options.lineWidth || 1;
       ctx.stroke();
-      // Draw the label above the marker
       ctx.fillText(wp.label, xPos, bottom - markerHeight - labelOffset);
     });
     ctx.restore();
   },
 };
 
-// Register required chart components along with our custom plugin and zoom
+// Register ChartJS components and plugins
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -71,17 +68,39 @@ interface TerrainClearancePopupProps {
   onClose: () => void;
 }
 
+/**
+ * TerrainClearancePopup component displays a chart and analysis of terrain clearance
+ * for a flight plan, with zoom/pan capabilities and waypoint markers.
+ */
 const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }) => {
-  // Create a ref for the chart instance
   const chartRef = useRef<any>(null);
+  const { analysisData } = useObstacleAnalysis();
+  const { flightPlan } = useFlightPlanContext();
 
-  // Custom close handler that cleans up the chart
+  // Cleanup effect for chart instance
+  useEffect(() => {
+    return () => {
+      if (chartRef.current) {
+        const chartInstance = chartRef.current;
+        try {
+          chartInstance.options.onHover = () => {};
+          chartInstance.stop();
+          chartInstance.destroy();
+        } catch (error) {
+          console.error("Error destroying chart:", error);
+        }
+      }
+    };
+  }, []);
+
+  // Handle popup closure with chart cleanup
   const handleClose = () => {
     if (chartRef.current) {
+      const chartInstance = chartRef.current;
       try {
-        chartRef.current.options.onHover = () => {};
-        chartRef.current.stop();
-        chartRef.current.destroy();
+        chartInstance.options.onHover = () => {};
+        chartInstance.stop();
+        chartInstance.destroy();
       } catch (error) {
         console.error("Error during chart cleanup:", error);
       }
@@ -89,10 +108,7 @@ const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }
     onClose();
   };
 
-  // Retrieve data from context
-  const { analysisData } = useObstacleAnalysis();
-  const { flightPlan } = useFlightPlanContext();
-
+  // Early return if required data is missing
   if (!analysisData || !flightPlan) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
@@ -104,7 +120,7 @@ const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }
     );
   }
 
-  // Helper function for minimum clearance distance
+  // Calculate distance of minimum terrain clearance
   const getMinClearanceDistance = (): number | null => {
     const clearances = analysisData.flightAltitudes.map(
       (alt, idx) => alt - analysisData.terrainElevations[idx]
@@ -114,7 +130,7 @@ const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }
     return analysisData.distances[index];
   };
 
-  // Prepare chart data
+  // Prepare chart data for terrain and flight path
   const chartData = {
     labels: analysisData.distances.map((d) => d.toFixed(2)),
     datasets: [
@@ -138,7 +154,7 @@ const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }
     ],
   };
 
-  // Compute waypoint positions from the original coordinates
+  // Calculate waypoint positions from flight plan coordinates
   const originalCoords = flightPlan.features?.[0]?.properties?.originalCoordinates || [];
   let cumulativeDistance = 0;
   const waypoints = originalCoords.map((coord: any, idx: number) => {
@@ -150,13 +166,12 @@ const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }
       );
     }
     return {
-      // Multiply cumulativeDistance by 100 to match your data scale, adjust if needed
       value: cumulativeDistance * 100,
       label: `WP ${idx + 1}`,
     };
   });
 
-  // Chart options including our custom waypoint labels plugin configuration
+  // Configure chart options including plugins
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
@@ -201,12 +216,8 @@ const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }
       },
       zoom: {
         zoom: {
-          wheel: {
-            enabled: true,
-          },
-          pinch: {
-            enabled: true,
-          },
+          wheel: { enabled: true },
+          pinch: { enabled: true },
           mode: "x" as const,
         },
         pan: {
@@ -214,52 +225,28 @@ const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }
           mode: "x" as const,
         },
       },
-      // Configure our custom waypoint labels plugin here
       waypointLabelsPlugin: {
-        waypoints: waypoints,
+        waypoints,
         font: "10px sans-serif",
         textColor: "#000",
         textAlign: "center",
         textBaseline: "bottom",
         lineColor: "rgba(0,0,0,0.6)",
         lineWidth: 1,
-        markerHeight: 10, // height of the marker line
-        labelOffset: 5,   // space above the marker for the label
+        markerHeight: 10,
+        labelOffset: 5,
       },
     },
     scales: {
-      x: {
-        title: {
-          display: true,
-          text: "Distance (km)",
-        },
-      },
-      y: {
-        title: {
-          display: true,
-          text: "Elevation (m)",
-        },
-      },
+      x: { title: { display: true, text: "Distance (km)" } },
+      y: { title: { display: true, text: "Elevation (m)" } },
     },
   };
 
-  // Cleanup effect (optional fallback)
-  useEffect(() => {
-    return () => {
-      if (chartRef.current) {
-        try {
-          chartRef.current.destroy();
-        } catch (error) {
-          console.error("Error destroying chart:", error);
-        }
-      }
-    };
-  }, []);
-
+  // Render popup via portal
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
       <div className="bg-white rounded-lg shadow-lg p-6 w-11/12 max-w-4xl max-h-full overflow-y-auto">
-        {/* Popup Header */}
         <div className="flex justify-between items-center mb-2">
           <h2 className="text-xl font-semibold">Terrain Clearance Analysis</h2>
           <button
@@ -271,12 +258,10 @@ const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }
         </div>
         <p className="text-sm text-gray-600 mb-4">Use mouse wheel to zoom, drag to pan.</p>
 
-        {/* Chart Section */}
         <div className="mb-4" style={{ height: "400px" }}>
           <Line data={chartData} options={chartOptions} ref={chartRef} />
         </div>
 
-        {/* Flight Plan Statistics Section */}
         <div className="mt-4">
           <h3 className="text-lg font-medium mb-2">Flight Plan Statistics</h3>
           <div className="flex justify-between text-sm text-gray-700">
@@ -285,7 +270,6 @@ const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }
           </div>
         </div>
 
-        {/* Terrain Clearance Verification Section */}
         <div className="mt-4 border-t pt-4">
           <h3 className="text-lg font-medium mb-2">Terrain Clearance Verification</h3>
           {analysisData.minimumClearanceHeight >= 0 ? (
