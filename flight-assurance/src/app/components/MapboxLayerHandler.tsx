@@ -35,15 +35,14 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
   const eventHandlersRef = useRef<{
     onPowerlineMouseEnter?: (e: mapboxgl.MapMouseEvent & { features?: mapboxgl.MapboxGeoJSONFeature[] }) => void;
     onPowerlineMouseLeave?: () => void;
+    onMapMouseMove?: (e: mapboxgl.MapMouseEvent) => void;
   }>({});
+  
+  // Track the current feature being hovered
+  const currentFeatureRef = useRef<mapboxgl.MapboxGeoJSONFeature | null>(null);
   
   useEffect(() => {
     if (!map) return;
-    
-    const localHandlers = {
-      onPowerlineMouseEnter: undefined as ((e: mapboxgl.MapMouseEvent & { features?: mapboxgl.MapboxGeoJSONFeature[] }) => void) | undefined,
-      onPowerlineMouseLeave: undefined as (() => void) | undefined
-    };
     
     // We're in a useEffect, so we're guaranteed to be on the client
     // Safe to dynamically import mapbox-gl
@@ -79,17 +78,20 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
           source: "electricity-lines",
           "source-layer": powerSourceLayerName,
           layout: { visibility: "visible" },
-          paint: { "line-width": 20, "line-color": "rgba(0,0,0,0)", "line-opacity": 0 }
+          paint: { "line-width": 20, "line-color": "rgba(0,0,0,0)" }
         });
       }
 
-      // Define the handlers and store in both refs and local variables
-      localHandlers.onPowerlineMouseEnter = eventHandlersRef.current.onPowerlineMouseEnter = (
+      // Handle mouse enter on powerline
+      const handlePowerlineMouseEnter = (
         e: mapboxgl.MapMouseEvent & { features?: mapboxgl.MapboxGeoJSONFeature[] }
       ) => {
         map.getCanvas().style.cursor = "pointer";
         const feature = e.features && e.features[0];
         if (!feature) return;
+        
+        // Store current feature for reference
+        currentFeatureRef.current = feature;
 
         const voltage = feature.properties?.CAPACITY_KV || "unknown";
         const height = voltage !== "unknown" ? getHeightForVoltage(String(voltage)) : "N/A";
@@ -100,7 +102,16 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
           <strong>Height:</strong> ${height}
         `;
 
-        const popup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false })
+        // Remove any existing popup first
+        if (extMap.__currentPopup) {
+          extMap.__currentPopup.remove();
+        }
+
+        const popup = new mapboxgl.Popup({ 
+          closeButton: false, 
+          closeOnClick: false,
+          maxWidth: "300px"
+        })
           .setLngLat(e.lngLat)
           .setHTML(popupContent)
           .addTo(map);
@@ -108,26 +119,42 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
         extMap.__currentPopup = popup;
       };
 
-      localHandlers.onPowerlineMouseLeave = eventHandlersRef.current.onPowerlineMouseLeave = () => {
+      // Handle mouse leave on powerline
+      const handlePowerlineMouseLeave = () => {
         map.getCanvas().style.cursor = "";
+        currentFeatureRef.current = null;
+        
         if (extMap.__currentPopup) {
           extMap.__currentPopup.remove();
           extMap.__currentPopup = null;
         }
       };
 
-      // Bind handlers from refs
-      map.on(
-        "mouseenter", 
-        "Electricity Transmission Lines Hitbox", 
-        localHandlers.onPowerlineMouseEnter
-      );
-      
-      map.on(
-        "mouseleave", 
-        "Electricity Transmission Lines Hitbox", 
-        localHandlers.onPowerlineMouseLeave
-      );
+      // Additional safety: track mouse movement across entire map
+      // This ensures popup cleanup even if mouseleave events are missed
+      const handleMapMouseMove = (e: mapboxgl.MapMouseEvent) => {
+        const features = map.queryRenderedFeatures(e.point, { 
+          layers: ["Electricity Transmission Lines Hitbox"] 
+        });
+        
+        // If we're not over a powerline but we have a currentFeature
+        // the mouse has left the powerline without triggering the mouseleave event
+        if (features.length === 0 && currentFeatureRef.current !== null) {
+          handlePowerlineMouseLeave();
+        }
+      };
+
+      // Bind handlers
+      map.on("mouseenter", "Electricity Transmission Lines Hitbox", handlePowerlineMouseEnter);
+      map.on("mouseleave", "Electricity Transmission Lines Hitbox", handlePowerlineMouseLeave);
+      map.on("mousemove", handleMapMouseMove);
+
+      // Store in ref for cleanup (single source of truth)
+      eventHandlersRef.current = {
+        onPowerlineMouseEnter: handlePowerlineMouseEnter,
+        onPowerlineMouseLeave: handlePowerlineMouseLeave,
+        onMapMouseMove: handleMapMouseMove
+      };
 
       // ----------- Airfields Layer Setup -----------
       if (!map.getSource("airfields")) {
@@ -252,21 +279,25 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
     return () => {
       if (!map) return;
       
-      // Clean up event listeners using the local references
-      if (localHandlers.onPowerlineMouseEnter) {
+      // Clean up event listeners using the ref
+      if (eventHandlersRef.current.onPowerlineMouseEnter) {
         map.off(
           "mouseenter", 
           "Electricity Transmission Lines Hitbox", 
-          localHandlers.onPowerlineMouseEnter
+          eventHandlersRef.current.onPowerlineMouseEnter
         );
       }
       
-      if (localHandlers.onPowerlineMouseLeave) {
+      if (eventHandlersRef.current.onPowerlineMouseLeave) {
         map.off(
           "mouseleave", 
           "Electricity Transmission Lines Hitbox", 
-          localHandlers.onPowerlineMouseLeave
+          eventHandlersRef.current.onPowerlineMouseLeave
         );
+      }
+      
+      if (eventHandlersRef.current.onMapMouseMove) {
+        map.off("mousemove", eventHandlersRef.current.onMapMouseMove);
       }
       
       map.off("mouseenter", "Airfields");
