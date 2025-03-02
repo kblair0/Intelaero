@@ -19,6 +19,7 @@ import {
 import { CheckCircle, XCircle } from "lucide-react";
 import { useFlightPlanContext } from "../context/FlightPlanContext";
 import * as turf from "@turf/turf"; // <-- Added to compute distances
+import zoomPlugin from 'chartjs-plugin-zoom';
 
 // Register the required chart components (if not already registered globally)
 ChartJS.register(
@@ -30,7 +31,8 @@ ChartJS.register(
   Tooltip,
   Legend,
   Filler,
-  annotationPlugin // Register annotation plugin
+  annotationPlugin,
+  zoomPlugin
 );
 
 interface TerrainClearancePopupProps {
@@ -194,6 +196,21 @@ const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }
           },
         },
       },
+      zoom: {
+        zoom: {
+          wheel: {
+            enabled: true,
+          },
+          pinch: {
+            enabled: true,
+          },
+          mode: "x" as const,
+        },
+        pan: {
+          enabled: true,
+          mode: "x" as const,
+        },
+      },
     },
     scales: {
       x: {
@@ -225,17 +242,22 @@ const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }
       }
     },
   };
+  
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
       <div className="bg-white rounded-lg shadow-lg p-6 w-11/12 max-w-4xl max-h-full overflow-y-auto">
         {/* Popup Header */}
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex justify-between items-center mb-2">
           <h2 className="text-xl font-semibold">Terrain Clearance Analysis</h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700 focus:outline-none">
+          <button 
+            onClick={onClose} 
+            className="text-gray-500 hover:text-gray-700 focus:outline-none"
+          >
             Close
           </button>
         </div>
+        <p className="text-sm text-gray-600 mb-4">Use mouse wheel to zoom, drag to pan.</p>
 
         {/* Chart Section */}
         <div className="mb-4">

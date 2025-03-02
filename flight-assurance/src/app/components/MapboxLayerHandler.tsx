@@ -14,16 +14,26 @@ interface ExtendedMapboxMap extends mapboxgl.Map {
 const getHeightForVoltage = (voltageValue: string): string => {
   const voltage = voltageValue.trim();
   switch (voltage) {
-    case "415": return "7 m";
-    case "11": return "9 m";
-    case "33": return "20 m";
-    case "66": return "20 m";
-    case "110": return "45 m";
-    case "132": return "45 m";
-    case "220": return "45 m";
-    case "275": return "55 m";
-    case "500": return "76 m";
-    default: return "N/A";
+    case "415":
+      return "7 m";
+    case "11":
+      return "9 m";
+    case "33":
+      return "20 m";
+    case "66":
+      return "20 m";
+    case "110":
+      return "45 m";
+    case "132":
+      return "45 m";
+    case "220":
+      return "45 m";
+    case "275":
+      return "55 m";
+    case "500":
+      return "76 m";
+    default:
+      return "N/A";
   }
 };
 
@@ -40,7 +50,7 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
     if (!map.getSource("electricity-lines")) {
       map.addSource("electricity-lines", {
         type: "vector",
-        url: "mapbox://intelaero.a8qtcidy"
+        url: "mapbox://intelaero.a8qtcidy",
       });
     }
 
@@ -51,7 +61,7 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
         source: "electricity-lines",
         "source-layer": powerSourceLayerName,
         layout: { visibility: "visible" },
-        paint: { "line-width": 2, "line-color": "#f00" }
+        paint: { "line-width": 2, "line-color": "#f00" },
       });
     }
 
@@ -62,11 +72,10 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
         source: "electricity-lines",
         "source-layer": powerSourceLayerName,
         layout: { visibility: "visible" },
-        paint: { "line-width": 20, "line-color": "rgba(0,0,0,0)", "line-opacity": 0 }
+        paint: { "line-width": 20, "line-color": "rgba(0,0,0,0)", "line-opacity": 0 },
       });
     }
 
-    // Annotate event parameter with custom features type.
     const onPowerlineMouseEnter = (
       e: mapboxgl.MapMouseEvent & { features?: mapboxgl.MapboxGeoJSONFeature[] }
     ) => {
@@ -106,9 +115,8 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
     if (!map.getSource("airfields")) {
       map.addSource("airfields", {
         type: "vector",
-        url: "mapbox://intelaero.6qpae87g"
+        url: "mapbox://intelaero.6qpae87g",
       });
-      console.log("Airfields source added");
     }
 
     if (!map.getLayer("Airfields")) {
@@ -120,15 +128,14 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
         paint: {
           "circle-radius": 4,
           "circle-color": "#ff0",
-          "circle-opacity": 1
+          "circle-opacity": 1,
         },
         filter: [
           "in",
           ["get", "aeroway"],
-          ["literal", ["aerodrome", "terminal", "helipad"]]
-        ]
+          ["literal", ["aerodrome", "terminal", "helipad"]],
+        ],
       });
-      console.log("Airfields layer added");
     }
 
     map.on(
@@ -138,11 +145,11 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
         const feature = e.features && e.features[0];
         if (!feature) return;
 
-        map.getCanvas().style.cursor = "pointer"; // Change cursor to pointer
+        map.getCanvas().style.cursor = "pointer";
 
-        const name = feature.properties.name || "Unnamed"; // Fallback if no name
-        const aeroway = feature.properties.aeroway || "Unknown"; // Fallback if missing
-        const aerowayFormatted = aeroway.charAt(0).toUpperCase() + aeroway.slice(1); // Capitalize
+        const name = feature.properties.name || "Unnamed";
+        const aeroway = feature.properties.aeroway || "Unknown";
+        const aerowayFormatted = aeroway.charAt(0).toUpperCase() + aeroway.slice(1);
         const coordinates = e.lngLat;
 
         const popupContent = `
@@ -152,14 +159,13 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
           </div>
         `;
 
-        // Remove any existing popup first
         if (extMap.__airfieldsPopup) {
           extMap.__airfieldsPopup.remove();
         }
 
         const popup = new mapboxgl.Popup({
-          closeButton: false, // No close button for hover
-          closeOnClick: false // Don’t close on map click
+          closeButton: false,
+          closeOnClick: false,
         })
           .setLngLat(coordinates)
           .setHTML(popupContent)
@@ -170,56 +176,20 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
     );
 
     map.on("mouseleave", "Airfields", () => {
-      map.getCanvas().style.cursor = ""; // Reset cursor
+      map.getCanvas().style.cursor = "";
       if (extMap.__airfieldsPopup) {
         extMap.__airfieldsPopup.remove();
         extMap.__airfieldsPopup = null;
       }
     });
 
-    // Debug source loading and features
-    map.on("sourcedata", (e) => {
-      if (e.sourceId === "airfields") {
-        console.log("Source data event for airfields, isLoaded:", map.isSourceLoaded("airfields"));
-        if (map.isSourceLoaded("airfields")) {
-          const features = map.querySourceFeatures("airfields", {
-            sourceLayer: "hotosm_aus_airports_points_ge-21mapu"
-          });
-          console.log("Total features loaded:", features.length);
-          if (features.length > 0) {
-            // Log detailed information for the first 5 features
-            features.slice(0, 5).forEach((feature, index) => {
-              console.log(`Feature ${index + 1} properties:`, feature.properties);
-              console.log(`   Name: ${feature.properties.name || "No name"}`);
-              console.log(`   Aeroway: ${feature.properties.aeroway || "Not specified"}`);
-            });
-            
-            // Extract and log unique values for 'aeroway' and 'name'
-            const aerowayValues = features.map(f => f.properties.aeroway).filter(Boolean);
-            console.log("Unique aeroway values:", [...new Set(aerowayValues)]);
-            
-            const names = features.map(f => f.properties.name).filter(Boolean);
-            console.log("Unique aerodrome names:", [...new Set(names)]);
-          } else {
-            console.log("No features found in hotosm_aus_airports_points_ge-21mapu");
-            console.log("Current bounds:", map.getBounds().toArray());
-          }  
-        }
-      }
-    });
-
-    // Log initial map state
-    console.log("Initial map center:", map.getCenter(), "Zoom:", map.getZoom());
-
-    // Consolidated cleanup
     return () => {
       map.off("mouseenter", "Electricity Transmission Lines Hitbox", onPowerlineMouseEnter);
       map.off("mouseleave", "Electricity Transmission Lines Hitbox", onPowerlineMouseLeave);
       map.off("mouseenter", "Airfields");
       map.off("mouseleave", "Airfields");
-      map.off("sourcedata"); // Cleanup sourcedata listener
+      map.off("sourcedata");
       map.off("click", "Airfields");
-      // Ensure popup is removed on cleanup
       if (extMap.__airfieldsPopup) {
         extMap.__airfieldsPopup.remove();
         extMap.__airfieldsPopup = null;
