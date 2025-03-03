@@ -26,7 +26,6 @@ const HomeContent = () => {
   const mapRef = useRef<MapRef>(null);
   const [activePanel, setActivePanel] = useState<"energy" | "los" | null>(null);
   const [showUploader, setShowUploader] = useState(false);
-  const [logoVisible, setLogoVisible] = useState(true);
   const { flightPlan, setFlightPlan } = useFlightPlanContext();
   const [feedback, setFeedback] = useState("");
   const [showThanks, setShowThanks] = useState(false);
@@ -40,42 +39,34 @@ const HomeContent = () => {
       <DisclaimerModal />
 
       {/* Logo Section */}
-      {logoVisible && (
-        <div className="absolute z-50 bottom-4 left-4 bg-white shadow-lg rounded-2xl p-4 w-40 flex flex-col items-center border border-gray-200">
-          <button
-            className="absolute top-2 right-2 text-gray-500 hover:text-gray-700"
-            onClick={() => setLogoVisible(false)}
-          >
-            <X size={20} />
-          </button>
-          <div className="flex flex-col items-center gap-3">
-            <Image
-              src="/Logonobackgrnd.png"
-              alt="Intel Aero Logo"
-              width={0}
-              height={0}
-              sizes="100vw"
-              style={{ width: '100%', height: 'auto' }}
-              className="max-w-full h-auto"
-            />
-            <Image
-              src="/Namenobackgrnd.png"
-              alt="Intel Aero Title"
-              width={0}
-              height={0}
-              sizes="100vw"
-              style={{ width: '100%', height: 'auto' }}
-              className="max-w-full h-auto"
-            />
-          </div>
+      <div className="absolute z-50 bottom-4 left-4 bg-white shadow-lg rounded-2xl p-4 w-40 flex flex-col items-center border border-gray-200">
+        <div className="flex flex-col items-center gap-3">
+          <Image
+            src="/Logonobackgrnd.png"
+            alt="Intel Aero Logo"
+            width={0}
+            height={0}
+            sizes="100vw"
+            style={{ width: "100%", height: "auto" }}
+            className="max-w-full h-auto"
+          />
+          <Image
+            src="/Namenobackgrnd.png"
+            alt="Intel Aero Title"
+            width={0}
+            height={0}
+            sizes="100vw"
+            style={{ width: "100%", height: "auto" }}
+            className="max-w-full h-auto"
+          />
         </div>
-      )}
+      </div>
 
       {/* Main Content Area */}
       <div className="flex-1 w-full h-full mx-2">
         <div className="flex flex-row h-full relative">
           {/* Map Section */}
-          <div className="flex-grow relative h-full pr-6">
+          <div className="flex-grow relative h-full">
             <div className="relative h-full rounded-r-xl overflow-hidden">
               <Map ref={mapRef} />
               {/* Uploader Overlay */}
@@ -183,18 +174,17 @@ const HomeContent = () => {
             </div>
           </div>
 
-            
           {/* Plan Verification Section - Fixed Width */}
-          <div className="w-80 h-full shrink-0">
+          <div className="w-80 h-full shrink-0 max-h-screen overflow-y-auto">
             <Card className="h-full rounded-l-xl">
               <div className="space-y-4 h-full flex flex-col">
                 <h3 className="text-lg font-semibold text-gray-900">
                   Plan Verification
                 </h3>
                 <div className="flex-1 overflow-y-auto">
-                  <PlanVerification 
-                    mapRef={mapRef} 
-                    onTogglePanel={togglePanel} 
+                  <PlanVerification
+                    mapRef={mapRef}
+                    onTogglePanel={togglePanel}
                   />
                   <div className="mt-4">
                     <WelcomePitch />
