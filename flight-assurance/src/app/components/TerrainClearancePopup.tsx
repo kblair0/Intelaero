@@ -68,10 +68,6 @@ interface TerrainClearancePopupProps {
   onClose: () => void;
 }
 
-/**
- * TerrainClearancePopup component displays a chart and analysis of terrain clearance
- * for a flight plan, with zoom/pan capabilities and waypoint markers.
- */
 const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }) => {
   const chartRef = useRef<any>(null);
   const { analysisData } = useObstacleAnalysis();
@@ -79,9 +75,12 @@ const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }
 
   // Cleanup effect for chart instance
   useEffect(() => {
+    // Capture the current chart instance at the time the effect runs
+    const chartInstance = chartRef.current;
+
+    // Cleanup function
     return () => {
-      if (chartRef.current) {
-        const chartInstance = chartRef.current;
+      if (chartInstance) {
         try {
           chartInstance.options.onHover = () => {};
           chartInstance.stop();
@@ -91,12 +90,12 @@ const TerrainClearancePopup: React.FC<TerrainClearancePopupProps> = ({ onClose }
         }
       }
     };
-  }, []);
+  }, []); // Empty dependency array since this is a one-time setup/cleanup
 
   // Handle popup closure with chart cleanup
   const handleClose = () => {
-    if (chartRef.current) {
-      const chartInstance = chartRef.current;
+    const chartInstance = chartRef.current;
+    if (chartInstance) {
       try {
         chartInstance.options.onHover = () => {};
         chartInstance.stop();
