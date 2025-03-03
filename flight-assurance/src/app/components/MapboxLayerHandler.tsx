@@ -25,6 +25,7 @@ const getHeightForVoltage = (voltageValue: string): string => {
     case "132": return "45 m";
     case "220": return "45 m";
     case "275": return "55 m";
+    case "330": return "65 m";
     case "500": return "76 m";
     default: return "N/A";
   }

@@ -1,24 +1,21 @@
 // src/app/api/uploadFlightPlan/route.ts
 import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { Readable } from 'stream'; // Added for stream compatibility
 import { DOMParser } from 'xmldom';
+import { kml } from '@tmcw/togeojson'; // Added for server-side KML parsing
 import type { FlightPlanData, WaypointData, FlightPlanFeature } from '../context/FlightPlanContext';
-
-// Resolve the current directory (for ES modules)
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Path to your service account key JSON file
-const KEYFILEPATH = path.join(process.cwd(), 'src/app/api/uploadFlightPlan/intel-aero-452003-05940784a3d3.json');
 
 // Define scopes for Google Drive API
 const SCOPES = ['https://www.googleapis.com/auth/drive'];
 
-// Initialize GoogleAuth with your service account credentials
+// Initialize GoogleAuth with environment variables
 const auth = new google.auth.GoogleAuth({
-  keyFile: KEYFILEPATH,
+  credentials: {
+    client_email: process.env.GCP_CLIENT_EMAIL,
+    private_key: process.env.GCP_PRIVATE_KEY,
+    project_id: process.env.GCP_PROJECT_ID,
+  },
   scopes: SCOPES,
 });
 const drive = google.drive({ version: 'v3', auth });
@@ -27,21 +24,21 @@ const drive = google.drive({ version: 'v3', auth });
 
 // Define an interface for the home position handler in the QGC parser.
 interface HomeHandler {
-  homePosition: { latitude: number; longitude: number; altitude: number; };
+  homePosition: { latitude: number; longitude: number; altitude: number };
   takeoffAltitude: number | null;
   processWaypoint: (index: number, command: number, alt: number, lat: number, lon: number) => void;
-  getHomePosition: () => { latitude: number; longitude: number; altitude: number; };
+  getHomePosition: () => { latitude: number; longitude: number; altitude: number };
 }
 
 // QGC .waypoints Parser
 function parseQGCFile(content: string): FlightPlanData {
-  const lines = content.trim().split("\n");
+  const lines = content.trim().split('\n');
 
-  if (!lines[0].includes("QGC WPL 110")) {
-    throw new Error("Invalid .waypoints file. Missing QGC WPL 110 header.");
+  if (!lines[0].includes('QGC WPL 110')) {
+    throw new Error('Invalid .waypoints file. Missing QGC WPL 110 header.');
   }
 
-  const homeHandler: HomeHandler = { 
+  const homeHandler: HomeHandler = {
     homePosition: { latitude: 0, longitude: 0, altitude: 0 },
     takeoffAltitude: null,
     processWaypoint(index: number, command: number, alt: number, lat: number, lon: number) {
@@ -56,14 +53,14 @@ function parseQGCFile(content: string): FlightPlanData {
       return this.takeoffAltitude !== null
         ? { ...this.homePosition, altitude: this.takeoffAltitude }
         : this.homePosition;
-    }
+    },
   };
 
   const waypoints: WaypointData[] = [];
   const coordinates: [number, number, number][] = [];
 
   for (let i = 1; i < lines.length; i++) {
-    const parts = lines[i].split("\t");
+    const parts = lines[i].split('\t');
     if (parts.length < 12) continue;
 
     const index = parseInt(parts[0], 10);
@@ -75,7 +72,7 @@ function parseQGCFile(content: string): FlightPlanData {
     const alt = parseFloat(parts[10]);
 
     // Simple altitude mode logic
-    const altitudeMode = frame === 3 ? "relative" : frame === 10 ? "terrain" : "absolute";
+    const altitudeMode = frame === 3 ? 'relative' : frame === 10 ? 'terrain' : 'absolute';
 
     homeHandler.processWaypoint(index, command, alt, lat, lon);
 
@@ -91,71 +88,72 @@ function parseQGCFile(content: string): FlightPlanData {
   const homePosition = homeHandler.getHomePosition();
 
   if (coordinates.length < 2) {
-    throw new Error("Flight plan must contain at least 2 valid coordinates.");
+    throw new Error('Flight plan must contain at least 2 valid coordinates.');
   }
 
   const feature: FlightPlanFeature = {
-    type: "Feature",
-    geometry: { type: "LineString", coordinates },
+    type: 'Feature',
+    geometry: { type: 'LineString', coordinates },
     properties: {
-      name: "Drone Flight Path",
-      originalAltitudes: coordinates.map(c => c[2]),
-      altitudeModes: waypoints.map(w => w.altitudeMode),
-      rawCommands: waypoints.map(w => w.commandType),
+      name: 'Drone Flight Path',
+      originalAltitudes: coordinates.map((c) => c[2]),
+      altitudeModes: waypoints.map((w) => w.altitudeMode),
+      rawCommands: waypoints.map((w) => w.commandType),
       waypoints,
-    }
+    },
   };
 
   return {
-    type: "FeatureCollection",
+    type: 'FeatureCollection',
     properties: { homePosition },
-    features: [feature]
+    features: [feature],
   };
 }
+
+// KML Parser (Updated to use @tmcw/togeojson)
 function parseKMLFile(kmlText: string): FlightPlanData {
   const parser = new DOMParser();
-  const kmlDom = parser.parseFromString(kmlText, "application/xml");
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const geojsonResult = (window as any).togeojson?.kml(kmlDom) as GeoJSON.FeatureCollection;
-
-
+  const kmlDom = parser.parseFromString(kmlText, 'application/xml');
+  const geojsonResult = kml(kmlDom) as GeoJSON.FeatureCollection;
 
   let lineStringCoords: [number, number, number][] = [];
-  let name = "KML Flight Path";
+  let name = 'KML Flight Path';
 
   for (const feature of geojsonResult.features) {
-    if (feature.geometry?.type === "LineString") {
-      lineStringCoords = feature.geometry.coordinates.map(([lon, lat, alt]) => [lon, lat, alt ?? 0]);
-      name = feature.properties?.name || name;
+    if (feature.geometry?.type === 'LineString') {
+      lineStringCoords = (feature.geometry.coordinates as [number, number, number][]).map(
+        ([lon, lat, alt]) => [lon, lat, alt ?? 0]
+      );
+      name = (feature.properties?.name as string) || name;
       break;
     }
   }
 
-  if (!lineStringCoords.length) throw new Error("No LineString geometry found in KML");
+  if (!lineStringCoords.length) throw new Error('No LineString geometry found in KML');
 
   const feature: FlightPlanFeature = {
-    type: "Feature",
-    geometry: { type: "LineString", coordinates: lineStringCoords },
+    type: 'Feature',
+    geometry: { type: 'LineString', coordinates: lineStringCoords },
     properties: {
       name,
-      originalAltitudes: lineStringCoords.map(c => c[2]),
-      altitudeModes: Array(lineStringCoords.length).fill("absolute"),
+      originalAltitudes: lineStringCoords.map((c) => c[2]),
+      altitudeModes: Array(lineStringCoords.length).fill('absolute'),
       rawCommands: Array(lineStringCoords.length).fill(16),
       waypoints: lineStringCoords.map((coord, index) => ({
         index,
-        altitudeMode: "absolute",
+        altitudeMode: 'absolute',
         originalAltitude: coord[2],
         commandType: 16,
         frame: 0,
         params: [],
       })),
-    }
+    },
   };
 
   return {
-    type: "FeatureCollection",
+    type: 'FeatureCollection',
     properties: { homePosition: inferHomePosition(lineStringCoords) },
-    features: [feature]
+    features: [feature],
   };
 }
 
@@ -163,21 +161,21 @@ function parseKMLFile(kmlText: string): FlightPlanData {
 function parseGeoJSONFile(geojsonText: string): FlightPlanData {
   const geojsonResult = JSON.parse(geojsonText) as GeoJSON.FeatureCollection;
   if (!geojsonResult.features || geojsonResult.features.length === 0) {
-    throw new Error("Invalid GeoJSON: No features found.");
+    throw new Error('Invalid GeoJSON: No features found.');
   }
 
-  const flightFeature = geojsonResult.features.find(f => f.geometry?.type === "LineString");
-  if (!flightFeature) throw new Error("No valid flight path found in GeoJSON.");
+  const flightFeature = geojsonResult.features.find((f) => f.geometry?.type === 'LineString');
+  if (!flightFeature) throw new Error('No valid flight path found in GeoJSON.');
 
   const coordinates = flightFeature.geometry.coordinates as [number, number, number][];
   flightFeature.properties = {
     ...flightFeature.properties,
-    originalAltitudes: coordinates.map(c => c[2]),
-    altitudeModes: Array(coordinates.length).fill("absolute"),
+    originalAltitudes: coordinates.map((c) => c[2]),
+    altitudeModes: Array(coordinates.length).fill('absolute'),
     rawCommands: Array(coordinates.length).fill(16),
     waypoints: coordinates.map((coord, index) => ({
       index,
-      altitudeMode: "absolute",
+      altitudeMode: 'absolute',
       originalAltitude: coord[2],
       commandType: 16,
       frame: 0,
@@ -186,7 +184,7 @@ function parseGeoJSONFile(geojsonText: string): FlightPlanData {
   };
 
   return {
-    type: "FeatureCollection",
+    type: 'FeatureCollection',
     properties: { homePosition: inferHomePosition(coordinates) },
     features: [flightFeature as FlightPlanFeature],
   };
@@ -204,12 +202,20 @@ export async function POST(request: Request) {
   try {
     const { fileName, fileContent, fileExtension } = await request.json();
 
-    // In development mode, skip the upload.
+    // Input validation
+    if (!fileName || !fileContent || !fileExtension) {
+      return NextResponse.json(
+        { message: 'Missing required fields: fileName, fileContent, or fileExtension' },
+        { status: 400 }
+      );
+    }
+
+    // In development mode, skip the upload
     if (process.env.NODE_ENV === 'development') {
-      console.log("Localhost environment detected - skipping Drive upload.");
+      console.log('Localhost environment detected - skipping Drive upload.');
       return NextResponse.json({
-        message: "Test environment: upload skipped.",
-        file: { id: "test-dummy-id" }
+        message: 'Test environment: upload skipped.',
+        file: { id: 'test-dummy-id' },
       });
     }
 
@@ -236,7 +242,7 @@ export async function POST(request: Request) {
       },
       media: {
         mimeType: 'application/json',
-        body: uploadContent,
+        body: Readable.from([uploadContent]), // Updated to use Readable stream
       },
     });
 
@@ -245,7 +251,10 @@ export async function POST(request: Request) {
       file: driveResponse.data,
     });
   } catch (error: unknown) {
-    console.error('Upload failed:', error);
+    console.error('Upload failed:', {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return NextResponse.json({ message: 'Upload failed', error: String(error) }, { status: 500 });
   }
 }
