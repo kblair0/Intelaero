@@ -710,6 +710,7 @@ const Map = forwardRef<MapRef, MapProps>(
       };
     }, []);
 
+    // ELOS Measuring Tool
     useEffect(() => {
       if (!mapRef.current || !isMeasuring) return;
     
@@ -756,32 +757,54 @@ const Map = forwardRef<MapRef, MapProps>(
       };
     
       const onMouseMove = (e: mapboxgl.MapMouseEvent) => {
-        if (fixedPointsRef.current.length > 0) {
-          const mousePoint = [e.lngLat.lng, e.lngLat.lat];
-          const lastPoint = fixedPointsRef.current[fixedPointsRef.current.length - 1];
-          const tempLineFeature = {
-            type: 'Feature',
-            geometry: { type: 'LineString', coordinates: [lastPoint, mousePoint] },
-          };
-          map.getSource(TEMP_LINE_SOURCE).setData({
+        // Only proceed if the measurement tool is active and a start point exists.
+        if (!isMeasuring || !fixedPointsRef.current || fixedPointsRef.current.length === 0) {
+          return;
+        }
+      
+        const mousePoint = [e.lngLat.lng, e.lngLat.lat];
+        const startPoint = fixedPointsRef.current[0];
+        if (!startPoint || startPoint.length < 2) return;
+      
+        // Update temporary line from startPoint to current mouse position
+        const tempLineFeature = {
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: [startPoint, mousePoint] },
+        };
+        const tempSource = map.getSource(TEMP_LINE_SOURCE);
+        if (tempSource) {
+          tempSource.setData({
             type: 'FeatureCollection',
             features: [tempLineFeature],
           });
-    
-          if (!movingPopupRef.current) {
-            movingPopupRef.current = new mapboxgl.Popup({ closeButton: false, className: 'measure-popup' });
-            movingPopupRef.current.addTo(map);
-          }
-          const distance = turf.distance(lastPoint, mousePoint, { units: 'kilometers' });
-          movingPopupRef.current.setLngLat(mousePoint).setHTML(`<div>${distance.toFixed(2)} km</div>`);
-        } else {
-          if (!movingPopupRef.current) {
-            movingPopupRef.current = new mapboxgl.Popup({ closeButton: false, className: 'measure-popup' });
-            movingPopupRef.current.addTo(map);
-          }
-          movingPopupRef.current.setLngLat(e.lngLat).setHTML('<div>Pick a position on the map</div>');
         }
+      
+        // Create or update the moving popup with dynamic distance
+        if (!movingPopupRef.current) {
+          movingPopupRef.current = new mapboxgl.Popup({
+            closeButton: false,
+            className: 'measure-popup',
+            offset: 15
+          }).addTo(map);
+        }
+        
+        let distance = 0;
+        try {
+          distance = turf.distance(startPoint, mousePoint, { units: 'kilometers' });
+        } catch (error) {
+          console.error('Error calculating distance:', error);
+        }
+        
+        // Inline style added to make the popup content more visible
+        movingPopupRef.current
+          .setLngLat(e.lngLat)
+          .setHTML(`<div style="background: rgba(255,255,255,0.9); padding: 4px 8px; border-radius: 4px; font-size: 12px;">
+                      ${distance.toFixed(2)} km
+                    </div>`);
       };
+      
+      
+      
     
       const onDblClick = (e: mapboxgl.MapMouseEvent) => {
         e.preventDefault();
@@ -931,7 +954,7 @@ const handleResetMap = () => {
 };
 
 // In the JSX:
-<button onClick={handleResetMap} className="map-button">Reset Map</button>
+<button onClick={handleResetMap} className="map-button">Reset LOS Analyses</button>
 
 const handleFileProcessing = (data: any) => {
   if (Array.isArray(data)) {
@@ -1278,6 +1301,7 @@ const handleFileProcessing = (data: any) => {
                   <span className="text-gray-500">
                     This may take a few moments... {Math.round(elosProgressDisplay)}%
                   </span>
+                  <span className="text-gray-500 text-xxs">Especially for terrain following missions.</span>
                 </div>
               </div>
               <button
@@ -1299,7 +1323,7 @@ const handleFileProcessing = (data: any) => {
             <button onClick={addObserver} className="map-button observer-icon">Add Observer 🔭</button>
             <button onClick={addRepeater} className="map-button repeater-icon">Add Repeater ⚡️</button>
           
-            <button onClick={handleResetMap} className="map-button">Reset Map</button>
+            <button onClick={handleResetMap} className="map-button">Reset LOS Analyses</button>
           </div>
     
           {/* Analysis Status Indicator */}

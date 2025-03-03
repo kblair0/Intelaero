@@ -58,6 +58,8 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
   const [zeroAltitudePoints, setZeroAltitudePoints] = useState<WaypointCoordinate[]>([]);
   const [duplicateWaypoints, setDuplicateWaypoints] = useState<WaypointCoordinate[]>([]);
   const [kmzTakeoffWarning, setKmzTakeoffWarning] = useState<string | null>(null);
+  const [energyAnalysisOpened, setEnergyAnalysisOpened] = useState(false);
+
 
   // Reset analysis state when a new flight plan is loaded
   useEffect(() => {
@@ -265,51 +267,62 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
     };
   };
   
-  // Energy analysis section
-  const getEnergyAnalysis = (): VerificationSection => {
-    if (!flightPlan) {
-      return {
-        id: "energy",
-        title: "Energy Analysis",
-        description: "Check battery capacity against flight requirements",
-        status: "pending"
-      };
-    }
-  
+// Energy analysis section
+const getEnergyAnalysis = (): VerificationSection => {
+  if (!flightPlan) {
     return {
       id: "energy",
       title: "Energy Analysis",
-      description: "Battery and flight time verification",
-      status: metrics?.isFeasible ? "success" : "warning",
-      subSections: [
-        {
-          title: "Battery Requirements",
-          content: (
-            <div className="space-y-2">
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div>Required Capacity:</div>
-                <div>{metrics.expectedBatteryConsumption} mAh</div>
-                <div>Available Capacity:</div>
-                <div>{metrics.availableBatteryCapacity} mAh</div>
-                <div>Flight Time:</div>
-                <div>{metrics.flightTime}</div>
-                <div>Reserve Required:</div>
-                <div>{metrics.batteryReserve} mAh</div>
-                <div>Status:</div>
-                <div className={metrics.isFeasible ? "text-green-600" : "text-red-600"}>
-                  {metrics.isFeasible 
-                    ? "Flight plan within battery capacity" 
-                    : "Flight plan exceeds battery capacity"}
-                </div>
+      description: "Check battery capacity against flight requirements",
+      status: "pending"
+    };
+  }
+
+  // Compute the status:
+  // If the user hasn't opened the energy analysis, force a "warning" status.
+  // Once opened, show "success" if metrics.isFeasible is true, otherwise "warning".
+  const status = energyAnalysisOpened ? (metrics?.isFeasible ? "success" : "warning") : "warning";
+
+  return {
+    id: "energy",
+    title: "Energy Analysis",
+    description: "Battery and flight time verification",
+    status, // Use the computed status value here
+    subSections: [
+      {
+        title: "Battery Requirements",
+        content: (
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <div>Required Capacity:</div>
+              <div>{metrics?.expectedBatteryConsumption} mAh</div>
+              <div>Available Capacity:</div>
+              <div>{metrics?.availableBatteryCapacity} mAh</div>
+              <div>Flight Time:</div>
+              <div>{metrics?.flightTime}</div>
+              <div>Reserve Required:</div>
+              <div>{metrics?.batteryReserve} mAh</div>
+              <div>Status:</div>
+              <div className={metrics?.isFeasible ? "text-green-600" : "text-red-600"}>
+                {energyAnalysisOpened
+                  ? (metrics?.isFeasible 
+                      ? "Flight plan within battery capacity" 
+                      : "Flight plan exceeds battery capacity")
+                  : "Review energy analysis for details"}
               </div>
             </div>
-          )
-        }
-      ],
-      action: () => onTogglePanel('energy'),
-      actionLabel: "Open Energy Analysis"
-    };
+          </div>
+        )
+      }
+    ],
+    action: () => {
+      // Update the state so that the warning is removed once opened.
+      setEnergyAnalysisOpened(true);
+      onTogglePanel('energy');
+    },
+    actionLabel: "Open Energy Analysis"
   };
+};
   
   // Terrain analysis section
   const getTerrainAnalysis = (): VerificationSection => {

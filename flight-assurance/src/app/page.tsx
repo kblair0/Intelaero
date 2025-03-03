@@ -28,6 +28,8 @@ const HomeContent = () => {
   const [showUploader, setShowUploader] = useState(false);
   const [logoVisible, setLogoVisible] = useState(true);
   const { flightPlan, setFlightPlan } = useFlightPlanContext();
+  const [feedback, setFeedback] = useState("");
+  const [showThanks, setShowThanks] = useState(false);
 
   const togglePanel = (panel: "energy" | "los") => {
     setActivePanel(activePanel === panel ? null : panel);
@@ -145,9 +147,43 @@ const HomeContent = () => {
                   Add Your Own DEM Data
                 </button>
               </div>
+
+              <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-10 w-full max-w-md px-4">
+                <div className="flex flex-col items-center relative">
+                  <div className="flex items-center w-full">
+                    <input
+                      type="text"
+                      value={feedback}
+                      onChange={(e) => setFeedback(e.target.value)}
+                      placeholder="Enter your feedback..."
+                      className="flex-grow px-3 py-2 border border-gray-300 rounded-l shadow-sm focus:outline-none focus:ring focus:border-blue-300"
+                    />
+                    <button
+                      onClick={() => {
+                        if (feedback.trim()) {
+                          trackEvent("feedback", { panel: "map", feedback });
+                          setFeedback(""); // Clear the input
+                          setShowThanks(true); // Show thanks message
+                          // Hide thanks message after 2 seconds
+                          setTimeout(() => setShowThanks(false), 2000);
+                        }
+                      }}
+                      className="px-4 py-2 bg-blue-500 text-white rounded-r hover:bg-blue-600 transition-colors"
+                    >
+                      Send
+                    </button>
+                  </div>
+                  {showThanks && (
+                    <div className="absolute top-[-2rem] text-green-600 font-medium animate-fade-in">
+                      Thanks!
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 
+            
           {/* Plan Verification Section - Fixed Width */}
           <div className="w-80 h-full shrink-0">
             <Card className="h-full rounded-l-xl">

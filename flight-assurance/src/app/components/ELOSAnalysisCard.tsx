@@ -2,6 +2,7 @@
 "use client";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { Info } from "lucide-react";
 import React, { useCallback, useEffect, useState } from "react";
 import { useLocation } from "../context/LocationContext";
 import { useLOSAnalysis } from "../context/LOSAnalysisContext";
@@ -444,7 +445,7 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
   const renderStationToStationUI = () => {
     if (availableStations.length < 2) {
       return (
-        <div className="p-3 bg-yellow-100 border border-yellow-400 text-sm text-yellow-700 rounded">
+        <div className="p-3 bg-yellow-100 border border-yellow-400 text-xs text-yellow-700 rounded">
           ⚠️ Place at least two stations on the map to perform station-to-station analysis.
           {availableStations.length === 1 && (
             <div className="mt-2">
@@ -890,7 +891,7 @@ const renderMergedAnalysisSection = () => {
       </div>
 
       {availableStations.length < 2 ? (
-        <div className="p-3 bg-yellow-100 border border-yellow-400 text-sm text-yellow-700 rounded">
+        <div className="p-3 bg-yellow-100 border border-yellow-400 text-xs text-yellow-700 rounded">
           ⚠️ Place at least two stations on the map to perform merged visibility analysis.
           {availableStations.length === 1 && (
             <div className="mt-2">
@@ -902,10 +903,13 @@ const renderMergedAnalysisSection = () => {
       ) : (
         <>
           <div className="mb-4">
+          <div className="flex items-center gap-1 mt-2">
+          <Info className="w-10 h-10 text-gray-500" />
             <p className="text-xs text-gray-600 mb-2">
-              Analyse combined visibility from all placed stations, showing areas visible
+              This tool shows the combined visibility from all placed stations, showing areas visible
               to at least one station.
             </p>
+          </div>
             
             {/* Grid Range/Size Control */}
             <div className="flex flex-row gap-4 mt-4">
@@ -919,8 +923,8 @@ const renderMergedAnalysisSection = () => {
                   type="range"
                   style={{ height: "6px" }}
                   min="500"
-                  max="2500"
-                  step="50"
+                  max="5000"
+                  step="100"
                   value={elosGridRange}
                   onChange={(e) => setElosGridRange(Number(e.target.value))}
                   className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
@@ -1082,14 +1086,12 @@ const renderMergedAnalysisSection = () => {
             }`}
           >
             {isAnalyzing ? "Analyzing..." : "Run Full Analysis"}
-          </button>
-          <p className="text-xs text-gray-500 mt-2">
-            Each square in the grid represents the local visibility of your flight path within the grid range you’ve set.
-            In other words, for each square, the system calculates the percentage of your flight path—within the specified grid range—that has an unobstructed view to that square.
-          </p>
-
-
-
+          </button><div className="flex items-center gap-1 mt-2">
+            <Info className="w-12 h-12 text-gray-500" />
+            <p className="text-xs text-gray-500">
+              This tool allows you to determine where to put your GCS, observer and repeater stations to ensure LOS with your drone.
+            </p>
+          </div>
           {/* Results Display */}
           {results && results.stats && (
             <div className="mt-4 p-4 bg-gray-50 rounded">
@@ -1126,14 +1128,17 @@ const renderMergedAnalysisSection = () => {
           <h3 className="text-base ml-2 font-semibold mb-2">
             Station Based LOS Analysis
           </h3>
-          <p className="text-xs ml-2 text-gray-500">
-            Determine the LOS of your stations to the surrounding area. Don&apos;t forget to include their elevation. </p>
+          <div className="flex items-center gap-1 mx-2">
+            <Info className="w-10 h-10 text-gray-500" />
+            <p className="text-xs ml-2 text-gray-500">
+            This tool shows the LOS of your stations to the surrounding area. Don&apos;t forget to include their elevation. </p>
+          </div>
 
           {/* --- Station Based LOS Analysis Sub-section --- */}
           <div className="mt-4 ml-2 p-4 bg-gray-50 rounded border-l-2 border-accentGold shadow-sm">
           
             {!gcsLocation && !observerLocation && !repeaterLocation && (
-              <div className="p-3 mb-3 bg-yellow-100 border border-yellow-400 text-sm text-yellow-700 rounded">
+              <div className="p-3 mb-3 bg-yellow-100 border border-yellow-400 text-xs text-yellow-700 rounded">
                 ⚠️ To unlock 📡GCS Station/🔭Observer Station/⚡️Repeater Station Line of Sight analysis, drop markers on the map.
               </div>
             )}
@@ -1205,7 +1210,7 @@ const renderMergedAnalysisSection = () => {
             </button>
               {/* Warning message when no station is placed */}
               {(!gcsLocation && !observerLocation && !repeaterLocation) && (
-                <div className="mt-2 p-3 bg-yellow-100 border border-yellow-400 text-sm text-yellow-700 rounded">
+                <div className="mt-2 p-3 bg-yellow-100 border border-yellow-400 text-xs text-yellow-700 rounded">
                   ⚠️ Place at least one station on the map to perform Flight Path Visibility Analysis.
                 </div>
               )}
