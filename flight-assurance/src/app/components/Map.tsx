@@ -419,7 +419,7 @@ const Map = forwardRef<MapRef, MapProps>(
           if (endMarkerRef.current) {
             endMarkerRef.current.setLngLat([endCoord[0], endCoord[1]]);
           } else {
-            const newEndMarker = new mapboxgl.Marker({ color: "red" })
+            const newEndMarker = new mapboxgl.Marker({ color: "blue" })
               .setLngLat([endCoord[0], endCoord[1]])
               .setPopup(
                 new mapboxgl.Popup({ closeButton: false }).setHTML(
@@ -526,7 +526,7 @@ const Map = forwardRef<MapRef, MapProps>(
                   markerRef.current.setLngLat([lng, lat]);
               } else {
                   if (mapRef.current) {
-                      markerRef.current = new mapboxgl.Marker({ color: 'blue' })
+                      markerRef.current = new mapboxgl.Marker({ color: 'red' })
                           .setLngLat([lng, lat])
                           .setPopup(
                               new mapboxgl.Popup({ closeButton: false }).setHTML(
@@ -1281,7 +1281,22 @@ const handleFileProcessing = (data: any) => {
       setElosProgressDisplay(0);
       setIsAnalyzing(false);
     };
+
+    // Powerlines and Airspace Overlays
+    const handleAddPowerlines = () => {
+      if (!mapRef.current) return;
+      // Toggle both the powerlines line and its hitbox layers
+      toggleLayerVisibility("Electricity Transmission Lines");
+      toggleLayerVisibility("Electricity Transmission Lines Hitbox");
+    };
     
+    const handleAddAirspaceOverlay = () => {
+      if (!mapRef.current) return;
+      // Toggle both the airfields fill and the labels layers
+      toggleLayerVisibility("Airfields");
+      toggleLayerVisibility("Airfields Labels");
+    };  
+
 
     return (
       <div className="relative">
@@ -1322,7 +1337,7 @@ const handleFileProcessing = (data: any) => {
 
           {/* Add Ground Station, Observer, and Repeater Buttons */}
           <div className="absolute top-4 right-4 z-10 flex flex-col space-y-2">
-          <button 
+            <button 
               onClick={() => {
                 trackEvent("add_ground_station_click", { panel: "map.tsx" });
                 addGroundStation();
@@ -1349,14 +1364,32 @@ const handleFileProcessing = (data: any) => {
             >
               Add Repeater ⚡️
             </button>
-                      
             <button 
               onClick={() => {
                 trackEvent("reset_los_analyses_click", { panel: "map.tsx" });
+                handleResetMap();
               }} 
               className="map-button"
             >
-              Reset LOS Analyses
+              Reset LOS Analyses 🚫
+            </button>
+            <button 
+              onClick={() => {
+                trackEvent("powerlines_add_overlay_click", { panel: "map.tsx" });
+                handleAddPowerlines();
+              }} 
+              className="map-button"
+            >
+              Add Powerlines 🔌
+            </button>
+            <button 
+              onClick={() => {
+                trackEvent("airspace_add_overlay_click", { panel: "map.tsx" });
+                handleAddAirspaceOverlay();
+              }} 
+              className="map-button"
+            >
+              Add Airspace Overlay ✈️
             </button>
           </div>
     

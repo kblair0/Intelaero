@@ -38,19 +38,19 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
     onPowerlineMouseLeave?: () => void;
     onMapMouseMove?: (e: mapboxgl.MapMouseEvent) => void;
   }>({});
-  
+
   // Track the current feature being hovered
   const currentFeatureRef = useRef<mapboxgl.MapboxGeoJSONFeature | null>(null);
-  
+
   useEffect(() => {
     if (!map) return;
-    
+
     // We're in a useEffect, so we're guaranteed to be on the client
     // Safe to dynamically import mapbox-gl
     import('mapbox-gl').then((mapboxModule) => {
       const mapboxgl = mapboxModule.default;
       const extMap = map as ExtendedMapboxMap;
-      
+
       // ----------- Powerlines Layer Setup -----------
       const powerSourceLayerName = "Electricity_Transmission_Line-08vle5";
 
@@ -67,8 +67,18 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
           type: "line",
           source: "electricity-lines",
           "source-layer": powerSourceLayerName,
-          layout: { visibility: "visible" },
-          paint: { "line-width": 2, "line-color": "#f00" }
+          layout: { visibility: "none" },
+          paint: { 
+            "line-color": "#f00",
+            "line-width": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              5, 3,
+              15, 1
+            ]
+          },
+          minzoom: 10
         });
       }
 
@@ -78,8 +88,9 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
           type: "line",
           source: "electricity-lines",
           "source-layer": powerSourceLayerName,
-          layout: { visibility: "visible" },
-          paint: { "line-width": 20, "line-color": "rgba(0,0,0,0)" }
+          layout: { visibility: "none" },
+          paint: { "line-width": 20, "line-color": "rgba(0,0,0,0)" },
+          minzoom: 10
         });
       }
 
@@ -90,7 +101,7 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
         map.getCanvas().style.cursor = "pointer";
         const feature = e.features && e.features[0];
         if (!feature) return;
-        
+
         // Store current feature for reference
         currentFeatureRef.current = feature;
 
@@ -124,7 +135,7 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
       const handlePowerlineMouseLeave = () => {
         map.getCanvas().style.cursor = "";
         currentFeatureRef.current = null;
-        
+
         if (extMap.__currentPopup) {
           extMap.__currentPopup.remove();
           extMap.__currentPopup = null;
@@ -132,25 +143,22 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
       };
 
       // Additional safety: track mouse movement across entire map
-      // This ensures popup cleanup even if mouseleave events are missed
       const handleMapMouseMove = (e: mapboxgl.MapMouseEvent) => {
         const features = map.queryRenderedFeatures(e.point, { 
           layers: ["Electricity Transmission Lines Hitbox"] 
         });
-        
-        // If we're not over a powerline but we have a currentFeature
-        // the mouse has left the powerline without triggering the mouseleave event
+
         if (features.length === 0 && currentFeatureRef.current !== null) {
           handlePowerlineMouseLeave();
         }
       };
 
-      // Bind handlers
+      // Bind powerline event handlers
       map.on("mouseenter", "Electricity Transmission Lines Hitbox", handlePowerlineMouseEnter);
       map.on("mouseleave", "Electricity Transmission Lines Hitbox", handlePowerlineMouseLeave);
       map.on("mousemove", handleMapMouseMove);
 
-      // Store in ref for cleanup (single source of truth)
+      // Store in ref for cleanup
       eventHandlersRef.current = {
         onPowerlineMouseEnter: handlePowerlineMouseEnter,
         onPowerlineMouseLeave: handlePowerlineMouseLeave,
@@ -161,115 +169,85 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
       if (!map.getSource("airfields")) {
         map.addSource("airfields", {
           type: "vector",
-          url: "mapbox://intelaero.6qpae87g"
+          url: "mapbox://intelaero.5d451fq2"
         });
       }
-
+      
       if (!map.getLayer("Airfields")) {
         map.addLayer({
           id: "Airfields",
-          type: "circle",
+          type: "fill",
+          layout: { visibility: "none" },
           source: "airfields",
-          "source-layer": "hotosm_aus_airports_points_ge-21mapu",
+          "source-layer": "July2024Airservices-7op6cm",
           paint: {
-            "circle-radius": 4,
-            "circle-color": "#ff0",
-            "circle-opacity": 1
+            "fill-color": "#ff7f50",
+            "fill-opacity": 0.2,
+            "fill-outline-color": "#ff0"
           },
-          filter: [
-            "in",
-            ["get", "aeroway"],
-            ["literal", ["aerodrome", "terminal", "helipad"]]
-          ]
+          minzoom: 10
         });
       }
-
-      const onAirfieldMouseEnter = (
-        e: mapboxgl.MapMouseEvent & { features?: mapboxgl.MapboxGeoJSONFeature[] }
-      ) => {
-        const feature = e.features && e.features[0];
-        if (!feature) return;
-
-        map.getCanvas().style.cursor = "pointer"; // Change cursor to pointer
-
-        const name = feature.properties?.name || "Unnamed"; // Fallback if no name
-        const aeroway = feature.properties?.aeroway || "Unknown"; // Fallback if missing
-        const aerowayFormatted = aeroway.charAt(0).toUpperCase() + aeroway.slice(1); // Capitalize
-        const coordinates = e.lngLat;
-
-        const popupContent = `
-          <div style="padding: 2px; font-family: Arial, sans-serif;">
-            <h3 style="margin: 0 0 2px 0; font-size: 14px;">${name}</h3>
-            <p style="margin: 0; font-size: 14px;"><strong>Type:</strong> ${aerowayFormatted}</p>
-          </div>
-        `;
-
-        // Remove any existing popup first
-        if (extMap.__airfieldsPopup) {
-          extMap.__airfieldsPopup.remove();
-        }
-
-        const popup = new mapboxgl.Popup({
-          closeButton: false, // No close button for hover
-          closeOnClick: false // Don't close on map click
-        })
-          .setLngLat(coordinates)
-          .setHTML(popupContent)
-          .addTo(map);
-
-        extMap.__airfieldsPopup = popup;
-      };
-
-      const onAirfieldMouseLeave = () => {
-        map.getCanvas().style.cursor = ""; // Reset cursor
-        if (extMap.__airfieldsPopup) {
-          extMap.__airfieldsPopup.remove();
-          extMap.__airfieldsPopup = null;
-        }
-      };
-
-      map.on("mouseenter", "Airfields", onAirfieldMouseEnter);
-      map.on("mouseleave", "Airfields", onAirfieldMouseLeave);
-
+      
+      if (!map.getLayer("Airfields Labels")) {
+        map.addLayer({
+          id: "Airfields Labels",
+          type: "symbol",
+          source: "airfields",
+          "source-layer": "July2024Airservices-7op6cm",
+          layout: {
+            "visibility": "none",
+            "text-field": ["get", "title"],
+            "symbol-placement": "line",
+            "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
+            "text-size": 12,
+            "text-offset": [0, 0],
+            "text-anchor": "center"
+          },
+          paint: {
+            "text-color": "#000"
+          },
+          minzoom: 10
+        });
+      }
+      
     });
 
     // Cleanup function
     return () => {
       if (!map) return;
-      
-      // Clean up event listeners using the ref
+
       if (eventHandlersRef.current.onPowerlineMouseEnter) {
         map.off(
-          "mouseenter", 
-          "Electricity Transmission Lines Hitbox", 
+          "mouseenter",
+          "Electricity Transmission Lines Hitbox",
           eventHandlersRef.current.onPowerlineMouseEnter
         );
       }
-      
+
       if (eventHandlersRef.current.onPowerlineMouseLeave) {
         map.off(
-          "mouseleave", 
-          "Electricity Transmission Lines Hitbox", 
+          "mouseleave",
+          "Electricity Transmission Lines Hitbox",
           eventHandlersRef.current.onPowerlineMouseLeave
         );
       }
-      
+
       if (eventHandlersRef.current.onMapMouseMove) {
         map.off("mousemove", eventHandlersRef.current.onMapMouseMove);
       }
-      
+
       map.off("mouseenter", "Airfields");
       map.off("mouseleave", "Airfields");
       map.off("sourcedata");
       map.off("click", "Airfields");
-      
-      // Handle popups
+
       const extMap = map as ExtendedMapboxMap;
       if (extMap.__airfieldsPopup) {
         extMap.__airfieldsPopup.remove();
         extMap.__airfieldsPopup = null;
       }
-      
+
       if (extMap.__currentPopup) {
         extMap.__currentPopup.remove();
         extMap.__currentPopup = null;

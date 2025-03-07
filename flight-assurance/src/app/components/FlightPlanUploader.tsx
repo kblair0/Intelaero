@@ -355,7 +355,7 @@ function inferHomePosition(coordinates: [number, number, number][]) {
   return { latitude: lat, longitude: lon, altitude: alt ?? 0 };
 }
 
-// New function to submit flight plan data to the new Google Form
+// function to submit flight plan data to the new Google Form
 const trackFlightPlan = async (
   flightData: import("../context/FlightPlanContext").FlightPlanData,
   fileName: string
@@ -483,10 +483,14 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded,
         });
       }
 
+      // Inside onDrop after processing the flight plan
       setFlightPlan(newFlightPlan);
 
-      // Submit to new Google Form instead of /api/uploadFlightPlan
-      await trackFlightPlan(newFlightPlan, file.name);
+      // Only track flight plan in production
+      if (process.env.NODE_ENV === "production") {
+        await trackFlightPlan(newFlightPlan, file.name);
+      }
+
 
       setFileUploadStatus("processed");
       if (onClose) onClose();
@@ -536,7 +540,10 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded,
       }
 
       // Submit example GeoJSON to new form
-      await trackFlightPlan(newFlightPlan, "example.geojson");
+      // Only track example flight plan in production
+      if (process.env.NODE_ENV === "production") {
+        await trackFlightPlan(newFlightPlan, "example.geojson");
+      }
 
       setFileUploadStatus("processed");
     } catch (error) {

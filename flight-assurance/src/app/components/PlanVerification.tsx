@@ -14,6 +14,30 @@ import { trackEventWithForm as trackEvent } from "./tracking/tracking";
 const ObstacleAssessment = dynamic(() => import("./ObstacleAssessment"), { ssr: false });
 const TerrainClearancePopup = dynamic(() => import("./TerrainClearancePopup"), { ssr: false });
 
+// --- Define layer toggle functions
+const toggleLayerVisibility = (mapRef: React.RefObject<MapRef>, layerName: string) => {
+  if (!mapRef.current) return;
+  const map = mapRef.current.getMap();
+  if (!map) return;
+  const visibility = map.getLayoutProperty(layerName, 'visibility');
+  map.setLayoutProperty(layerName, 'visibility', visibility === 'visible' ? 'none' : 'visible');
+};
+
+// Powerlines and Airspace Overlays Toggle
+const handleAddPowerlines = (mapRef: React.RefObject<MapRef>) => {
+  if (!mapRef.current) return;
+  toggleLayerVisibility(mapRef, "Electricity Transmission Lines");
+  toggleLayerVisibility(mapRef, "Electricity Transmission Lines Hitbox");
+};
+
+const handleAddAirspaceOverlay = (mapRef: React.RefObject<MapRef>) => {
+  if (!mapRef.current) return;
+  toggleLayerVisibility(mapRef, "Airfields");
+  toggleLayerVisibility(mapRef, "Airfields Labels");
+};
+
+
+
 interface PlanVerificationProps {
   mapRef: React.RefObject<MapRef>;
   onTogglePanel: (panel: 'energy' | 'los' | null) => void;
@@ -242,14 +266,12 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
         <div className="flex flex-col gap-2 mt-3">
           <button
             onClick={() => {
-              trackEvent("airspace_request_click", { panel: "planverification.tsx" });
-              if (typeof window !== "undefined") {
-                window.alert("Coming Soon!");
-              }
+              trackEvent("toggle_airspace_overlay", { panel: "planverification.tsx" });
+              handleAddAirspaceOverlay(mapRef);
             }}
-            className="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 transition-colors"
+            className="mt-2 flex gap-2 px-3 py-1.5 bg-blue-500 justify-center text-white text-sm rounded-md hover:bg-blue-600 transition-colors"
           >
-            Add Airspace Overlay
+            ✈️ Toggle Airspace
           </button>
           <button
             onClick={() => {
@@ -557,14 +579,12 @@ const getEnergyAnalysis = (): VerificationSection => {
                   {section.id === "terrain" && (
                     <button
                       onClick={() => {
-                        trackEvent("powerlines_request_click", { panel: "planverification.tsx" });
-                        if (typeof window !== "undefined") {
-                          window.alert("Coming Soon!");
-                        }
+                        trackEvent("toggle_powerlines_overlay", { panel: "planverification.tsx" });
+                        handleAddPowerlines(mapRef);
                       }}
                       className="mt-2 flex items-center gap-2 px-3 py-1.5 bg-green-500 text-white text-sm rounded-md hover:bg-green-600 transition-colors"
                     >
-                      ⚡ Add Powerlines
+                      ⚡ Toggle Powerlines
                     </button>
                   )}
                 </>
