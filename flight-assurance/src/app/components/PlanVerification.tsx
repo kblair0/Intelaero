@@ -242,7 +242,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
         <div className="flex flex-col gap-2 mt-3">
           <button
             onClick={() => {
-              trackEvent("airspace_request_click", { panel: "basic" });
+              trackEvent("airspace_request_click", { panel: "planverification.tsx" });
               if (typeof window !== "undefined") {
                 window.alert("Coming Soon!");
               }
@@ -253,7 +253,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
           </button>
           <button
             onClick={() => {
-              trackEvent("insert_weather_click", { panel: "weather" });
+              trackEvent("insert_weather_click", { panel: "planverification.tsx" });
               if (typeof window !== "undefined") {
                 window.alert("Coming Soon!");
               }
@@ -374,8 +374,12 @@ const getEnergyAnalysis = (): VerificationSection => {
           )
         }
       ],
-      action: () => setShowTerrainPopup(true),
+      action: () => {
+        trackEvent("terrain_detailed_analysis_click", { panel: "terrain", actionLabel: "View Detailed Analysis" });
+        setShowTerrainPopup(true);
+      },
       actionLabel: "View Detailed Analysis"
+      
     };
   };
 
@@ -553,7 +557,7 @@ const getEnergyAnalysis = (): VerificationSection => {
                   {section.id === "terrain" && (
                     <button
                       onClick={() => {
-                        trackEvent("powerlines_request_click", { panel: "terrain" });
+                        trackEvent("powerlines_request_click", { panel: "planverification.tsx" });
                         if (typeof window !== "undefined") {
                           window.alert("Coming Soon!");
                         }

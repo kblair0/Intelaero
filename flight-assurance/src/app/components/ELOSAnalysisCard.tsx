@@ -13,6 +13,8 @@ import StationCard from "./StationCard";
 import mapboxgl from 'mapbox-gl';
 import * as turf from '@turf/turf';
 import { analyzeFlightPathVisibility, addVisibilityLayer } from './flightPathVisibilityAnalysis';
+import { trackEventWithForm as trackEvent } from "./tracking/tracking";
+
 // Import both the LOS check and the new profile function and types.
 import { 
   checkStationToStationLOS, 
@@ -507,7 +509,14 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
         {/* Existing buttons for analysis */}
         <div className="flex flex-col gap-2">
           <button
-            onClick={handleStationLOSCheck}
+            onClick={() => {
+              trackEventWithForm("station_los_check_click", {
+                panel: "ELOSAnalysisCard.tsx",
+                source: sourceStation,
+                target: targetStation
+              });
+              handleStationLOSCheck();
+            }}
             className={`${
               stationLOSResult ? "flex-1" : "w-full"
             } py-2 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed`}
@@ -519,10 +528,18 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
           >
             Check Station-to-Station LOS
           </button>
-  
+          
           {stationLOSResult && (
             <button
-              onClick={handleShowLOSGraph}
+              onClick={() => {
+                trackEventWithForm("show_los_graph_click", { 
+                  panel: "ELOSAnalysisCard.tsx",
+                  source: sourceStation,
+                  target: targetStation,
+                  result: stationLOSResult.clear ? "clear" : "obstructed"
+                });
+                handleShowLOSGraph();
+              }}
               className="flex-1 py-2 bg-indigo-500 text-white text-sm rounded hover:bg-indigo-600 transition-colors"
             >
               Show LOS Graph
@@ -954,7 +971,10 @@ const renderMergedAnalysisSection = () => {
 
           {/* Analysis Button */}
           <button
-            onClick={handleMergedAnalysis}
+            onClick={() => {
+              trackEventWithForm("merged_analysis_click", { panel: "ELOSAnalysisCard.tsx" });
+              handleMergedAnalysis();
+            }}
             disabled={isAnalyzing}
             className={`w-full py-2 rounded-lg text-sm font-medium transition-colors ${
               isAnalyzing
@@ -1077,7 +1097,10 @@ const renderMergedAnalysisSection = () => {
           )}
 
           <button
-            onClick={handleAnalysis}
+            onClick={() => {
+              trackEventWithForm("elos_full_analysis_click", { panel: "ELOSAnalysisCard.tsx" });
+              handleAnalysis();
+            }}
             disabled={!isFlightPlanLoaded || isAnalyzing}
             className={`w-full py-2 rounded-lg text-sm font-medium transition-colors ${
               !isFlightPlanLoaded || isAnalyzing
@@ -1086,7 +1109,9 @@ const renderMergedAnalysisSection = () => {
             }`}
           >
             {isAnalyzing ? "Analyzing..." : "Run Full Analysis"}
-          </button><div className="flex items-center gap-1 mt-2">
+          </button>
+          
+          <div className="flex items-center gap-1 mt-2">
             <Info className="w-12 h-12 text-gray-500" />
             <p className="text-xs text-gray-500">
               This tool allows you to determine where to put your GCS, observer and repeater stations to ensure LOS with your drone.
@@ -1195,8 +1220,12 @@ const renderMergedAnalysisSection = () => {
             <h4 className="text-m font-semibold mb-2">
               Flight Path Visibility Analysis
             </h4>
+
             <button
-              onClick={handleFlightPathVisibility}
+              onClick={() => {
+                trackEventWithForm("flight_path_visibility_click", { panel: "ELOSAnalysisCard.tsx" });
+                handleFlightPathVisibility();
+              }}
               disabled={!isFlightPlanLoaded || isAnalyzing}
               className={`w-full py-2 rounded-lg text-sm font-medium transition-colors ${
                 (!isFlightPlanLoaded || isAnalyzing)
@@ -1208,6 +1237,7 @@ const renderMergedAnalysisSection = () => {
                 ? "Analyzing..."
                 : "Check Visibility from All Stations"}
             </button>
+
               {/* Warning message when no station is placed */}
               {(!gcsLocation && !observerLocation && !repeaterLocation) && (
                 <div className="mt-2 p-3 bg-yellow-100 border border-yellow-400 text-xs text-yellow-700 rounded">

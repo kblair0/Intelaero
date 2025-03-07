@@ -77,12 +77,16 @@ const HomeContent = () => {
                       <h3 className="text-lg font-semibold text-gray-900">
                         Flight Plan Upload
                       </h3>
-                      <button
-                        onClick={() => setShowUploader(false)}
-                        className="text-gray-500 hover:text-gray-700"
-                      >
-                        <X size={20} />
-                      </button>
+                        {/* Close Uploader Button */}
+                        <button
+                          onClick={() => {
+                            trackEvent("uploader_close_click", { panel: "page.tsx" });
+                            setShowUploader(false);
+                          }}
+                          className="text-gray-500 hover:text-gray-700"
+                        >
+                          <X size={20} />
+                        </button>
                     </div>
                     <FlightPlanUploader
                       onClose={() => setShowUploader(false)}
@@ -97,8 +101,13 @@ const HomeContent = () => {
               )}
               {/* Analysis Control Buttons */}
               <div className="absolute top-4 left-4 z-10 flex flex-row gap-2 mb-4">
+                
+                {/* Energy Analysis Button */}
                 <button
-                  onClick={() => togglePanel("energy")}
+                  onClick={() => {
+                    trackEvent("map_energy_panel_click", { panel: "page.tsx" });
+                    togglePanel("energy");
+                  }}
                   className={`map-button flex items-center gap-2 transition-colors ${
                     activePanel === "energy"
                       ? "bg-blue-100 border-blue-300 shadow-md"
@@ -108,8 +117,13 @@ const HomeContent = () => {
                   <Battery className="w-4 h-4" />
                   Energy Analysis
                 </button>
+
+                {/* LOS Analysis Button */}
                 <button
-                  onClick={() => togglePanel("los")}
+                  onClick={() => {
+                    trackEvent("map_los_panel_click", { panel: "page.tsx" });
+                    togglePanel("los");
+                  }}
                   className={`map-button flex items-center gap-2 transition-colors ${
                     activePanel === "los"
                       ? "bg-blue-100 border-blue-300 shadow-md"
@@ -119,17 +133,23 @@ const HomeContent = () => {
                   <Radio className="w-4 h-4" />
                   LOS Analysis
                 </button>
+
+                {/* Upload Flight Plan Button */}
                 {flightPlan && (
                   <button
-                    onClick={() => setShowUploader(true)}
+                    onClick={() => {
+                      trackEvent("upload_flight_plan_click", { panel: "page.tsx" });
+                      setShowUploader(true);
+                    }}
                     className="map-button flex items-center gap-2 transition-colors hover:bg-gray-300/80"
                   >
                     Upload Flight Plan
                   </button>
                 )}
+
                 <button
                   onClick={() => {
-                    trackEvent("own_dem_data_request", { panel: "dem" });
+                    trackEvent("own_dem_data_request", { panel: "page.tsx" });
                     window.alert("Coming Soon!");
                   }}
                   className="map-button flex items-center gap-2 transition-colors hover:bg-gray-300/80"
@@ -152,7 +172,7 @@ const HomeContent = () => {
                     <button
                       onClick={() => {
                         if (feedback.trim()) {
-                          trackEvent("feedback", { panel: "map", feedback });
+                          trackEvent("feedback", { panel: "page.tsx", feedback });
                           setFeedback(""); // Clear the input
                           setShowThanks(true); // Show thanks message
                           // Hide thanks message after 2 seconds

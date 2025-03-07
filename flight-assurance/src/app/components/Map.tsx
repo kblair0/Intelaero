@@ -1305,7 +1305,10 @@ const handleFileProcessing = (data: any) => {
                 </div>
               </div>
               <button
-                onClick={stopAnalysisHandler}
+                onClick={() => {
+                  trackEvent("stop_analysis_click", { panel: "map.tsx" });
+                  stopAnalysisHandler();
+                }}
                 className="bg-red-500 hover:bg-red-600 text-white px-2 py-0.5 rounded text-xs"
               >
                 Stop
@@ -1319,11 +1322,42 @@ const handleFileProcessing = (data: any) => {
 
           {/* Add Ground Station, Observer, and Repeater Buttons */}
           <div className="absolute top-4 right-4 z-10 flex flex-col space-y-2">
-            <button onClick={addGroundStation} className="map-button ground-station-icon">Add Ground Station 📡</button>
-            <button onClick={addObserver} className="map-button observer-icon">Add Observer 🔭</button>
-            <button onClick={addRepeater} className="map-button repeater-icon">Add Repeater ⚡️</button>
-          
-            <button onClick={handleResetMap} className="map-button">Reset LOS Analyses</button>
+          <button 
+              onClick={() => {
+                trackEvent("add_ground_station_click", { panel: "map.tsx" });
+                addGroundStation();
+              }} 
+              className="map-button ground-station-icon"
+            >
+              Add Ground Station 📡
+            </button>
+            <button 
+              onClick={() => {
+                trackEvent("add_observer_click", { panel: "map.tsx" });
+                addObserver();
+              }} 
+              className="map-button observer-icon"
+            >
+              Add Observer 🔭
+            </button>
+            <button 
+              onClick={() => {
+                trackEvent("add_repeater_click", { panel: "map.tsx" });
+                addRepeater();
+              }} 
+              className="map-button repeater-icon"
+            >
+              Add Repeater ⚡️
+            </button>
+                      
+            <button 
+              onClick={() => {
+                trackEvent("reset_los_analyses_click", { panel: "map.tsx" });
+              }} 
+              className="map-button"
+            >
+              Reset LOS Analyses
+            </button>
           </div>
     
           {/* Analysis Status Indicator */}
@@ -1349,8 +1383,24 @@ const handleFileProcessing = (data: any) => {
     
           {/* Measurement Buttons */}
           <div className="absolute bottom-48 right-4 z-10 flex flex-col space-y-2">
-          <button onClick={startMeasuring} className="map-button">Start Measuring</button>
-          <button onClick={deleteMeasurement} className="map-button">Delete Measurement</button>
+          <button 
+            onClick={() => {
+              trackEvent("start_measuring_click", { panel: "map.tsx" });
+              startMeasuring();
+            }} 
+            className="map-button"
+          >
+            Start Measuring
+          </button>
+          <button 
+            onClick={() => {
+              trackEvent("delete_measurement_click", { panel: "map.tsx" });
+              deleteMeasurement();
+            }} 
+            className="map-button"
+          >
+            Delete Measurement
+          </button>
           </div>
 
     

@@ -1,3 +1,0 @@
-Flight assurance
-
-Soaring, Flying 🎶🎶🎶

@@ -4,7 +4,7 @@ import { useDropzone } from "react-dropzone";
 import { useFlightPlanContext } from "../context/FlightPlanContext";
 import toGeoJSON from "@mapbox/togeojson";
 import JSZip from "jszip";
-
+import { trackEventWithForm as trackEvent } from "./tracking/tracking";
 const parser = typeof window !== "undefined" ? new DOMParser() : null;
 
 // MavLink Altitude Mode Setter
@@ -45,13 +45,13 @@ function parseQGCFile(content: string): import("../context/FlightPlanContext").F
     const lon = parseFloat(parts[9]);
     const alt = parseFloat(parts[10]);
 
-    if (i === 1) homePosition = { latitude: lat, longitude: lon, altitude: alt }; // Initial home
+    if (i === 1) homePosition = { latitude: lat, longitude: lon, altitude: alt };
 
     const altitudeMode = frameToAltitudeMode(frame);
-    if (command === 22) { // Takeoff command
+    if (command === 22) {
       takeoffAltitude = alt;
-      if (frame === 10) isTerrainMission = true; // Terrain mode
-      if (frame === 3) isRelativeMission = true; // Relative mode
+      if (frame === 10) isTerrainMission = true;
+      if (frame === 3) isRelativeMission = true;
     }
 
     waypoints.push({
@@ -86,7 +86,18 @@ function parseQGCFile(content: string): import("../context/FlightPlanContext").F
     properties: {
       homePosition,
       config: {},
-      metadata: { processed: false },
+      metadata: {
+        processed: false,
+        source: "waypoints",
+        metadata: {
+          file: { version: "QGC WPL 110" },
+          segments: waypoints.map((wp) => ({
+            index: wp.index,
+            command: wp.commandType,
+            frame: wp.frame,
+          })),
+        },
+      },
     },
     features: [{
       type: "Feature",
@@ -96,36 +107,60 @@ function parseQGCFile(content: string): import("../context/FlightPlanContext").F
   };
 }
 
-// Parse KML file
-function parseKMLFile(kmlText: string): import("../context/FlightPlanContext").FlightPlanData {
-  const kmlDom = parser?.parseFromString(kmlText, "application/xml");
-  const geojsonResult = toGeoJSON.kml(kmlDom) as GeoJSON.FeatureCollection;
-
-  let coordinates: [number, number, number][] = [];
-  let name = "KML Flight Path";
-
-  for (const feature of geojsonResult.features) {
-    if (feature.geometry?.type === "LineString") {
-      coordinates = feature.geometry.coordinates.map(([lon, lat, alt]) => [lon, lat, alt ?? 0]);
-      name = feature.properties?.name || name;
-      break;
-    }
+// Parse KML file with enhanced metadata
+function parseKMLFile(kmlText: string, file?: File): import("../context/FlightPlanContext").FlightPlanData {
+  if (!parser) {
+    throw new Error("DOMParser is not available in this environment.");
   }
 
-  if (!coordinates.length) throw new Error("No LineString geometry found in KML");
+  const kmlDom = parser.parseFromString(kmlText, "application/xml");
+  const geojsonResult = toGeoJSON.kml(kmlDom) as GeoJSON.FeatureCollection;
 
-  const waypoints = coordinates.map((coord, index) => ({
+  const lineStringFeatures = geojsonResult.features.filter(
+    (feature): feature is GeoJSON.Feature<GeoJSON.LineString> => feature.geometry?.type === "LineString"
+  );
+
+  if (lineStringFeatures.length === 0) {
+    throw new Error("No valid LineString geometry found in KML file.");
+  }
+
+  const coordinates: [number, number, number][] = lineStringFeatures.flatMap((feature) =>
+    (feature.geometry as GeoJSON.LineString).coordinates.map(([lon, lat, alt]) => [
+      lon,
+      lat,
+      alt ?? 0,
+    ] as [number, number, number])
+  );
+
+  const waypoints: import("../context/FlightPlanContext").WaypointData[] = coordinates.map((coord, index) => ({
     index,
-    altitudeMode: "absolute",
+    altitudeMode: "absolute" as const,
     originalAltitude: coord[2],
+    commandType: 16,
+    frame: 0,
   }));
+
+  const fileName = kmlDom.querySelector("name")?.textContent;
+  const metadata: import("../context/FlightPlanContext").FlightPlanMetadata = {
+    processed: false,
+    source: "kml",
+    distance: lineStringFeatures.reduce((sum, f) => sum + (Number(f.properties?.Shape__Length) || 0), 0),
+    ...(file?.lastModified && { updated: Math.floor(file.lastModified / 1000) }),
+    metadata: {
+      file: { name: fileName ?? "KML Flight Path" },
+      segments: lineStringFeatures.map((f) => ({
+        ...f.properties,
+        coordinateCount: (f.geometry as GeoJSON.LineString).coordinates.length,
+      })),
+    },
+  };
 
   return {
     type: "FeatureCollection",
     properties: {
       homePosition: inferHomePosition(coordinates),
       config: {},
-      metadata: { processed: false },
+      metadata,
     },
     features: [{
       type: "Feature",
@@ -157,7 +192,14 @@ function parseGeoJSONFile(geojsonText: string): import("../context/FlightPlanCon
     properties: {
       homePosition: inferHomePosition(coordinates),
       config: {},
-      metadata: { processed: false },
+      metadata: {
+        processed: false,
+        source: "geojson",
+        metadata: {
+          file: { featureCount: geojsonResult.features.length },
+          segments: geojsonResult.features.map((f) => f.properties || {}),
+        },
+      },
     },
     features: [{
       type: "Feature",
@@ -171,28 +213,25 @@ function parseGeoJSONFile(geojsonText: string): import("../context/FlightPlanCon
 async function parseKMZFile(file: File): Promise<import("../context/FlightPlanContext").FlightPlanData> {
   const zip = await JSZip.loadAsync(file);
   const fileNames = Object.keys(zip.files);
-  
+
   console.log("KMZ contents:", fileNames);
-  
-  // Check for files either at root or in wpmz/ directory
+
   const templateFile = zip.file("template.kml") || zip.file("wpmz/template.kml");
   const waylinesFile = zip.file("waylines.wpml") || zip.file("wpmz/waylines.wpml");
-  
+
   if (templateFile && waylinesFile) {
-    // Process as DJI format
     const templateText = await templateFile.async("string");
     const waylinesText = await waylinesFile.async("string");
-    
+
     const templateDom = parser!.parseFromString(templateText, "application/xml");
     const waylinesDom = parser!.parseFromString(waylinesText, "application/xml");
 
-    // Helper function to find elements with a specific tag name, handling namespaces
     const findElementsByTagName = (element: Element, tagName: string): Element[] => {
       const result: Element[] = [];
-      const allElements = element.getElementsByTagName('*');
+      const allElements = element.getElementsByTagName("*");
       for (let i = 0; i < allElements.length; i++) {
         const elem = allElements[i];
-        if (elem.localName === tagName || elem.tagName.endsWith(':' + tagName)) {
+        if (elem.localName === tagName || elem.tagName.endsWith(":" + tagName)) {
           result.push(elem);
         }
       }
@@ -200,74 +239,60 @@ async function parseKMZFile(file: File): Promise<import("../context/FlightPlanCo
     };
 
     const safeNum = (val: string | undefined | null) => Number(val) || 0;
-    
-    // Get home position
-    const takeOffRefPointElem = findElementsByTagName(templateDom, 'takeOffRefPoint')[0];
+
+    const takeOffRefPointElem = findElementsByTagName(templateDom, "takeOffRefPoint")[0];
     let homePosition = { latitude: 0, longitude: 0, altitude: 0 };
-    
+
     if (takeOffRefPointElem && takeOffRefPointElem.textContent) {
-      const homeParts = takeOffRefPointElem.textContent.split(',');
+      const homeParts = takeOffRefPointElem.textContent.split(",");
       homePosition = {
         latitude: safeNum(homeParts[0]),
         longitude: safeNum(homeParts[1]),
         altitude: safeNum(homeParts[2]),
       };
     }
-    
-    // Get height mode
-    const heightModeElem = findElementsByTagName(templateDom, 'heightMode')[0];
-    const executeHeightModeElem = findElementsByTagName(templateDom, 'executeHeightMode')[0];
-    
-    const heightMode = 
-      (heightModeElem && heightModeElem.textContent === "relativeToStartPoint") || 
+
+    const heightModeElem = findElementsByTagName(templateDom, "heightMode")[0];
+    const executeHeightModeElem = findElementsByTagName(templateDom, "executeHeightMode")[0];
+
+    const heightMode =
+      (heightModeElem && heightModeElem.textContent === "relativeToStartPoint") ||
       (executeHeightModeElem && executeHeightModeElem.textContent === "relativeToStartPoint")
         ? "relative"
         : (executeHeightModeElem && executeHeightModeElem.textContent === "realTimeFollowSurface")
           ? "terrain"
           : "absolute";
-    
-    // Get takeoff height
-    const takeOffSecurityHeightElem = findElementsByTagName(templateDom, 'takeOffSecurityHeight')[0];
+
+    const takeOffSecurityHeightElem = findElementsByTagName(templateDom, "takeOffSecurityHeight")[0];
     const takeoffHeight = safeNum(takeOffSecurityHeightElem?.textContent);
-    
-    // Set home altitude for terrain missions
+
     if (heightMode === "terrain") {
       homePosition.altitude = takeoffHeight;
     }
 
-    // Get all placemarks
-    const placemarks = Array.from(waylinesDom.getElementsByTagName('Placemark'));
-    
-    // Process waypoints
+    const placemarks = Array.from(waylinesDom.getElementsByTagName("Placemark"));
     const coordinates: [number, number, number][] = [];
     const waypoints: import("../context/FlightPlanContext").WaypointData[] = [];
 
-    
     placemarks.forEach((pm, index) => {
-      // Get coordinates
-      const coordElem = pm.querySelector('Point coordinates');
+      const coordElem = pm.querySelector("Point coordinates");
       if (!coordElem || !coordElem.textContent) return;
-      
+
       const coordText = coordElem.textContent.trim();
-      const coordParts = coordText.split(',');
+      const coordParts = coordText.split(",");
       if (coordParts.length < 2) return;
-      
+
       const lon = safeNum(coordParts[0]);
       const lat = safeNum(coordParts[1]);
-      
-      // Get altitude - FIXED: properly search for executeHeight tag
-      const executeHeightElems = findElementsByTagName(pm, 'executeHeight');
+      const executeHeightElems = findElementsByTagName(pm, "executeHeight");
       const altValue = executeHeightElems.length > 0 ? safeNum(executeHeightElems[0].textContent) : takeoffHeight;
-      
-      // Check for gimbal command
-      const actionElems = findElementsByTagName(pm, 'actionActuatorFunc');
-      const isGimbalCommand = actionElems.some(elem => 
-        elem.textContent && elem.textContent.includes('gimbal'));
-      
-      // Add coordinate with correct altitude
+
+      const actionElems = findElementsByTagName(pm, "actionActuatorFunc");
+      const isGimbalCommand = actionElems.some((elem) =>
+        elem.textContent && elem.textContent.includes("gimbal")
+      );
+
       coordinates.push([lon, lat, altValue]);
-      
-      // Add waypoint data
       waypoints.push({
         index,
         altitudeMode: heightMode,
@@ -276,14 +301,13 @@ async function parseKMZFile(file: File): Promise<import("../context/FlightPlanCo
         frame: 0,
       });
     });
-    
-    // Get other metadata
-    const speedElem = findElementsByTagName(templateDom, 'globalTransitionalSpeed')[0];
-    const finishActionElem = findElementsByTagName(templateDom, 'finishAction')[0];
-    const createTimeElem = findElementsByTagName(templateDom, 'createTime')[0];
-    const updateTimeElem = findElementsByTagName(templateDom, 'updateTime')[0];
-    const distanceElem = findElementsByTagName(waylinesDom, 'distance')[0];
-    
+
+    const speedElem = findElementsByTagName(templateDom, "globalTransitionalSpeed")[0];
+    const finishActionElem = findElementsByTagName(templateDom, "finishAction")[0];
+    const createTimeElem = findElementsByTagName(templateDom, "createTime")[0];
+    const updateTimeElem = findElementsByTagName(templateDom, "updateTime")[0];
+    const distanceElem = findElementsByTagName(waylinesDom, "distance")[0];
+
     return {
       type: "FeatureCollection",
       properties: {
@@ -294,10 +318,22 @@ async function parseKMZFile(file: File): Promise<import("../context/FlightPlanCo
           finishAction: finishActionElem?.textContent || "goHome",
         },
         metadata: {
-          created: safeNum(createTimeElem?.textContent),
-          updated: safeNum(updateTimeElem?.textContent),
-          distance: safeNum(distanceElem?.textContent),
           processed: false,
+          source: "kmz",
+          distance: safeNum(distanceElem?.textContent),
+          created: safeNum(createTimeElem?.textContent),
+          updated: safeNum(updateTimeElem?.textContent) || (file?.lastModified && Math.floor(file.lastModified / 1000)),
+          metadata: {
+            file: {
+              takeoffHeight,
+              speed: safeNum(speedElem?.textContent),
+              finishAction: finishActionElem?.textContent || "goHome",
+            },
+            segments: placemarks.map((pm, index) => ({
+              index,
+              executeHeight: safeNum(findElementsByTagName(pm, "executeHeight")[0]?.textContent),
+            })),
+          },
         },
       },
       features: [{
@@ -307,28 +343,81 @@ async function parseKMZFile(file: File): Promise<import("../context/FlightPlanCo
       }],
     };
   }
-  
-  // If single KML file, try to parse that instead
-  const kmlFiles = fileNames.filter(name => name.endsWith('.kml') && !name.includes('/'));
-  if (kmlFiles.length > 0) {
-    // Process single KML file logic here
-    // ...similar approach but adapted for single file structure
-  }
-  
-  // If we get here, no valid format was found
+
   throw new Error("Unsupported KMZ format. Only DJI flight plan KMZ files are supported.");
 }
 
 function inferHomePosition(coordinates: [number, number, number][]) {
-  if (!coordinates.length) return null;
+  if (!coordinates.length) return { latitude: 0, longitude: 0, altitude: 0 };
   const [lon, lat, alt] = coordinates[0];
   return { latitude: lat, longitude: lon, altitude: alt ?? 0 };
 }
 
+// New function to submit flight plan data to the new Google Form
+const trackFlightPlan = async (
+  flightData: import("../context/FlightPlanContext").FlightPlanData,
+  fileName: string
+) => {
+  const formUrl = "https://docs.google.com/forms/d/e/1FAIpQLScuzovyjSaTRVVKVLa-Y88bGjBp1uG-doxALVE4aAdJTmzvJg/formResponse"; // Your form's formResponse URL
+
+  const auditMetadata = {
+    uploadTimestamp: new Date().toISOString(),
+    userAgent: navigator.userAgent,
+    screenResolution: `${window.screen.width}x${window.screen.height}`,
+    language: navigator.language,
+    ipAddress: "", // Placeholder; enable IP fetch below if desired
+    userId: "", // Placeholder for future auth integration
+  };
+
+  // Fetch IP address 
+  try {
+    const ipResponse = await fetch("https://api.ipify.org?format=json");
+    const ipData = await ipResponse.json();
+    auditMetadata.ipAddress = ipData.ip;
+  } catch (error) {
+    console.error("Failed to fetch IP address:", error);
+  }
+
+
+  const formData = {
+    "entry.2094842776": new Date().toISOString(), // Timestamp
+    "entry.1248754852": fileName, // File Name
+    "entry.1814819258": JSON.stringify(flightData), // Flight Plan Data
+    "entry.903129689": JSON.stringify(auditMetadata), // Audit Metadata
+  };
+
+  let iframe = document.getElementById("hidden_iframe_flightplan") as HTMLIFrameElement;
+  if (!iframe) {
+    iframe = document.createElement("iframe");
+    iframe.name = "hidden_iframe_flightplan";
+    iframe.id = "hidden_iframe_flightplan";
+    iframe.style.display = "none";
+    document.body.appendChild(iframe);
+  }
+
+  const form = document.createElement("form");
+  form.action = formUrl;
+  form.method = "POST";
+  form.target = "hidden_iframe_flightplan";
+  form.style.display = "none";
+
+  Object.keys(formData).forEach((key) => {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = key;
+    input.value = formData[key];
+    form.appendChild(input);
+  });
+
+  document.body.appendChild(form);
+  form.submit();
+  document.body.removeChild(form);
+};
+
 interface FlightPlanUploaderProps {
   onPlanUploaded?: (flightData: import("../context/FlightPlanContext").FlightPlanData, resetMap: () => void) => void;
   onClose?: () => void;
-  mapRef?: React.RefObject<MapRef>;
+  mapRef?: React.RefObject<any>;
 }
 
 const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded, onClose, mapRef }) => {
@@ -336,148 +425,129 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded,
   const [fileName, setFileName] = useState<string | null>(null);
   const { setFlightPlan } = useFlightPlanContext();
 
+  const onDrop = async (acceptedFiles: File[]) => {
+    const file = acceptedFiles[0];
+    const fileExtension = file.name.split(".").pop()?.toLowerCase() || "";
+    setFileName(file.name);
+    setFileUploadStatus("uploading");
 
-// Flightplan Uploader Dropbox
-const onDrop = async (acceptedFiles: File[]) => {
-  const file = acceptedFiles[0];
-  const fileExtension = file.name.split(".").pop()?.toLowerCase() || "";
-  setFileName(file.name);
-  setFileUploadStatus("uploading");
+    try {
+      let flightData: import("../context/FlightPlanContext").FlightPlanData;
+      if (fileExtension === "kmz") {
+        flightData = await parseKMZFile(file);
+      } else {
+        const reader = new FileReader();
+        flightData = await new Promise<import("../context/FlightPlanContext").FlightPlanData>((resolve, reject) => {
+          reader.onload = () => {
+            try {
+              const result = reader.result as string;
+              if (fileExtension === "waypoints") resolve(parseQGCFile(result));
+              else if (fileExtension === "geojson") resolve(parseGeoJSONFile(result));
+              else if (fileExtension === "kml") resolve(parseKMLFile(result, file));
+              else reject(new Error("Unsupported file type"));
+            } catch (error) {
+              reject(error);
+            }
+          };
+          reader.onerror = () => reject(new Error("Failed to read file"));
+          reader.readAsText(file);
+        });
+      }
 
-  try {
-    let flightData: import("../context/FlightPlanContext").FlightPlanData;
-    if (fileExtension === "kmz") {
-      flightData = await parseKMZFile(file);
-    } else {
-      const reader = new FileReader();
-      flightData = await new Promise<import("../context/FlightPlanContext").FlightPlanData>((resolve, reject) => {
-        reader.onload = () => {
-          try {
-            const result = reader.result as string;
-            if (fileExtension === "waypoints") resolve(parseQGCFile(result));
-            else if (fileExtension === "geojson") resolve(parseGeoJSONFile(result));
-            else if (fileExtension === "kml") resolve(parseKMLFile(result));
-            else reject(new Error("Unsupported file type"));
-          } catch (error) {
-            reject(error);
+      const newFlightPlan = {
+        ...flightData,
+        properties: { ...flightData.properties, processed: false },
+      };
+
+      if (onPlanUploaded && mapRef?.current) {
+        onPlanUploaded(newFlightPlan, () => {
+          const map = mapRef.current!.getMap();
+          if (map) {
+            if (map.getLayer("line-0")) {
+              mapRef.current!.toggleLayerVisibility("line-0");
+            }
+            ["ELOS_GRID", "GCS_GRID", "OBSERVER_GRID", "REPEATER_GRID", "MERGED_VISIBILITY"].forEach((layer) => {
+              if (map.getSource(layer)) {
+                mapRef.current!.toggleLayerVisibility(layer);
+              }
+            });
+            map.getStyle().layers?.forEach((layer: any) => {
+              if (layer.id.startsWith("marker")) {
+                map.removeLayer(layer.id);
+                map.removeSource(layer.id);
+              }
+            });
           }
-        };
-        reader.onerror = () => reject(new Error("Failed to read file"));
-        reader.readAsText(file);
-      });
-      
+        });
+      }
+
+      setFlightPlan(newFlightPlan);
+
+      // Submit to new Google Form instead of /api/uploadFlightPlan
+      await trackFlightPlan(newFlightPlan, file.name);
+
+      setFileUploadStatus("processed");
+      if (onClose) onClose();
+    } catch (error) {
+      console.error("Error processing file:", error);
+      setFileUploadStatus("error");
     }
+  };
 
-    const newFlightPlan = {
-      ...flightData,
-      properties: { ...flightData.properties, processed: false },
-    };
+  const { getRootProps, getInputProps } = useDropzone({
+    accept: {
+      "application/vnd.google-earth.kmz": [".kmz"],
+      "application/vnd.google-earth.kml+xml": [".kml"],
+      "application/geo+json": [".geojson"],
+      "application/waypoints": [".waypoints"],
+    },
+    onDrop,
+  });
 
-    // Reset map and update flight plan if callback provided
-    if (onPlanUploaded && mapRef?.current) {
-      onPlanUploaded(newFlightPlan, () => {
-        const map = mapRef.current!.getMap();
-        if (map) {
-          // Hide old flight path
-          mapRef.current!.toggleLayerVisibility("line-0");
+  const loadExampleGeoJSON = async () => {
+    try {
+      const response = await fetch("/example.geojson");
+      const rawData = await response.json();
 
-          // Remove analysis layers
-          ["ELOS_GRID", "GCS_GRID", "OBSERVER_GRID", "REPEATER_GRID", "MERGED_VISIBILITY"].forEach(layer => {
-            if (map.getSource(layer)) {
-              mapRef.current!.toggleLayerVisibility(layer);
-            }
-          });
+      const processedData = parseGeoJSONFile(JSON.stringify(rawData));
+      const newFlightPlan = { ...processedData, properties: { ...processedData.properties, processed: false } };
 
-          // Remove markers
-          map.getStyle().layers?.forEach(layer => {
-            if (layer.id.startsWith("marker")) {
-              map.removeLayer(layer.id);
-              map.removeSource(layer.id);
-            }
-          });
-        }
-      });
+      setFlightPlan(newFlightPlan);
+      if (onPlanUploaded && mapRef?.current) {
+        onPlanUploaded(newFlightPlan, () => {
+          const map = mapRef.current!.getMap();
+          if (map) {
+            mapRef.current!.toggleLayerVisibility("line-0");
+            ["ELOS_GRID", "GCS_GRID", "OBSERVER_GRID", "REPEATER_GRID", "MERGED_VISIBILITY"].forEach((layer) => {
+              if (map.getSource(layer)) {
+                mapRef.current!.toggleLayerVisibility(layer);
+              }
+            });
+            map.getStyle().layers?.forEach((layer: any) => {
+              if (layer.id.startsWith("marker")) {
+                map.removeLayer(layer.id);
+                map.removeSource(layer.id);
+              }
+            });
+          }
+        });
+      }
+
+      // Submit example GeoJSON to new form
+      await trackFlightPlan(newFlightPlan, "example.geojson");
+
+      setFileUploadStatus("processed");
+    } catch (error) {
+      console.error("Error loading example GeoJSON:", error);
+      setFileUploadStatus("error");
     }
-
-    // Update context with new flight plan
-    setFlightPlan(newFlightPlan);
-
-    // Upload to backend
-    const payload = {
-      fileName: file.name,
-      fileContent: flightData,
-      fileExtension,
-    };
-    const response = await fetch("/api/uploadFlightPlan", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (!response.ok) throw new Error("Drive upload failed");
-
-    setFileUploadStatus("processed");
-    if (onClose) onClose(); // Close uploader if provided
-  } catch (error) {
-    console.error("Error processing file:", error);
-    setFileUploadStatus("error");
-  }
-};
-
-const { getRootProps, getInputProps } = useDropzone({
-  accept: {
-    "application/vnd.google-earth.kmz": [".kmz"],
-    "application/vnd.google-earth.kml+xml": [".kml"],
-    "application/geo+json": [".geojson"],
-    "application/waypoints": [".waypoints"],
-  },
-  onDrop,
-});
-
-const loadExampleGeoJSON = async () => {
-  try {
-    const response = await fetch("/example.geojson");
-    const rawData = await response.json();
-
-    const processedData = parseGeoJSONFile(JSON.stringify(rawData));
-    const newFlightPlan = { ...processedData, processed: false };
-
-    setFlightPlan(newFlightPlan);
-    if (onPlanUploaded && mapRef?.current) {
-      onPlanUploaded(newFlightPlan, () => {
-        const map = mapRef.current!.getMap();
-        if (map) {
-          // Hide old flight path
-          mapRef.current!.toggleLayerVisibility("line-0");
-
-          // Remove analysis layers
-          ["ELOS_GRID", "GCS_GRID", "OBSERVER_GRID", "REPEATER_GRID", "MERGED_VISIBILITY"].forEach(layer => {
-            if (map.getSource(layer)) {
-              mapRef.current!.toggleLayerVisibility(layer);
-            }
-          });
-
-          // Remove markers
-          map.getStyle().layers?.forEach(layer => {
-            if (layer.id.startsWith("marker")) {
-              map.removeLayer(layer.id);
-              map.removeSource(layer.id);
-            }
-          });
-        }
-      });
-    }
-    setFileUploadStatus("processed");
-  } catch (error) {
-    console.error("Error loading example GeoJSON:", error);
-    setFileUploadStatus("error");
-  }
-};
+  };
 
   return (
     <div className="flex-1 bg-white shadow-lg p-6 rounded-lg border border-gray-200">
       <h3 className="text-lg font-bold text-black">📁 Upload Your Flight Plan</h3>
       <p className="text-sm text-gray-600">
-        Upload a <strong>.waypoints</strong>, <strong>.geojson</strong>, <strong>.kml</strong>, or <strong>.kmz</strong> file to analyze your drone&apos;s flight path.
+        Upload a <strong>.waypoints</strong>, <strong>.geojson</strong>, <strong>.kml</strong>, or <strong>.kmz</strong> file to analyze your drone's flight path.
       </p>
 
       <div
@@ -501,13 +571,17 @@ const loadExampleGeoJSON = async () => {
       </div>
 
       <div className="flex justify-center gap-2 mt-6">
-        <button
-          onClick={loadExampleGeoJSON}
-          className="bg-blue-500 text-white px-4 py-2 rounded shadow hover:bg-blue-600 text-sm"
-        >
-          Show Me an Example
-        </button>
-      </div>
+  <button
+    onClick={() => {
+      trackEvent("example_geojson_click", { panel: "flightplanuploader.tsx" });
+      loadExampleGeoJSON();
+    }}
+    className="bg-blue-500 text-white px-4 py-2 rounded shadow hover:bg-blue-600 text-sm"
+  >
+    Show Me an Example
+  </button>
+</div>
+
     </div>
   );
 };

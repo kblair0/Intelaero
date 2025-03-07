@@ -1,6 +1,7 @@
 import React, {} from "react";
 import { useLocation } from "../context/LocationContext";
 import { LocationData } from "../components/Map";
+import { trackEventWithForm as trackEvent } from "./tracking/tracking";
 
 interface StationCardProps {
   stationType: "gcs" | "observer" | "repeater";
@@ -68,6 +69,19 @@ const StationCard: React.FC<StationCardProps> = ({
     observer: "green",
     repeater: "red",
   };
+
+  // Handle analyze with tracking
+  const handleAnalyzeWithTracking = () => {
+    trackEventWithForm(`${stationType}_station_analysis_click`, { 
+      panel: "station_analysis", 
+      station_type: stationType,
+      range: markerConfig.gridRange,
+      elevation_offset: elevationOffset,
+      location: `${location.lat.toFixed(3)},${location.lng.toFixed(3)}`
+    });
+    onAnalyze();
+  };
+
 
   return (
     <article className="bg-white p-2 rounded shadow flex flex-col gap-2 w-full text-xs">
@@ -145,7 +159,7 @@ const StationCard: React.FC<StationCardProps> = ({
   
         {/* Analyze Button */}
         <button
-          onClick={onAnalyze}
+          onClick={handleAnalyzeWithTracking}
           aria-label="Run analysis"
           className={`h-5 px-2 py-0 rounded text-white bg-${colors[stationType]}-500 hover:bg-${colors[stationType]}-600 flex-shrink-0 flex items-center justify-center`}
         >

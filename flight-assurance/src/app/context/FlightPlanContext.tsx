@@ -24,6 +24,11 @@ export interface FlightPlanMetadata {
   updated?: number;
   distance?: number;
   processed: boolean;
+  source?: string;
+  metadata?: {
+    file?: Record<string, any>;
+    segments?: Record<string, any>[];
+  };
 }
 
 

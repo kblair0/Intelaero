@@ -163,7 +163,6 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
           type: "vector",
           url: "mapbox://intelaero.6qpae87g"
         });
-        console.log("Airfields source added");
       }
 
       if (!map.getLayer("Airfields")) {
@@ -183,7 +182,6 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
             ["literal", ["aerodrome", "terminal", "helipad"]]
           ]
         });
-        console.log("Airfields layer added");
       }
 
       const onAirfieldMouseEnter = (
@@ -233,47 +231,6 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
       map.on("mouseenter", "Airfields", onAirfieldMouseEnter);
       map.on("mouseleave", "Airfields", onAirfieldMouseLeave);
 
-      // Debug source loading and features
-      const onSourceData = (e: { sourceId: string }) => {
-        if (e.sourceId === "airfields") {
-          console.log("Source data event for airfields, isLoaded:", map.isSourceLoaded("airfields"));
-          if (map.isSourceLoaded("airfields")) {
-            const features = map.querySourceFeatures("airfields", {
-              sourceLayer: "hotosm_aus_airports_points_ge-21mapu"
-            });
-            console.log("Total features loaded:", features.length);
-            if (features.length > 0) {
-              // Log detailed information for the first 5 features
-              features.slice(0, 5).forEach((feature, index) => {
-                console.log(`Feature ${index + 1} properties:`, feature.properties);
-                console.log(`   Name: ${feature.properties?.name || "No name"}`);
-                console.log(`   Aeroway: ${feature.properties?.aeroway || "Not specified"}`);
-              });
-              
-              // Extract and log unique values for 'aeroway' and 'name'
-              const aerowayValues = features
-                .map(f => f.properties?.aeroway)
-                .filter(Boolean);
-              console.log("Unique aeroway values:", [...new Set(aerowayValues)]);
-              
-              const names = features
-                .map(f => f.properties?.name)
-                .filter(Boolean);
-              console.log("Unique aerodrome names:", [...new Set(names)]);
-            } else {
-              console.log("No features found in hotosm_aus_airports_points_ge-21mapu");
-              console.log("Current bounds:", map.getBounds().toArray());
-            }  
-          }
-        }
-      };
-
-      map.on("sourcedata", onSourceData);
-
-      // Log initial map state
-      console.log("Initial map center:", map.getCenter(), "Zoom:", map.getZoom());
-    }).catch(error => {
-      console.error("Error loading mapbox-gl:", error);
     });
 
     // Cleanup function
