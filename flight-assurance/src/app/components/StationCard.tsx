@@ -72,7 +72,7 @@ const StationCard: React.FC<StationCardProps> = ({
 
   // Handle analyze with tracking
   const handleAnalyzeWithTracking = () => {
-    trackEventWithForm(`${stationType}_station_analysis_click`, { 
+    trackEvent(`${stationType}_station_analysis_click`, { 
       panel: "station_analysis", 
       station_type: stationType,
       range: markerConfig.gridRange,

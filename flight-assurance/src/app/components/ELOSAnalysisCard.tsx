@@ -510,7 +510,7 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
         <div className="flex flex-col gap-2">
           <button
             onClick={() => {
-              trackEventWithForm("station_los_check_click", {
+              trackEvent("station_los_check_click", {
                 panel: "ELOSAnalysisCard.tsx",
                 source: sourceStation,
                 target: targetStation
@@ -532,7 +532,7 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
           {stationLOSResult && (
             <button
               onClick={() => {
-                trackEventWithForm("show_los_graph_click", { 
+                trackEvent("show_los_graph_click", { 
                   panel: "ELOSAnalysisCard.tsx",
                   source: sourceStation,
                   target: targetStation,
@@ -972,7 +972,7 @@ const renderMergedAnalysisSection = () => {
           {/* Analysis Button */}
           <button
             onClick={() => {
-              trackEventWithForm("merged_analysis_click", { panel: "ELOSAnalysisCard.tsx" });
+              trackEvent("merged_analysis_click", { panel: "ELOSAnalysisCard.tsx" });
               handleMergedAnalysis();
             }}
             disabled={isAnalyzing}
@@ -1098,7 +1098,7 @@ const renderMergedAnalysisSection = () => {
 
           <button
             onClick={() => {
-              trackEventWithForm("elos_full_analysis_click", { panel: "ELOSAnalysisCard.tsx" });
+              trackEvent("elos_full_analysis_click", { panel: "ELOSAnalysisCard.tsx" });
               handleAnalysis();
             }}
             disabled={!isFlightPlanLoaded || isAnalyzing}
@@ -1223,7 +1223,7 @@ const renderMergedAnalysisSection = () => {
 
             <button
               onClick={() => {
-                trackEventWithForm("flight_path_visibility_click", { panel: "ELOSAnalysisCard.tsx" });
+                trackEvent("flight_path_visibility_click", { panel: "ELOSAnalysisCard.tsx" });
                 handleFlightPathVisibility();
               }}
               disabled={!isFlightPlanLoaded || isAnalyzing}
