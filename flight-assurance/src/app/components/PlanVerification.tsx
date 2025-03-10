@@ -217,12 +217,14 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
       heightModeDisplay = "Unknown";
   }
   
-    const overallStatus: VerificationSection["status"] =
-    hasZeroAltitudes || hasDuplicates || hasKmzTakeoffIssue
-      ? "error"
-      : analysisData
-      ? "success"
-      : "pending";
+  const overallStatus: VerificationSection["status"] =
+  hasZeroAltitudes || hasDuplicates || hasKmzTakeoffIssue
+    ? "error"
+    : analysisData
+    ? heightCheckStatus === "warning"
+      ? "warning"
+      : "success"
+    : "pending";
   
     return {
       id: "basic",

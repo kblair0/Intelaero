@@ -40,13 +40,13 @@ const FeedbackInput = memo(() => {
     <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-10 w-full max-w-md px-4">
       <div className="flex flex-col items-center relative">
         <div className="flex items-center w-full">
-        <input
-          type="text"
-          value={feedback}
-          onChange={(e) => setFeedback(e.target.value)}
-          placeholder="Enter your feedback..."
-          className="flex-grow px-4 py-3 border border-gray-300 rounded-l shadow-sm focus:outline-none focus:ring focus:border-blue-300 text-black text-sm"
-        />
+          <input
+            type="text"
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
+            placeholder="Enter your feedback..."
+            className="flex-grow px-4 py-3 border border-gray-300 rounded-l shadow-sm focus:outline-none focus:ring focus:border-blue-300 text-black text-sm"
+          />
           <button
             onClick={handleSend}
             className="px-4 py-2 bg-blue-500 text-white rounded-r hover:bg-blue-600 transition-colors"
@@ -63,6 +63,7 @@ const FeedbackInput = memo(() => {
     </div>
   );
 });
+FeedbackInput.displayName = "FeedbackInput"; // Added displayName
 
 const HomeContent = () => {
   const mapRef = useRef<MapRef>(null);
