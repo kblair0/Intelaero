@@ -326,20 +326,22 @@ const getEnergyAnalysis = (): VerificationSection => {
       id: "energy",
       title: "Energy Analysis",
       description: "Check battery capacity against flight requirements",
-      status: "pending"
+      status: "pending",
     };
   }
 
-  // Compute the status:
-  // If the user hasn't opened the energy analysis, force a "warning" status.
-  // Once opened, show "success" if metrics.isFeasible is true, otherwise "warning".
-  const status = energyAnalysisOpened ? (metrics?.isFeasible ? "success" : "warning") : "warning";
+  // Determine status based on battery feasibility
+  const status = energyAnalysisOpened
+    ? metrics?.isFeasible
+      ? "success" // Flight plan within capacity
+      : "error"   // Flight plan exceeds capacity
+    : "warning";  // Not yet reviewed
 
   return {
     id: "energy",
     title: "Energy Analysis",
     description: "Battery and flight time verification",
-    status, // Use the computed status value here
+    status, // Use the computed status
     subSections: [
       {
         title: "Battery Requirements",
@@ -347,32 +349,40 @@ const getEnergyAnalysis = (): VerificationSection => {
           <div className="space-y-2">
             <div className="grid grid-cols-2 gap-2 text-sm">
               <div>Required Capacity:</div>
-              <div>{metrics?.expectedBatteryConsumption} mAh</div>
+              <div>{metrics?.expectedBatteryConsumption ?? "N/A"} mAh</div>
               <div>Available Capacity:</div>
-              <div>{metrics?.availableBatteryCapacity} mAh</div>
+              <div>{metrics?.availableBatteryCapacity ?? "N/A"} mAh</div>
               <div>Flight Time:</div>
-              <div>{metrics?.flightTime}</div>
+              <div>{metrics?.flightTime ?? "N/A"}</div>
               <div>Reserve Required:</div>
-              <div>{metrics?.batteryReserve} mAh</div>
+              <div>{metrics?.batteryReserve ?? "N/A"} mAh</div>
               <div>Status:</div>
-              <div className={metrics?.isFeasible ? "text-green-600" : "text-red-600"}>
+              <div
+                className={
+                  energyAnalysisOpened
+                    ? metrics?.isFeasible
+                      ? "text-green-600"
+                      : "text-red-600"
+                    : "text-yellow-600"
+                }
+              >
                 {energyAnalysisOpened
-                  ? (metrics?.isFeasible 
-                      ? "Flight plan within battery capacity" 
-                      : "Flight plan exceeds battery capacity")
-                  : "Review energy analysis for details"}
+                  ? metrics?.isFeasible
+                    ? "✓ Flight plan within battery capacity"
+                    : "✗ Flight plan exceeds battery capacity"
+                  : "⚠️ Review energy analysis for details"}
               </div>
             </div>
           </div>
-        )
-      }
+        ),
+      },
     ],
     actions: (
       <div className="flex flex-col gap-2">
         <button
           onClick={() => {
             setEnergyAnalysisOpened(true);
-            onTogglePanel('energy');
+            onTogglePanel("energy");
           }}
           className="flex items-center gap-2 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors"
         >
@@ -382,7 +392,7 @@ const getEnergyAnalysis = (): VerificationSection => {
         <button
           onClick={() => {
             trackEvent("upload_bin_ulg_click", { panel: "planverification.tsx" });
-            if (typeof window !== "-Chromeundefined") {
+            if (typeof window !== "undefined") {
               window.alert("Coming Soon!");
             }
           }}
@@ -392,7 +402,7 @@ const getEnergyAnalysis = (): VerificationSection => {
           Upload BIN/ULG File for Analysis
         </button>
       </div>
-    )
+    ),
   };
 };
   
