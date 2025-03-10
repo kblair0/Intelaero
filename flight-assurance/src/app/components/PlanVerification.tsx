@@ -584,8 +584,19 @@ const getEnergyAnalysis = (): VerificationSection => {
         />
       </div>
 
-      {/* Render sections */}
-      {sections.map((section) => (
+{/* Render sections */}
+{sections.map((section) => {
+      // Define guide URLs for each section
+      const guideUrls = {
+        basic: "https://youtu.be/iUYkmdUv46A",
+        energy: "https://youtu.be/mJTWGmtgtZg",
+        terrain: "https://youtu.be/H1JveIqB_v4",
+        los: "https://youtu.be/u-WPwwh1tpA",
+      };
+
+      const guideUrl = guideUrls[section.id as keyof typeof guideUrls] || "https://www.youtube.com/channel/UCstd7Ks-s7hlZA8zmAxMlvw"; // Fallback URL
+
+      return (
         <div key={section.id} className="border rounded-lg bg-white shadow-sm overflow-hidden">
           <button
             onClick={() => setExpandedSection(expandedSection === section.id ? null : section.id)}
@@ -594,7 +605,26 @@ const getEnergyAnalysis = (): VerificationSection => {
             <div className="flex items-center gap-3">
               {renderStatusIcon(section.status)}
               <div className="text-left">
-                <h3 className="font-medium text-gray-900">{section.title}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-medium text-gray-900">{section.title}</h3>
+                  {/* YouTube SVG Button */}
+                  <a
+                    href={guideUrl}
+                    target="_blank"
+                    rel="intel.aero_testing"
+                    className="inline-flex gap-1 items-center"
+                    aria-label={`Watch YouTube guide for ${section.title}`}
+                  >
+                    <svg
+                      className="w-5 h-5 text-red-600 hover:text-red-700 transition-colors"
+                      fill="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="M23.5 6.2c-.3-1.1-1.1-2-2.2-2.3C19.1 3.5 12 3.5 12 3.5s-7.1 0-9.3.4c-1.1.3-1.9 1.2-2.2 2.3C.5 8.4.5 12 .5 12s0 3.6.4 5.8c.3 1.1 1.1 2 2.2 2.3 2.2.4 9.3.4 9.3.4s7.1 0 9.3-.4c1.1-.3 1.9-1.2 2.2-2.3.4-2.2.4-5.8.4-5.8s0-3.6-.4-5.8zM9.8 15.5V8.5l6.2 3.5-6.2 3.5z" />
+                    </svg>
+                    <span className="text-xs text-red-600 hover:text-red-700 transition-colors">Guide</span>
+                  </a>
+                </div>
                 <p className="text-sm text-gray-500">{section.description}</p>
               </div>
             </div>
@@ -604,7 +634,7 @@ const getEnergyAnalysis = (): VerificationSection => {
               <ChevronRight className="w-5 h-5 text-gray-400" />
             )}
           </button>
-  
+
           {expandedSection === section.id && (
             <div className="px-4 py-3 bg-gray-50 border-t space-y-4">
               {section.subSections?.map((subSection, index) => (
@@ -642,7 +672,8 @@ const getEnergyAnalysis = (): VerificationSection => {
             </div>
           )}
         </div>
-      ))}
+      );
+    })}
   
       {/* Terrain Clearance Popup */}
       {showTerrainPopup && (
