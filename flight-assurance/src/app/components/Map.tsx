@@ -23,15 +23,14 @@ import "../globals.css";
 import { ProgressBar } from "./ProgressBar";
 import { Loader } from "lucide-react";
 import MapboxLayerHandler from "./MapboxLayerHandler";
-
+import { trackEventWithForm as trackEvent } from "./tracking/tracking";
+import { AlertTriangle } from "lucide-react";
 
 // Contexts
 import { useLocation } from "../context/LocationContext";
 import { FlightPlanData, useFlightPlanContext } from "../context/FlightPlanContext";
 import { useFlightConfiguration } from "../context/FlightConfigurationContext";
 import { useLOSAnalysis } from "../context/LOSAnalysisContext";
-import { Cloud } from "lucide-react";
-import { trackEventWithForm as trackEvent } from "./tracking/tracking";
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || "";
 
@@ -145,8 +144,6 @@ const Map = forwardRef<MapRef, MapProps>(
       setDistance,
     } = useFlightPlanContext();
 
-
-
     const [totalDistance, setTotalDistance] = useState<number>(0);
     const lineRef = useRef<GeoJSON.FeatureCollection | null>(null);
     const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -159,6 +156,7 @@ const Map = forwardRef<MapRef, MapProps>(
     const [resolvedGeoJSON, setResolvedGeoJSON] = useState<GeoJSON.FeatureCollection | null>(null);
     const terrainLoadedRef = useRef<boolean>(false);
     const [elosProgressDisplay, setElosProgressDisplay] = useState(0);
+    const [showLosModal, setShowLosModal] = useState(false);
     
     //measuirng tool
     const [isMeasuring, setIsMeasuring] = useState(false);
@@ -710,46 +708,73 @@ const Map = forwardRef<MapRef, MapProps>(
       };
     }, []);
 
-    // ELOS Measuring Tool
+    //  Measuring Tool
     useEffect(() => {
       if (!mapRef.current || !isMeasuring) return;
     
       const map = mapRef.current;
-      map.getCanvas().style.cursor = 'crosshair';
+      map.getCanvas().style.cursor = "crosshair";
     
       const onClick = (e: mapboxgl.MapMouseEvent) => {
         try {
-          const point = [e.lngLat.lng, e.lngLat.lat];
-          if (fixedPointsRef.current.length === 0) {
-            fixedPointsRef.current.push(point);
-            const marker = new mapboxgl.Marker({ color: '#800080' })
+          const point = [e.lngLat.lng, e.lngLat.lat] as [number, number];
+          const fixedPoints = fixedPointsRef.current;
+    
+          if (fixedPoints.length === 0) {
+            fixedPoints.push(point);
+            const marker = new mapboxgl.Marker({ color: "#800080" })
               .setLngLat(point)
-              .setPopup(new mapboxgl.Popup({ closeButton: false, className: 'measure-popup' })
-                .setHTML('<div>Start</div>'))
+              .setPopup(
+                new mapboxgl.Popup({ closeButton: false, className: "measure-popup" }).setHTML(
+                  "<div>Start</div>"
+                )
+              )
               .addTo(map);
             marker.togglePopup();
             markersRef.current.push(marker);
+            console.log("First point added:", point);
           } else {
-            const lastPoint = fixedPointsRef.current[fixedPointsRef.current.length - 1];
-            const distance = turf.distance(lastPoint, point, { units: 'kilometers' });
-            fixedPointsRef.current.push(point);
+            const lastPoint = fixedPoints[fixedPoints.length - 1];
+            fixedPoints.push(point);
     
+            const segmentDistance = turf.distance(lastPoint, point, { units: "kilometers" });
             const lineFeature = {
-              type: 'Feature',
-              geometry: { type: 'LineString', coordinates: fixedPointsRef.current },
+              type: "Feature" as const,
+              geometry: { type: "LineString" as const, coordinates: fixedPoints },
             };
-            map.getSource(FIXED_LINE_SOURCE).setData({
-              type: 'FeatureCollection',
-              features: [lineFeature],
-            });
     
-            const marker = new mapboxgl.Marker({ color: '#800080' })
+            const fixedSource = map.getSource(FIXED_LINE_SOURCE);
+            if (fixedSource) {
+              fixedSource.setData({
+                type: "FeatureCollection" as const,
+                features: [lineFeature],
+              });
+              console.log("Fixed line updated with points:", fixedPoints);
+            } else {
+              console.error("FIXED_LINE_SOURCE not found on click");
+            }
+    
+            const totalDistance = turf.length(turf.lineString(fixedPoints), { units: "kilometers" });
+    
+            const marker = new mapboxgl.Marker({ color: "#800080" })
               .setLngLat(point)
-              .setPopup(new mapboxgl.Popup({ closeButton: false, className: 'measure-popup' })
-                .setHTML(`<div>${distance.toFixed(2)} km</div>`))
+              .setPopup(
+                new mapboxgl.Popup({ closeButton: false, className: "measure-popup" }).setHTML(
+                  `<div>Segment: ${segmentDistance.toFixed(2)} km<br>Total: ${totalDistance.toFixed(2)} km</div>`
+                )
+              )
               .addTo(map);
             marker.togglePopup();
             markersRef.current.push(marker);
+    
+            const tempSource = map.getSource(TEMP_LINE_SOURCE);
+            if (tempSource) {
+              tempSource.setData({
+                type: "FeatureCollection" as const,
+                features: [],
+              });
+              console.log("Temp line reset after click");
+            }
           }
         } catch (error) {
           console.error("Error during measurement click:", error);
@@ -757,85 +782,86 @@ const Map = forwardRef<MapRef, MapProps>(
       };
     
       const onMouseMove = (e: mapboxgl.MapMouseEvent) => {
-        // Only proceed if the measurement tool is active and a start point exists.
-        if (!isMeasuring || !fixedPointsRef.current || fixedPointsRef.current.length === 0) {
-          return;
-        }
-      
-        const mousePoint = [e.lngLat.lng, e.lngLat.lat];
-        const startPoint = fixedPointsRef.current[0];
-        if (!startPoint || startPoint.length < 2) return;
-      
-        // Update temporary line from startPoint to current mouse position
+        if (!isMeasuring || fixedPointsRef.current.length === 0) return;
+    
+        const mousePoint = [e.lngLat.lng, e.lngLat.lat] as [number, number];
+        const lastPoint = fixedPointsRef.current[fixedPointsRef.current.length - 1];
+    
         const tempLineFeature = {
-          type: 'Feature',
-          geometry: { type: 'LineString', coordinates: [startPoint, mousePoint] },
+          type: "Feature" as const,
+          geometry: { type: "LineString" as const, coordinates: [lastPoint, mousePoint] },
         };
+    
         const tempSource = map.getSource(TEMP_LINE_SOURCE);
         if (tempSource) {
           tempSource.setData({
-            type: 'FeatureCollection',
+            type: "FeatureCollection" as const,
             features: [tempLineFeature],
           });
+          console.log("Temp line updated from", lastPoint, "to", mousePoint);
+        } else {
+          console.error("TEMP_LINE_SOURCE not found during mousemove");
         }
-      
-        // Create or update the moving popup with dynamic distance
+    
         if (!movingPopupRef.current) {
           movingPopupRef.current = new mapboxgl.Popup({
             closeButton: false,
-            className: 'measure-popup',
-            offset: 15
+            className: "measure-popup",
+            offset: 15,
           }).addTo(map);
         }
-        
+    
         let distance = 0;
         try {
-          distance = turf.distance(startPoint, mousePoint, { units: 'kilometers' });
+          distance = turf.distance(lastPoint, mousePoint, { units: "kilometers" });
         } catch (error) {
-          console.error('Error calculating distance:', error);
+          console.error("Error calculating distance:", error);
         }
-        
-        // Inline style added to make the popup content more visible
+    
         movingPopupRef.current
           .setLngLat(e.lngLat)
-          .setHTML(`<div style="background: rgba(255,255,255,0.9); padding: 4px 8px; border-radius: 4px; font-size: 12px;">
-                      ${distance.toFixed(2)} km
-                    </div>`);
-      };
-      
-      
-      
-    
-      const onDblClick = (e: mapboxgl.MapMouseEvent) => {
-        e.preventDefault();
-        if (fixedPointsRef.current.length > 0) {
-          deleteMeasurement(); // Reuse cleanup logic
-        }
+          .setHTML(
+            `<div style="background: rgba(255,255,255,0.9); padding: 4px 8px; border-radius: 4px; font-size: 12px;">
+              ${distance.toFixed(2)} km
+            </div>`
+          );
       };
     
       const onRightClick = (e: mapboxgl.MapMouseEvent) => {
         e.preventDefault();
-        deleteMeasurement(); // Reuse cleanup logic
+        if (isMeasuring && fixedPointsRef.current.length > 0) {
+          setIsMeasuring(false); // Stop measuring on single right-click
+          map.getCanvas().style.cursor = "";
+          if (movingPopupRef.current) {
+            movingPopupRef.current.remove();
+            movingPopupRef.current = null;
+          }
+          const tempSource = map.getSource(TEMP_LINE_SOURCE);
+          if (tempSource) {
+            tempSource.setData({
+              type: "FeatureCollection" as const,
+              features: [],
+            });
+          }
+          console.log("Stopped measuring with right-click");
+        }
       };
     
-      map.on('click', onClick);
-      map.on('mousemove', onMouseMove);
-      map.on('dblclick', onDblClick);
-      map.on('contextmenu', onRightClick);
+      map.on("click", onClick);
+      map.on("mousemove", onMouseMove);
+      map.on("contextmenu", onRightClick);
     
       return () => {
-        map.off('click', onClick);
-        map.off('mousemove', onMouseMove);
-        map.off('dblclick', onDblClick);
-        map.off('contextmenu', onRightClick);
-        map.getCanvas().style.cursor = '';
+        map.off("click", onClick);
+        map.off("mousemove", onMouseMove);
+        map.off("contextmenu", onRightClick);
+        map.getCanvas().style.cursor = "";
         if (movingPopupRef.current) {
           movingPopupRef.current.remove();
           movingPopupRef.current = null;
         }
       };
     }, [isMeasuring, mapRef]);
-    
 
 async function fetchTerrainElevation(lng: number, lat: number): Promise<number> {
   try {
@@ -893,33 +919,51 @@ async function fetchTerrainElevation(lng: number, lat: number): Promise<number> 
 //measurement tool on map
 const startMeasuring = () => {
   if (!mapRef.current || !terrainLoadedRef.current) return;
-  deleteMeasurement();
-  setIsMeasuring(true);
 
   const map = mapRef.current;
-  layerManager.addLayer(
-    'fixed-line-layer',
-    { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
-    {
-      id: 'fixed-line-layer',
-      type: 'line',
-      source: 'fixed-line-source', // Explicitly set in layer config
-      paint: { 'line-color': '#0000FF', 'line-width': 2 },
-    },
-    'fixed-line-source'
-  );
 
-  layerManager.addLayer(
-    'temp-line-layer',
-    { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
-    {
-      id: 'temp-line-layer',
-      type: 'line',
-      source: 'temp-line-source', // Explicitly set in layer config
-      paint: { 'line-color': '#0000FF', 'line-width': 2, 'line-dasharray': [2, 2] },
-    },
-    'temp-line-source'
-  );
+  // Clear any existing measurement before starting a new one
+  deleteMeasurement();
+
+  setIsMeasuring(true);
+
+  // Initialize or reset FIXED_LINE_SOURCE and FIXED_LINE_LAYER
+  if (!map.getSource(FIXED_LINE_SOURCE)) {
+    map.addSource(FIXED_LINE_SOURCE, {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    console.log("Added FIXED_LINE_SOURCE");
+  }
+  if (!map.getLayer(FIXED_LINE_LAYER)) {
+    map.addLayer({
+      id: FIXED_LINE_LAYER,
+      type: "line",
+      source: FIXED_LINE_SOURCE,
+      paint: { "line-color": "#0000FF", "line-width": 2 },
+    });
+    console.log("Added FIXED_LINE_LAYER");
+  }
+
+  // Initialize or reset TEMP_LINE_SOURCE and TEMP_LINE_LAYER
+  if (!map.getSource(TEMP_LINE_SOURCE)) {
+    map.addSource(TEMP_LINE_SOURCE, {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    console.log("Added TEMP_LINE_SOURCE");
+  }
+  if (!map.getLayer(TEMP_LINE_LAYER)) {
+    map.addLayer({
+      id: TEMP_LINE_LAYER,
+      type: "line",
+      source: TEMP_LINE_SOURCE,
+      paint: { "line-color": "#0000FF", "line-width": 2, "line-dasharray": [2, 2] },
+    });
+    console.log("Added TEMP_LINE_LAYER");
+  }
+
+  console.log("New measurement started");
 };
 
 const deleteMeasurement = () => {
@@ -927,8 +971,22 @@ const deleteMeasurement = () => {
     const map = mapRef.current;
     markersRef.current.forEach(marker => marker.remove());
     markersRef.current = [];
-    layerManager.removeLayer(FIXED_LINE_LAYER);
-    layerManager.removeLayer(TEMP_LINE_LAYER);
+    if (map.getLayer(FIXED_LINE_LAYER)) {
+      map.removeLayer(FIXED_LINE_LAYER);
+      console.log("Removed FIXED_LINE_LAYER");
+    }
+    if (map.getSource(FIXED_LINE_SOURCE)) {
+      map.removeSource(FIXED_LINE_SOURCE);
+      console.log("Removed FIXED_LINE_SOURCE");
+    }
+    if (map.getLayer(TEMP_LINE_LAYER)) {
+      map.removeLayer(TEMP_LINE_LAYER);
+      console.log("Removed TEMP_LINE_LAYER");
+    }
+    if (map.getSource(TEMP_LINE_SOURCE)) {
+      map.removeSource(TEMP_LINE_SOURCE);
+      console.log("Removed TEMP_LINE_SOURCE");
+    }
     if (movingPopupRef.current) {
       movingPopupRef.current.remove();
       movingPopupRef.current = null;
@@ -936,6 +994,7 @@ const deleteMeasurement = () => {
   }
   fixedPointsRef.current = [];
   setIsMeasuring(false);
+  console.log("Measurement deleted");
 };
 
 const handleResetMap = () => {
@@ -1295,7 +1354,19 @@ const handleFileProcessing = (data: any) => {
       // Toggle both the airfields fill and the labels layers
       toggleLayerVisibility("Airfields");
       toggleLayerVisibility("Airfields Labels");
-    };  
+    };
+
+    //Do LOS Modal
+    useEffect(() => {
+      if (resolvedGeoJSON && !showLosModal) {
+        setShowLosModal(true); // Show modal only once per new flight plan
+      }
+    }, [resolvedGeoJSON]);
+
+    //autodismiss
+    useEffect(() => {
+      if (isAnalyzing) setShowLosModal(false);
+    }, [isAnalyzing]);
 
 
     return (
@@ -1307,7 +1378,7 @@ const handleFileProcessing = (data: any) => {
         >
           {/* Progress Bar Overlay */}
           {isAnalyzing && (
-          <div className="fixed top-4 left-1/2 transform -translate-x-1/2 bg-white/95 backdrop-blur-sm border border-gray-200 px-4 py-2 rounded-lg shadow-lg flex flex-col gap-3 z-50 animate-slide-down min-w-[150px]">
+          <div className="fixed top-4 left-1/2 transform -translate-x-1/2 bg-white/95 backdrop-blur-sm border border-gray-200 px-4 py-2 rounded-lg border-l-4 border-yellow-500 shadow-lg flex flex-col gap-3 z-50 animate-slide-down min-w-[150px]">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <Loader className="w-5 h-5 animate-spin text-yellow-400" />
@@ -1334,6 +1405,50 @@ const handleFileProcessing = (data: any) => {
             </div>
           </div>
         )}
+
+        {/* LOS Modal with Direct Call */}
+        {showLosModal && (
+  <div className="fixed top-4 left-1/2 transform -translate-x-1/2 bg-white p-4 rounded-lg shadow-xl z-50 max-w-md w-full animate-slide-down border-l-4 border-yellow-500">
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2">
+      <AlertTriangle className="text-yellow-500 h-8 w-8" />
+        <p className="text-sm text-gray-900 mr-2 leading-tight">
+          <span className="font-semibold text-gray-900">Start Here:</span> Check your flight path visibility to begin your mission.
+        </p>
+      </div>
+      <div className="flex gap-2">
+        <button
+          onClick={async () => {
+            if (!ref.current) return;
+            try {
+              setIsAnalyzing(true);
+              setError(null);
+              await ref.current.runElosAnalysis();
+              trackEvent("full_elos_analysis_from_modal_click", { panel: "map.tsx" });
+              setShowLosModal(false);
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "Analysis failed");
+            } finally {
+              setIsAnalyzing(false);
+            }
+          }}
+          className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-md text-sm font-medium shadow-sm"
+        >
+          Run
+        </button>
+        <button
+          onClick={() => {
+            trackEvent("dismiss_los_modal_click", { panel: "map.tsx" });
+            setShowLosModal(false);
+          }}
+          className="text-gray-500 hover:text-gray-700 text-lg font-semibold"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
           {/* Add Ground Station, Observer, and Repeater Buttons */}
           <div className="absolute top-4 right-4 z-10 flex flex-col space-y-2">

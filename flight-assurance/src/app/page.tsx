@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState } from "react";
+import { useRef, useState, memo } from "react";
 import { MapRef } from "./components/Map";
 import Calculator from "./components/Calculator";
 import Image from "next/image";
@@ -22,13 +22,53 @@ import { Battery, Radio, GripVertical, X } from "lucide-react";
 import { trackEventWithForm as trackEvent } from "./components/tracking/tracking";
 import WelcomePitch from "./components/WelcomePitch";
 
+// Separate memoized FeedbackInput component
+const FeedbackInput = memo(() => {
+  const [feedback, setFeedback] = useState("");
+  const [showThanks, setShowThanks] = useState(false);
+
+  const handleSend = () => {
+    if (feedback.trim()) {
+      trackEvent("feedback", { panel: feedback });
+      setFeedback("");
+      setShowThanks(true);
+      setTimeout(() => setShowThanks(false), 2000);
+    }
+  };
+
+  return (
+    <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-10 w-full max-w-md px-4">
+      <div className="flex flex-col items-center relative">
+        <div className="flex items-center w-full">
+        <input
+          type="text"
+          value={feedback}
+          onChange={(e) => setFeedback(e.target.value)}
+          placeholder="Enter your feedback..."
+          className="flex-grow px-4 py-3 border border-gray-300 rounded-l shadow-sm focus:outline-none focus:ring focus:border-blue-300 text-black text-sm"
+        />
+          <button
+            onClick={handleSend}
+            className="px-4 py-2 bg-blue-500 text-white rounded-r hover:bg-blue-600 transition-colors"
+          >
+            Send
+          </button>
+        </div>
+        {showThanks && (
+          <div className="absolute top-[-2rem] text-green-600 font-medium animate-fade-in">
+            Thanks!
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
 const HomeContent = () => {
   const mapRef = useRef<MapRef>(null);
   const [activePanel, setActivePanel] = useState<"energy" | "los" | null>(null);
   const [showUploader, setShowUploader] = useState(false);
   const { flightPlan, setFlightPlan } = useFlightPlanContext();
-  const [feedback, setFeedback] = useState("");
-  const [showThanks, setShowThanks] = useState(false);
 
   const togglePanel = (panel: "energy" | "los") => {
     setActivePanel(activePanel === panel ? null : panel);
@@ -77,16 +117,16 @@ const HomeContent = () => {
                       <h3 className="text-lg font-semibold text-gray-900">
                         Flight Plan Upload
                       </h3>
-                        {/* Close Uploader Button */}
-                        <button
-                          onClick={() => {
-                            trackEvent("uploader_close_click", { panel: "page.tsx" });
-                            setShowUploader(false);
-                          }}
-                          className="text-gray-500 hover:text-gray-700"
-                        >
-                          <X size={20} />
-                        </button>
+                      {/* Close Uploader Button */}
+                      <button
+                        onClick={() => {
+                          trackEvent("uploader_close_click", { panel: "page.tsx" });
+                          setShowUploader(false);
+                        }}
+                        className="text-gray-500 hover:text-gray-700"
+                      >
+                        <X size={20} />
+                      </button>
                     </div>
                     <FlightPlanUploader
                       onClose={() => setShowUploader(false)}
@@ -101,7 +141,6 @@ const HomeContent = () => {
               )}
               {/* Analysis Control Buttons */}
               <div className="absolute top-4 left-4 z-10 flex flex-row gap-2 mb-4">
-                
                 {/* Energy Analysis Button */}
                 <button
                   onClick={() => {
@@ -159,38 +198,8 @@ const HomeContent = () => {
                 </button>
               </div>
 
-              <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-10 w-full max-w-md px-4">
-                <div className="flex flex-col items-center relative">
-                  <div className="flex items-center w-full">
-                    <input
-                      type="text"
-                      value={feedback}
-                      onChange={(e) => setFeedback(e.target.value)}
-                      placeholder="Enter your feedback..."
-                      className="flex-grow px-3 py-2 border border-gray-300 rounded-l shadow-sm focus:outline-none focus:ring focus:border-blue-300"
-                    />
-                    <button
-                      onClick={() => {
-                        if (feedback.trim()) {
-                          trackEvent("feedback", { panel: "page.tsx", feedback });
-                          setFeedback(""); // Clear the input
-                          setShowThanks(true); // Show thanks message
-                          // Hide thanks message after 2 seconds
-                          setTimeout(() => setShowThanks(false), 2000);
-                        }
-                      }}
-                      className="px-4 py-2 bg-blue-500 text-white rounded-r hover:bg-blue-600 transition-colors"
-                    >
-                      Send
-                    </button>
-                  </div>
-                  {showThanks && (
-                    <div className="absolute top-[-2rem] text-green-600 font-medium animate-fade-in">
-                      Thanks!
-                    </div>
-                  )}
-                </div>
-              </div>
+              {/* Feedback Input */}
+              <FeedbackInput />
             </div>
           </div>
 

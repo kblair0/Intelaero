@@ -74,8 +74,8 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
               "interpolate",
               ["linear"],
               ["zoom"],
-              5, 3,
-              15, 1
+              11, 1,
+              14, 2
             ]
           },
           minzoom: 10
@@ -183,7 +183,7 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
           paint: {
             "fill-color": "#ff7f50",
             "fill-opacity": 0.2,
-            "fill-outline-color": "#ff0"
+            "fill-outline-color": "#FFF"
           },
           minzoom: 10
         });
@@ -205,9 +205,9 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
             "text-anchor": "center"
           },
           paint: {
-            "text-color": "#000"
+            "text-color": "#FFF"
           },
-          minzoom: 10
+          minzoom: 12
         });
       }
       

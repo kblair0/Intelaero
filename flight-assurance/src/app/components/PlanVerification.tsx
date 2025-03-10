@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { CheckCircle, XCircle, Loader, ChevronDown, ChevronRight, Battery, Radio, Mountain } from "lucide-react";
+import { CheckCircle, XCircle, Loader, ChevronDown, ChevronRight, Battery, Radio, Mountain, Upload } from "lucide-react";
 import { useFlightPlanContext } from "../context/FlightPlanContext";
 import { useObstacleAnalysis } from "../context/ObstacleAnalysisContext";
 import { useFlightConfiguration } from "../context/FlightConfigurationContext";
@@ -51,6 +51,7 @@ interface VerificationSection {
   details?: string[];
   action?: () => void;
   actionLabel?: string;
+  actions?: React.ReactNode;
   subSections?: {
     title: string;
     content: React.ReactNode;
@@ -170,7 +171,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
     const hasDuplicates = duplicateWaypoints.length > 0;
     const hasKmzTakeoffIssue = kmzTakeoffWarning !== null;
   
-    let heightCheckStatus: "success" | "error" | "loading" = "loading";
+    let heightCheckStatus: "success" | "warning" | "loading" = "loading";
     let heightCheckContent: React.ReactNode = (
       <div className="text-sm text-gray-500">Terrain analysis pending</div>
     );
@@ -179,32 +180,49 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
       const clearances = analysisData.flightAltitudes.map(
         (alt, idx) => alt - analysisData.terrainElevations[idx]
       );
-      const maxClearance = Math.max(...clearances);
-      const hasExceededRegulatoryLimit = maxClearance > 120;
+      const maxClearance = Math.max(...clearances.filter(c => !isNaN(c))); // Filter out NaN values
+      const exceedsHeightLimit = maxClearance > 120;
   
-      if (hasExceededRegulatoryLimit) {
-        heightCheckStatus = "error";
+      if (exceedsHeightLimit) {
+        heightCheckStatus = "warning";
         heightCheckContent = (
-          <div className="text-sm text-red-600">
-            Flight altitude exceeds 120m regulatory limit: {maxClearance.toFixed(1)}m
+          <div className="text-sm text-yellow-600">
+            ⚠️ Maximum height above ground exceeds 120m: {maxClearance.toFixed(1)}m AGL
           </div>
         );
       } else {
         heightCheckStatus = "success";
         heightCheckContent = (
           <div className="text-sm text-green-600">
-            ✓ Maximum altitude: {maxClearance.toFixed(1)}m (within limit)
+            ✓ Maximum height above ground: {maxClearance.toFixed(1)}m AGL (within 120m limit)
           </div>
         );
       }
     }
+
+    // Extract height mode from flight plan
+  const heightMode = flightPlan.features[0]?.properties?.waypoints[0]?.altitudeMode || "Unknown";
+  let heightModeDisplay: string;
+  switch (heightMode) {
+    case "terrain":
+      heightModeDisplay = "Terrain Following (10m Fidelity Shown)";
+      break;
+    case "relative":
+      heightModeDisplay = "Relative To Start Point";
+      break;
+    case "absolute":
+      heightModeDisplay = "Absolute (Set AMSL Altitudes)";
+      break;
+    default:
+      heightModeDisplay = "Unknown";
+  }
   
     const overallStatus: VerificationSection["status"] =
-      hasZeroAltitudes || hasDuplicates || hasKmzTakeoffIssue || (analysisData && heightCheckStatus === "error")
-        ? "error"
-        : analysisData
-        ? "success"
-        : "pending";
+    hasZeroAltitudes || hasDuplicates || hasKmzTakeoffIssue
+      ? "error"
+      : analysisData
+      ? "success"
+      : "pending";
   
     return {
       id: "basic",
@@ -212,6 +230,18 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
       description: "Essential flight plan validation",
       status: overallStatus,
       subSections: [
+        {
+          title: "Explicit Height Mode",
+          content: (
+            <div className="text-sm">
+              {heightMode === "Unknown" ? (
+                <span className="text-yellow-600">⚠️ Height mode not detected</span>
+              ) : (
+                <span className="text-green-600">✓ {heightModeDisplay}</span>
+              )}
+            </div>
+          )
+        },
         {
           title: "Zero Altitude Check",
           content: (
@@ -240,7 +270,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
           )
         },
         {
-          title: "120m Height Check",
+          title: "120m AGL Height Check",
           content: heightCheckContent
         },
         {
@@ -337,12 +367,32 @@ const getEnergyAnalysis = (): VerificationSection => {
         )
       }
     ],
-    action: () => {
-      // Update the state so that the warning is removed once opened.
-      setEnergyAnalysisOpened(true);
-      onTogglePanel('energy');
-    },
-    actionLabel: "Open Energy Analysis"
+    actions: (
+      <div className="flex flex-col gap-2">
+        <button
+          onClick={() => {
+            setEnergyAnalysisOpened(true);
+            onTogglePanel('energy');
+          }}
+          className="flex items-center gap-2 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors"
+        >
+          <Battery className="w-4 h-4" />
+          Open Energy Analysis
+        </button>
+        <button
+          onClick={() => {
+            trackEvent("upload_bin_ulg_click", { panel: "planverification.tsx" });
+            if (typeof window !== "-Chromeundefined") {
+              window.alert("Coming Soon!");
+            }
+          }}
+          className="flex items-center gap-2 px-3 py-1.5 bg-green-500 text-white text-sm rounded-md hover:bg-green-600 transition-colors"
+        >
+          <Upload className="w-4 h-4" />
+          Upload BIN/ULG File for Analysis
+        </button>
+      </div>
+    )
   };
 };
   
