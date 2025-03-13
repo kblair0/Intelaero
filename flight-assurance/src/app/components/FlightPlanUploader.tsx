@@ -554,11 +554,13 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded,
 
   return (
     <div className="flex-1 bg-white shadow-lg p-6 rounded-lg border border-gray-200">
-      <h3 className="text-lg font-bold text-black">📁 Upload Your Flight Plan</h3>
+      <h3 className="text-lg font-bold">📁 Upload or Use Example Flight Plan</h3>
       <p className="text-sm text-gray-600">
-        Upload a <strong>.waypoints</strong>, <strong>.geojson</strong>, <strong>.kml</strong>, or <strong>.kmz</strong> file to analyze your drone&apos;s flight path.
+        Upload a <strong>.waypoints</strong>, <strong>.geojson</strong>, <strong>.kml</strong>, or{" "}
+        <strong>.kmz</strong> file, or use our example to analyze a drone flight path.
       </p>
-
+      
+      {/* Upload Dropzone */}
       <div
         {...getRootProps()}
         className="mt-4 border-2 border-dashed border-gray-300 p-6 rounded-lg flex flex-col items-center justify-center cursor-pointer"
@@ -579,18 +581,25 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded,
         )}
       </div>
 
-      <div className="flex justify-center gap-2 mt-6">
-  <button
-    onClick={() => {
-      trackEvent("example_geojson_click", { panel: "flightplanuploader.tsx" });
-      loadExampleGeoJSON();
-    }}
-    className="bg-blue-500 text-white px-4 py-2 rounded shadow hover:bg-blue-600 text-sm"
-  >
-    Show Me an Example
-  </button>
-</div>
 
+
+      {/* New Message and Updated Button */}
+      <div className="mt-4">
+        <p className="text-sm text-gray-600 text-center">
+          Don’t have a file? Try our example to get started.
+        </p>
+        <div className="flex justify-center mt-2">
+          <button
+            onClick={() => {
+              trackEvent("example_geojson_click", { panel: "flightplanuploader.tsx" });
+              loadExampleGeoJSON();
+            }}
+            className="bg-blue-500 text-white px-4 py-2 rounded shadow hover:bg-blue-600 text-sm"
+          >
+            Load Example Flight Plan
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
