@@ -8,6 +8,9 @@ export const MAP_LAYERS = {
   OBSERVER_GRID: 'observer-grid-layer',
   REPEATER_GRID: 'repeater-grid-layer',
   MERGED_VISIBILITY: 'merged-visibility-layer',
+  AOTERRAIN_GRID: "AOterrain-grid-layer",
+  AREA_OF_OPERATIONS_FILL: "area-of-operations-fill",
+  AREA_OF_OPERATIONS_OUTLINE: "area-of-operations-outline"
 } as const;
 
 class LayerManager {

@@ -595,7 +595,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
 
       {/* Hidden AOGenerator Component */}
       <div className="hidden">
-        <AOGenerator ref={aoGeneratorRef} />
+        <AOGenerator ref={aoGeneratorRef} mapRef={mapRef} /> {/* Pass mapref */}
       </div>
 
       {/* Hidden ObstacleAssessment Component */}

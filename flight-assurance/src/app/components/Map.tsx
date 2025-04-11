@@ -1,6 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-// /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 // components/map.tsx
@@ -23,7 +22,7 @@ import "../globals.css";
 import { ProgressBar } from "./ProgressBar";
 import { Loader } from "lucide-react";
 import MapboxLayerHandler from "./MapboxLayerHandler";
-import BYDALayerHandler from "./powerlines/BYDALayerHandler"; 
+import BYDALayerHandler from "./powerlines/BYDALayerHandler";
 import { trackEventWithForm as trackEvent } from "./tracking/tracking";
 import { AlertTriangle } from "lucide-react";
 
@@ -160,12 +159,12 @@ const Map = forwardRef<MapRef, MapProps>(
     const [elosProgressDisplay, setElosProgressDisplay] = useState(0);
     const [showLosModal, setShowLosModal] = useState(false);
     const [showDBYD, setShowDBYD] = useState(false);
-    const boundingBox: [number, number, number, number] = [
-      151.20387, -33.8545, 151.21473, -33.8455
-    ];
 
-    //AO Box
-    const { aoGeometry } = useAreaOfOpsContext();
+    //AO Box & Associations
+    const { aoGeometry, aoTerrainGrid } = useAreaOfOpsContext();
+    const [isTerrainGridVisible, setIsTerrainGridVisible] = useState(true);
+    const bydLayerHandlerRef = useRef<{ fetchLayers: () => void }>(null);
+
     
     //measuirng tool
     const [isMeasuring, setIsMeasuring] = useState(false);
@@ -636,61 +635,100 @@ const Map = forwardRef<MapRef, MapProps>(
     [addGeoJSONToMap, toggleLayerVisibility]
   );
 
-  // Add AO geometry to map
-  useEffect(() => {
-    if (!mapRef.current || !terrainLoadedRef.current) return;
+ // Add AO geometry to map
+useEffect(() => {
+  if (!mapRef.current || !terrainLoadedRef.current) return;
 
-    const map = mapRef.current;
-    if (aoGeometry) {
-      // Update or add the AO source
-      if (map.getSource("area-of-operations")) {
-        (map.getSource("area-of-operations") as mapboxgl.GeoJSONSource).setData(aoGeometry);
-      } else {
-        map.addSource("area-of-operations", {
-          type: "geojson",
-          data: aoGeometry,
-        });
-      }
+  const map = mapRef.current;
+  const layerId = MAP_LAYERS.AOTERRAIN_GRID; // "AOterrain-grid-layer"
+  const sourceId = "AOterrain-grid-source";
 
-      // Add or update the fill layer (light blue, transparent)
-      if (!map.getLayer("area-of-operations-fill")) {
-        map.addLayer({
-          id: "area-of-operations-fill",
-          type: "fill",
-          source: "area-of-operations",
-          paint: {
-            "fill-color": "#ADD8E6", 
-            "fill-opacity": 0.5,
-        }
-      });
-      }
+  console.log("Adding terrain grid layer with ID:", layerId); // Debug
 
-      // Add or update the line layer (dark blue, dashed)
-      if (!map.getLayer("area-of-operations-outline")) {
-        map.addLayer({
-          id: "area-of-operations-outline",
-          type: "line",
-          source: "area-of-operations",
-          paint: {
-            "line-color": "#00008B", // Dark blue
-            "line-width": 2,
-            "line-dasharray": [2, 2], // Dashed pattern: 2 units on, 2 units off
+  try {
+    if (aoTerrainGrid && aoTerrainGrid.length > 0) {
+      // Calculate min and max elevation values from the dataset
+      const elevations = aoTerrainGrid.map(cell => cell.properties.elevation);
+      const minElevation = Math.min(...elevations);
+      const maxElevation = Math.max(...elevations);
+      
+      // Log elevation range for debugging
+      console.log(`Elevation range: min=${minElevation}, max=${maxElevation}`);
+
+      const geojson: GeoJSON.FeatureCollection = {
+        type: "FeatureCollection",
+        features: aoTerrainGrid.map(cell => ({
+          type: "Feature",
+          geometry: cell.geometry,
+          properties: { 
+            elevation: cell.properties.elevation,
+            // Add normalized elevation for potential future use
+            normalized_elevation: (cell.properties.elevation - minElevation) / (maxElevation - minElevation || 1)
           },
+        })),
+      };
+
+      if (map.getSource(sourceId)) {
+        (map.getSource(sourceId) as mapboxgl.GeoJSONSource).setData(geojson);
+      } else {
+        map.addSource(sourceId, {
+          type: "geojson",
+          data: geojson,
         });
+      }
+
+      if (!map.getLayer(layerId)) {
+        const layerConfig: mapboxgl.AnyLayer = {
+          id: layerId,
+          type: "fill",
+          source: sourceId,
+          paint: {
+            "fill-color": [
+              "interpolate",
+              ["linear"],
+              ["get", "elevation"],
+              minElevation, "#0000FF", // Lowest elevation -> Blue
+              minElevation + (maxElevation - minElevation) * 0.33, "#00FF00", // 33% -> Green
+              minElevation + (maxElevation - minElevation) * 0.66, "#FFFF00", // 66% -> Yellow
+              maxElevation, "#FF0000" // Highest elevation -> Red
+            ],
+            "fill-opacity": 0.5,
+          },
+        };
+
+        // Only use beforeId if it exists
+        const beforeId = MAP_LAYERS.AREA_OF_OPERATIONS_OUTLINE; // "area-of-operations-outline"
+        if (map.getLayer(beforeId)) {
+          console.log(`Adding ${layerId} before ${beforeId}`);
+          map.addLayer(layerConfig, beforeId);
+        } else {
+          console.log(`Layer ${beforeId} not found, adding ${layerId} without beforeId`);
+          map.addLayer(layerConfig);
+        }
+      } else {
+        // Update the layer's paint properties if it already exists
+        map.setPaintProperty(layerId, "fill-color", [
+          "interpolate",
+          ["linear"],
+          ["get", "elevation"],
+          minElevation, "#0000FF", // Lowest elevation -> Blue
+          minElevation + (maxElevation - minElevation) * 0.33, "#00FF00", // 33% -> Green
+          minElevation + (maxElevation - minElevation) * 0.66, "#FFFF00", // 66% -> Yellow
+          maxElevation, "#FF0000" // Highest elevation -> Red
+        ]);
       }
     } else {
-      // Remove layers if aoGeometry is null
-      if (map.getLayer("area-of-operations-fill")) {
-        map.removeLayer("area-of-operations-fill");
+      if (map.getLayer(layerId)) {
+        map.removeLayer(layerId);
       }
-      if (map.getLayer("area-of-operations-outline")) {
-        map.removeLayer("area-of-operations-outline");
-      }
-      if (map.getSource("area-of-operations")) {
-        map.removeSource("area-of-operations");
+      if (map.getSource(sourceId)) {
+        map.removeSource(sourceId);
       }
     }
-  }, [aoGeometry]);
+  } catch (error) {
+    console.error("Error updating terrain grid layer:", error);
+  }
+}, [aoTerrainGrid]);
 
   // Map initialization
   useEffect(() => {
@@ -1568,12 +1606,19 @@ const handleFileProcessing = (data: any) => {
             <button 
               onClick={() => {
                 trackEvent("DYBDpowerlines_add_overlay_click", { panel: "map.tsx" });
-                handleDBYDPowerlines()
-              }} 
+                setShowDBYD(true);
+                // Call fetchLayers directly from the BYDALayerHandler ref.
+                if (bydLayerHandlerRef.current) {
+                  bydLayerHandlerRef.current.fetchLayers();
+                } else {
+                  console.warn("BYDALayerHandler ref not available.");
+                }
+              }}
               className="map-button"
             >
               Add DBYD Powerlines 🏡
             </button>
+
             <button 
               onClick={() => {
                 trackEvent("airspace_add_overlay_click", { panel: "map.tsx" });
@@ -1583,15 +1628,26 @@ const handleFileProcessing = (data: any) => {
             >
               Add Airspace Overlay ✈️
             </button>
+            <button 
+              onClick={() => {
+                trackEvent("toggle_terrain_grid_click", { panel: "map.tsx" });
+                // Toggle the layer's visibility via the layer manager.
+                layerManager.toggleLayerVisibility(MAP_LAYERS.AOTERRAIN_GRID);
+                // And then update the React state to update the button text.
+                setIsTerrainGridVisible(prev => !prev);
+              }} 
+              className="map-button"
+            >
+              {isTerrainGridVisible ? "Hide AO Terrain Grid 🌍" : "Show AO Terrain Grid 🌍"}
+            </button>
+
           </div>
 
-          {/* Conditionally render the DBYD layer handler when requested */}
-          {showDBYD && mapRef.current && (
+          {/* Render BYDALayerHandler only if map and AO geometry exist */}
+          {mapRef.current && aoGeometry && (
             <BYDALayerHandler 
+              ref={bydLayerHandlerRef}
               map={mapRef.current} 
-              boundingBox={boundingBox}
-              /* Optionally pass an extra prop like isDBYD={true}
-                so that BYDALayerHandler can choose the correct endpoints or query parameters. */
             />
           )}
     
