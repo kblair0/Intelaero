@@ -23,6 +23,7 @@ import "../globals.css";
 import { ProgressBar } from "./ProgressBar";
 import { Loader } from "lucide-react";
 import MapboxLayerHandler from "./MapboxLayerHandler";
+import BYDALayerHandler from "./powerlines/BYDALayerHandler"; 
 import { trackEventWithForm as trackEvent } from "./tracking/tracking";
 import { AlertTriangle } from "lucide-react";
 
@@ -31,6 +32,7 @@ import { useLocation } from "../context/LocationContext";
 import { FlightPlanData, useFlightPlanContext } from "../context/FlightPlanContext";
 import { useFlightConfiguration } from "../context/FlightConfigurationContext";
 import { useLOSAnalysis } from "../context/LOSAnalysisContext";
+import { useAreaOfOpsContext } from "../context/AreaOfOpsContext";
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || "";
 
@@ -157,6 +159,13 @@ const Map = forwardRef<MapRef, MapProps>(
     const terrainLoadedRef = useRef<boolean>(false);
     const [elosProgressDisplay, setElosProgressDisplay] = useState(0);
     const [showLosModal, setShowLosModal] = useState(false);
+    const [showDBYD, setShowDBYD] = useState(false);
+    const boundingBox: [number, number, number, number] = [
+      151.20387, -33.8545, 151.21473, -33.8455
+    ];
+
+    //AO Box
+    const { aoGeometry } = useAreaOfOpsContext();
     
     //measuirng tool
     const [isMeasuring, setIsMeasuring] = useState(false);
@@ -626,242 +635,297 @@ const Map = forwardRef<MapRef, MapProps>(
     }),
     [addGeoJSONToMap, toggleLayerVisibility]
   );
- 
 
-    // Map initialization
-    useEffect(() => {
-      if (mapContainerRef.current) {
-        try {
-          const map = new mapboxgl.Map({
-            container: mapContainerRef.current,
-            style: "mapbox://styles/intelaero/cm7pqu42s000601svdp7m3h0b",
-            center: [0, 0],
-            zoom: 2.5,
-            projection: "globe",
-          });
-    
-          map.once('style.load', () => {  // Changed from on("load") to once('style.load')
-            try {
-              // Add the DEM source
-              map.addSource("mapbox-dem", {
-                type: "raster-dem",
-                url: "mapbox://mapbox.mapbox-terrain-dem-v1",
-                tileSize: 512,
-                maxzoom: 15,
-              });
-    
-              map.setTerrain({
-                source: "mapbox-dem",
-                exaggeration: 1.5,
-              });
-    
-             /* map.addLayer({
-                id: "sky",
-                type: "sky",
-                paint: {
-                  "sky-type": "atmosphere",
-                  "sky-atmosphere-sun": [0.0, 90.0],
-                  "sky-atmosphere-sun-intensity": 15,
-                },
-              }); */
-    
-              // Wait for both style and DEM
-              Promise.all([
-                new Promise(resolve => map.once('idle', resolve)),
-                waitForDEM(map)
-              ]).then(() => {
-                console.log("✅ Map style and terrain fully loaded");
-                // Set map ref first
-                mapRef.current = map;
-                layerManager.setMap(map);
-                // Then set terrain loaded
-                terrainLoadedRef.current = true;
-                // Finally set map ready
-                console.log("Map and DEM ready – all refs set");
-              }).catch((error) => {
-                console.error("Error waiting for map and DEM:", error);
-              });
-    
-            } catch (error) {
-              console.error("❌ Error initializing map layers:", error);
-              throw error;
-            }
-          });
-          
-          // Listen for any load errors
-          map.on('error', (e) => {
-            console.error("Mapbox error:", e);
-          });
-    
-        } catch (error) {
-          console.error("❌ Error creating map:", error);
-        }
+  // Add AO geometry to map
+  useEffect(() => {
+    if (!mapRef.current || !terrainLoadedRef.current) return;
+
+    const map = mapRef.current;
+    if (aoGeometry) {
+      // Update or add the AO source
+      if (map.getSource("area-of-operations")) {
+        (map.getSource("area-of-operations") as mapboxgl.GeoJSONSource).setData(aoGeometry);
+      } else {
+        map.addSource("area-of-operations", {
+          type: "geojson",
+          data: aoGeometry,
+        });
       }
-    
-      // Cleanup function
-      return () => {
-        terrainLoadedRef.current = false;
-        if (mapRef.current) {
-          mapRef.current.remove();
-          mapRef.current = null;
-        }
-      };
-    }, []);
 
-    //  Measuring Tool
-    useEffect(() => {
-      if (!mapRef.current || !isMeasuring) return;
-    
-      const map = mapRef.current;
-      map.getCanvas().style.cursor = "crosshair";
-    
-      const onClick = (e: mapboxgl.MapMouseEvent) => {
-        try {
-          const point = [e.lngLat.lng, e.lngLat.lat] as [number, number];
-          const fixedPoints = fixedPointsRef.current;
-    
-          if (fixedPoints.length === 0) {
-            fixedPoints.push(point);
-            const marker = new mapboxgl.Marker({ color: "#800080" })
-              .setLngLat(point)
-              .setPopup(
-                new mapboxgl.Popup({ closeButton: false, className: "measure-popup" }).setHTML(
-                  "<div>Start</div>"
-                )
-              )
-              .addTo(map);
-            marker.togglePopup();
-            markersRef.current.push(marker);
-            console.log("First point added:", point);
-          } else {
-            const lastPoint = fixedPoints[fixedPoints.length - 1];
-            fixedPoints.push(point);
-    
-            const segmentDistance = turf.distance(lastPoint, point, { units: "kilometers" });
-            const lineFeature = {
-              type: "Feature" as const,
-              geometry: { type: "LineString" as const, coordinates: fixedPoints },
-            };
-    
-            const fixedSource = map.getSource(FIXED_LINE_SOURCE);
-            if (fixedSource) {
-              fixedSource.setData({
-                type: "FeatureCollection" as const,
-                features: [lineFeature],
-              });
-              console.log("Fixed line updated with points:", fixedPoints);
-            } else {
-              console.error("FIXED_LINE_SOURCE not found on click");
-            }
-    
-            const totalDistance = turf.length(turf.lineString(fixedPoints), { units: "kilometers" });
-    
-            const marker = new mapboxgl.Marker({ color: "#800080" })
-              .setLngLat(point)
-              .setPopup(
-                new mapboxgl.Popup({ closeButton: false, className: "measure-popup" }).setHTML(
-                  `<div>Segment: ${segmentDistance.toFixed(2)} km<br>Total: ${totalDistance.toFixed(2)} km</div>`
-                )
-              )
-              .addTo(map);
-            marker.togglePopup();
-            markersRef.current.push(marker);
-    
-            const tempSource = map.getSource(TEMP_LINE_SOURCE);
-            if (tempSource) {
-              tempSource.setData({
-                type: "FeatureCollection" as const,
-                features: [],
-              });
-              console.log("Temp line reset after click");
-            }
-          }
-        } catch (error) {
-          console.error("Error during measurement click:", error);
+      // Add or update the fill layer (light blue, transparent)
+      if (!map.getLayer("area-of-operations-fill")) {
+        map.addLayer({
+          id: "area-of-operations-fill",
+          type: "fill",
+          source: "area-of-operations",
+          paint: {
+            "fill-color": "#ADD8E6", 
+            "fill-opacity": 0.5,
         }
-      };
-    
-      const onMouseMove = (e: mapboxgl.MapMouseEvent) => {
-        if (!isMeasuring || fixedPointsRef.current.length === 0) return;
-    
-        const mousePoint = [e.lngLat.lng, e.lngLat.lat] as [number, number];
-        const lastPoint = fixedPointsRef.current[fixedPointsRef.current.length - 1];
-    
-        const tempLineFeature = {
-          type: "Feature" as const,
-          geometry: { type: "LineString" as const, coordinates: [lastPoint, mousePoint] },
-        };
-    
-        const tempSource = map.getSource(TEMP_LINE_SOURCE);
-        if (tempSource) {
-          tempSource.setData({
-            type: "FeatureCollection" as const,
-            features: [tempLineFeature],
-          });
-          console.log("Temp line updated from", lastPoint, "to", mousePoint);
+      });
+      }
+
+      // Add or update the line layer (dark blue, dashed)
+      if (!map.getLayer("area-of-operations-outline")) {
+        map.addLayer({
+          id: "area-of-operations-outline",
+          type: "line",
+          source: "area-of-operations",
+          paint: {
+            "line-color": "#00008B", // Dark blue
+            "line-width": 2,
+            "line-dasharray": [2, 2], // Dashed pattern: 2 units on, 2 units off
+          },
+        });
+      }
+    } else {
+      // Remove layers if aoGeometry is null
+      if (map.getLayer("area-of-operations-fill")) {
+        map.removeLayer("area-of-operations-fill");
+      }
+      if (map.getLayer("area-of-operations-outline")) {
+        map.removeLayer("area-of-operations-outline");
+      }
+      if (map.getSource("area-of-operations")) {
+        map.removeSource("area-of-operations");
+      }
+    }
+  }, [aoGeometry]);
+
+  // Map initialization
+  useEffect(() => {
+    if (mapContainerRef.current) {
+      try {
+        const map = new mapboxgl.Map({
+          container: mapContainerRef.current,
+          style: "mapbox://styles/intelaero/cm7pqu42s000601svdp7m3h0b",
+          center: [0, 0],
+          zoom: 2.5,
+          projection: "globe",
+        });
+  
+        map.once('style.load', () => {  // Changed from on("load") to once('style.load')
+          try {
+            // Add the DEM source
+            map.addSource("mapbox-dem", {
+              type: "raster-dem",
+              url: "mapbox://mapbox.mapbox-terrain-dem-v1",
+              tileSize: 512,
+              maxzoom: 15,
+            });
+  
+            map.setTerrain({
+              source: "mapbox-dem",
+              exaggeration: 1.5,
+            });
+  
+            /* map.addLayer({
+              id: "sky",
+              type: "sky",
+              paint: {
+                "sky-type": "atmosphere",
+                "sky-atmosphere-sun": [0.0, 90.0],
+                "sky-atmosphere-sun-intensity": 15,
+              },
+            }); */
+  
+            // Wait for both style and DEM
+            Promise.all([
+              new Promise(resolve => map.once('idle', resolve)),
+              waitForDEM(map)
+            ]).then(() => {
+              console.log("✅ Map style and terrain fully loaded");
+              // Set map ref first
+              mapRef.current = map;
+              layerManager.setMap(map);
+              // Then set terrain loaded
+              terrainLoadedRef.current = true;
+              // Finally set map ready
+              console.log("Map and DEM ready – all refs set");
+            }).catch((error) => {
+              console.error("Error waiting for map and DEM:", error);
+            });
+  
+          } catch (error) {
+            console.error("❌ Error initializing map layers:", error);
+            throw error;
+          }
+        });
+        
+        // Listen for any load errors
+        map.on('error', (e) => {
+          console.error("Mapbox error:", e);
+        });
+  
+      } catch (error) {
+        console.error("❌ Error creating map:", error);
+      }
+    }
+  
+    // Cleanup function
+    return () => {
+      terrainLoadedRef.current = false;
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
+  }, []);
+
+  //  Measuring Tool
+  useEffect(() => {
+    if (!mapRef.current || !isMeasuring) return;
+  
+    const map = mapRef.current;
+    map.getCanvas().style.cursor = "crosshair";
+  
+    const onClick = (e: mapboxgl.MapMouseEvent) => {
+      try {
+        const point = [e.lngLat.lng, e.lngLat.lat] as [number, number];
+        const fixedPoints = fixedPointsRef.current;
+  
+        if (fixedPoints.length === 0) {
+          fixedPoints.push(point);
+          const marker = new mapboxgl.Marker({ color: "#800080" })
+            .setLngLat(point)
+            .setPopup(
+              new mapboxgl.Popup({ closeButton: false, className: "measure-popup" }).setHTML(
+                "<div>Start</div>"
+              )
+            )
+            .addTo(map);
+          marker.togglePopup();
+          markersRef.current.push(marker);
+          console.log("First point added:", point);
         } else {
-          console.error("TEMP_LINE_SOURCE not found during mousemove");
-        }
-    
-        if (!movingPopupRef.current) {
-          movingPopupRef.current = new mapboxgl.Popup({
-            closeButton: false,
-            className: "measure-popup",
-            offset: 15,
-          }).addTo(map);
-        }
-    
-        let distance = 0;
-        try {
-          distance = turf.distance(lastPoint, mousePoint, { units: "kilometers" });
-        } catch (error) {
-          console.error("Error calculating distance:", error);
-        }
-    
-        movingPopupRef.current
-          .setLngLat(e.lngLat)
-          .setHTML(
-            `<div style="background: rgba(255,255,255,0.9); padding: 4px 8px; border-radius: 4px; font-size: 12px;">
-              ${distance.toFixed(2)} km
-            </div>`
-          );
-      };
-    
-      const onRightClick = (e: mapboxgl.MapMouseEvent) => {
-        e.preventDefault();
-        if (isMeasuring && fixedPointsRef.current.length > 0) {
-          setIsMeasuring(false); // Stop measuring on single right-click
-          map.getCanvas().style.cursor = "";
-          if (movingPopupRef.current) {
-            movingPopupRef.current.remove();
-            movingPopupRef.current = null;
+          const lastPoint = fixedPoints[fixedPoints.length - 1];
+          fixedPoints.push(point);
+  
+          const segmentDistance = turf.distance(lastPoint, point, { units: "kilometers" });
+          const lineFeature = {
+            type: "Feature" as const,
+            geometry: { type: "LineString" as const, coordinates: fixedPoints },
+          };
+  
+          const fixedSource = map.getSource(FIXED_LINE_SOURCE);
+          if (fixedSource) {
+            fixedSource.setData({
+              type: "FeatureCollection" as const,
+              features: [lineFeature],
+            });
+            console.log("Fixed line updated with points:", fixedPoints);
+          } else {
+            console.error("FIXED_LINE_SOURCE not found on click");
           }
+  
+          const totalDistance = turf.length(turf.lineString(fixedPoints), { units: "kilometers" });
+  
+          const marker = new mapboxgl.Marker({ color: "#800080" })
+            .setLngLat(point)
+            .setPopup(
+              new mapboxgl.Popup({ closeButton: false, className: "measure-popup" }).setHTML(
+                `<div>Segment: ${segmentDistance.toFixed(2)} km<br>Total: ${totalDistance.toFixed(2)} km</div>`
+              )
+            )
+            .addTo(map);
+          marker.togglePopup();
+          markersRef.current.push(marker);
+  
           const tempSource = map.getSource(TEMP_LINE_SOURCE);
           if (tempSource) {
             tempSource.setData({
               type: "FeatureCollection" as const,
               features: [],
             });
+            console.log("Temp line reset after click");
           }
-          console.log("Stopped measuring with right-click");
         }
+      } catch (error) {
+        console.error("Error during measurement click:", error);
+      }
+    };
+  
+    const onMouseMove = (e: mapboxgl.MapMouseEvent) => {
+      if (!isMeasuring || fixedPointsRef.current.length === 0) return;
+  
+      const mousePoint = [e.lngLat.lng, e.lngLat.lat] as [number, number];
+      const lastPoint = fixedPointsRef.current[fixedPointsRef.current.length - 1];
+  
+      const tempLineFeature = {
+        type: "Feature" as const,
+        geometry: { type: "LineString" as const, coordinates: [lastPoint, mousePoint] },
       };
-    
-      map.on("click", onClick);
-      map.on("mousemove", onMouseMove);
-      map.on("contextmenu", onRightClick);
-    
-      return () => {
-        map.off("click", onClick);
-        map.off("mousemove", onMouseMove);
-        map.off("contextmenu", onRightClick);
+  
+      const tempSource = map.getSource(TEMP_LINE_SOURCE);
+      if (tempSource) {
+        tempSource.setData({
+          type: "FeatureCollection" as const,
+          features: [tempLineFeature],
+        });
+        console.log("Temp line updated from", lastPoint, "to", mousePoint);
+      } else {
+        console.error("TEMP_LINE_SOURCE not found during mousemove");
+      }
+  
+      if (!movingPopupRef.current) {
+        movingPopupRef.current = new mapboxgl.Popup({
+          closeButton: false,
+          className: "measure-popup",
+          offset: 15,
+        }).addTo(map);
+      }
+  
+      let distance = 0;
+      try {
+        distance = turf.distance(lastPoint, mousePoint, { units: "kilometers" });
+      } catch (error) {
+        console.error("Error calculating distance:", error);
+      }
+  
+      movingPopupRef.current
+        .setLngLat(e.lngLat)
+        .setHTML(
+          `<div style="background: rgba(255,255,255,0.9); padding: 4px 8px; border-radius: 4px; font-size: 12px;">
+            ${distance.toFixed(2)} km
+          </div>`
+        );
+    };
+  
+    const onRightClick = (e: mapboxgl.MapMouseEvent) => {
+      e.preventDefault();
+      if (isMeasuring && fixedPointsRef.current.length > 0) {
+        setIsMeasuring(false); // Stop measuring on single right-click
         map.getCanvas().style.cursor = "";
         if (movingPopupRef.current) {
           movingPopupRef.current.remove();
           movingPopupRef.current = null;
         }
-      };
-    }, [isMeasuring, mapRef]);
+        const tempSource = map.getSource(TEMP_LINE_SOURCE);
+        if (tempSource) {
+          tempSource.setData({
+            type: "FeatureCollection" as const,
+            features: [],
+          });
+        }
+        console.log("Stopped measuring with right-click");
+      }
+    };
+  
+    map.on("click", onClick);
+    map.on("mousemove", onMouseMove);
+    map.on("contextmenu", onRightClick);
+  
+    return () => {
+      map.off("click", onClick);
+      map.off("mousemove", onMouseMove);
+      map.off("contextmenu", onRightClick);
+      map.getCanvas().style.cursor = "";
+      if (movingPopupRef.current) {
+        movingPopupRef.current.remove();
+        movingPopupRef.current = null;
+      }
+    };
+  }, [isMeasuring, mapRef]);
 
 async function fetchTerrainElevation(lng: number, lat: number): Promise<number> {
   try {
@@ -1348,6 +1412,10 @@ const handleFileProcessing = (data: any) => {
       toggleLayerVisibility("Electricity Transmission Lines");
       toggleLayerVisibility("Electricity Transmission Lines Hitbox");
     };
+
+    const handleDBYDPowerlines = () => {
+      setShowDBYD(true);
+    };
     
     const handleAddAirspaceOverlay = () => {
       if (!mapRef.current) return;
@@ -1495,7 +1563,16 @@ const handleFileProcessing = (data: any) => {
               }} 
               className="map-button"
             >
-              Add Powerlines 🔌
+              Add Powerlines ⚡️
+            </button>
+            <button 
+              onClick={() => {
+                trackEvent("DYBDpowerlines_add_overlay_click", { panel: "map.tsx" });
+                handleDBYDPowerlines()
+              }} 
+              className="map-button"
+            >
+              Add DBYD Powerlines 🏡
             </button>
             <button 
               onClick={() => {
@@ -1507,6 +1584,16 @@ const handleFileProcessing = (data: any) => {
               Add Airspace Overlay ✈️
             </button>
           </div>
+
+          {/* Conditionally render the DBYD layer handler when requested */}
+          {showDBYD && mapRef.current && (
+            <BYDALayerHandler 
+              map={mapRef.current} 
+              boundingBox={boundingBox}
+              /* Optionally pass an extra prop like isDBYD={true}
+                so that BYDALayerHandler can choose the correct endpoints or query parameters. */
+            />
+          )}
     
           {/* Analysis Status Indicator */}
           {isAnalyzing && (
@@ -1550,7 +1637,6 @@ const handleFileProcessing = (data: any) => {
             Delete Measurement
           </button>
           </div>
-
     
           {/* Legend for Visibility Colors */}
           <div className="map-legend">

@@ -1,3 +1,4 @@
+// src/page.tsx (home index page)
 "use client";
 import { useRef, useState, memo } from "react";
 import { MapRef } from "./components/Map";
@@ -13,11 +14,13 @@ import {
 import { LocationProvider } from "./context/LocationContext";
 import { LOSAnalysisProvider } from "./context/LOSAnalysisContext";
 import { FlightConfigurationProvider } from "./context/FlightConfigurationContext";
+import { AreaOfOpsProvider } from "./context/AreaOfOpsContext";
 import PlanVerification from "./components/PlanVerification";
 import Card from "./components/Card";
 import ELOSAnalysisCard from "./components/ELOSAnalysisCard";
 import { ObstacleAnalysisProvider } from "./context/ObstacleAnalysisContext";
 import MapSidePanel from "./components/MapSidePanel";
+import AOGenerator from "./AO/AOGenerator";
 import { Battery, Radio, GripVertical, X } from "lucide-react";
 import { trackEventWithForm as trackEvent } from "./components/tracking/tracking";
 import WelcomePitch from "./components/WelcomePitch";
@@ -257,7 +260,9 @@ export default function Home() {
         <LocationProvider>
           <LOSAnalysisProvider>
             <ObstacleAnalysisProvider>
-              <HomeContent />
+              <AreaOfOpsProvider>
+                <HomeContent />
+              </AreaOfOpsProvider>
             </ObstacleAnalysisProvider>
           </LOSAnalysisProvider>
         </LocationProvider>
