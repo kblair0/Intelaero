@@ -1,7 +1,6 @@
 // src/context/AreaOfOpsContext.tsx
 "use client";
 import React, { createContext, useContext, useState, ReactNode } from "react";
-import * as turf from "@turf/turf";
 
 interface AreaOfOpsContextType {
   aoGeometry: GeoJSON.FeatureCollection | null;
@@ -16,6 +15,7 @@ interface GridCell {
   geometry: GeoJSON.Polygon;
   properties: {
     elevation: number;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     [key: string]: any; // Allow additional properties for flexibility
   };
 }
