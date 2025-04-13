@@ -6,6 +6,7 @@ import * as turf from "@turf/turf";
 import AOGenerator, { AOGeneratorRef } from "../AO/AOGenerator";
 
 interface AreaOpsUploaderProps {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   mapRef: React.RefObject<any>;
   onClose?: () => void;
 }
