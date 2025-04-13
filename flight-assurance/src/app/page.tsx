@@ -22,7 +22,7 @@ import Card from "./components/Card";
 import ELOSAnalysisCard from "./components/ELOSAnalysisCard";
 import { ObstacleAnalysisProvider } from "./context/ObstacleAnalysisContext";
 import MapSidePanel from "./components/MapSidePanel";
-import { Battery, Radio, GripVertical, X } from "lucide-react";
+import { Battery, Radio, GripVertical } from "lucide-react";
 import { trackEventWithForm as trackEvent } from "./components/tracking/tracking";
 import WelcomePitch from "./components/WelcomePitch";
 
