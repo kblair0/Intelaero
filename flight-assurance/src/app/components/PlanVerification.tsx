@@ -80,7 +80,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
   const { results: losResults } = useLOSAnalysis();
   const { aoGeometry } = useAreaOfOpsContext();
   //Ao Draft Implementation
-  const { generateAO } = useAreaOfOpsContext();
+  // const { generateAO } = useAreaOfOpsContext();
   const aoGeneratorRef = useRef<AOGeneratorRef>(null);
   const bydLayerHandlerRef = useRef<{ fetchLayers: () => void }>(null);
 
