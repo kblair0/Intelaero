@@ -69,6 +69,7 @@ interface FlightPlanFeature {
     coordinates: number[][];
     type: string;
   };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   properties: Record<string, any>; // Adjusted to `any` for flexibility
 }
 
