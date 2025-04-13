@@ -11,6 +11,7 @@ import { MapRef } from "./Map";
 import { trackEventWithForm as trackEvent } from "./tracking/tracking";
 import { useAreaOfOpsContext } from "../context/AreaOfOpsContext";
 import AOGenerator, { AOGeneratorRef } from "./AO/AOGenerator";
+import BYDALayerHandler from "./powerlines/BYDALayerHandler";
 
 // Dynamically load components that use browser APIs
 const ObstacleAssessment = dynamic(() => import("./ObstacleAssessment"), { ssr: false });
@@ -76,9 +77,11 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
   const { metrics } = useFlightConfiguration();
   const { analysisData, setAnalysisData } = useObstacleAnalysis();
   const { results: losResults } = useLOSAnalysis();
+  const { aoGeometry } = useAreaOfOpsContext();
   //Ao Draft Implementation
   const { generateAO } = useAreaOfOpsContext();
   const aoGeneratorRef = useRef<AOGeneratorRef>(null);
+  const bydLayerHandlerRef = useRef<{ fetchLayers: () => void }>(null);
 
   const [expandedSection, setExpandedSection] = useState<string | null>("basic");
   const [showTerrainPopup, setShowTerrainPopup] = useState(false);
@@ -396,88 +399,107 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
     };
   };
 
-  // Terrain analysis section
-  const getTerrainAnalysis = (): VerificationSection => {
-    if (!flightPlan) {
-      return {
-        id: "terrain",
-        title: "Obstruction Analysis",
-        description: "Check flight path against terrain and obstructions",
-        status: "pending",
-      };
-    }
+// Terrain analysis section
+const getTerrainAnalysis = (): VerificationSection => {
+  const hasAOGeometry = aoGeometry && aoGeometry.features.length > 0;
 
-    if (!analysisData) {
-      return {
-        id: "terrain",
-        title: "Obstruction Analysis",
-        description: "Analyzing obstructions clearance...",
-        status: "loading",
-      };
-    }
-
-    const isSafe = analysisData.minimumClearanceHeight >= 0;
+  if (!analysisData) {
     return {
       id: "terrain",
       title: "Obstruction Analysis",
-      description: "Obstruction clearance verification",
-      status: isSafe ? "success" : "error",
-      subSections: [
-        {
-          title: "Clearance Analysis",
-          content: (
-            <div className="space-y-2">
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div>Minimum Clearance:</div>
-                <div className={isSafe ? "text-green-600" : "text-red-600"}>
-                  {analysisData.minimumClearanceHeight.toFixed(1)}m
-                </div>
-                <div>Closest Approach:</div>
-                <div>{getMinClearanceDistance()?.toFixed(2)} km along route</div>
-                <div>Highest Terrain:</div>
-                <div>{analysisData.highestObstacle.toFixed(1)}m</div>
-                <div>Flight Plan Altitude Range:</div>
-                <div>
-                  {Math.min(...analysisData.flightAltitudes).toFixed(1)}m -{" "}
-                  {Math.max(...analysisData.flightAltitudes).toFixed(1)}m
-                </div>
+      description: "Analyze terrain clearance for the defined area",
+      status: "pending",
+      actions: hasAOGeometry ? (
+        <div className="flex flex-col gap-2 mt-2">
+        <button
+          onClick={() => {
+            trackEvent("DYBDpowerlines_add_overlay_click", { panel: "planverification.tsx" });
+            if (bydLayerHandlerRef.current) {
+              bydLayerHandlerRef.current.fetchLayers();
+            } else {
+              console.warn("BYDALayerHandler ref not available.");
+            }
+          }}
+          className="flex items-center justify-center gap-2 px-3 py-1.5 bg-green-500 text-white text-sm rounded-md hover:bg-green-600 transition-colors"
+        >
+          ⚡ Toggle Powerlines
+        </button>
+        <button
+          onClick={() => {
+            trackEvent("generate_ao_click", { panel: "planverification.tsx" });
+            aoGeneratorRef.current?.generateAO();
+          }}
+          className="flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors"
+        >
+          🌍 Analyse Terrain In AO
+        </button>
+      </div>
+      ) : undefined,
+    };
+  }
+
+  const isSafe = analysisData.minimumClearanceHeight >= 0;
+  return {
+    id: "terrain",
+    title: "Obstruction Analysis",
+    description: "Obstruction clearance verification",
+    status: isSafe ? "success" : "error",
+    subSections: [
+      {
+        title: "Clearance Analysis",
+        content: (
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <div>Minimum Clearance:</div>
+              <div className={isSafe ? "text-green-600" : "text-red-600"}>
+                {analysisData.minimumClearanceHeight.toFixed(1)}m
+              </div>
+              <div>Closest Approach:</div>
+              <div>{getMinClearanceDistance()?.toFixed(2)} km along route</div>
+              <div>Highest Terrain:</div>
+              <div>{analysisData.highestObstacle.toFixed(1)}m</div>
+              <div>Flight Plan Altitude Range:</div>
+              <div>
+                {Math.min(...analysisData.flightAltitudes).toFixed(1)}m -{" "}
+                {Math.max(...analysisData.flightAltitudes).toFixed(1)}m
               </div>
             </div>
-          ),
-        },
-      ],
-      action: () => {
-        trackEvent("terrain_detailed_analysis_click", {
-          panel: "terrain",
-          actionLabel: "View Detailed Analysis",
-        });
-        setShowTerrainPopup(true);
+          </div>
+        ),
       },
-      actionLabel: "View Detailed Analysis",
-      actions: (
-        <div className="flex flex-col gap-2 mt-2">
-          <button
-            onClick={() => {
-              trackEvent("toggle_powerlines_overlay", { panel: "planverification.tsx" });
-              handleAddPowerlines(mapRef);
-            }}
-            className="flex items-center gap-2 px-3 py-1.5 bg-green-500 text-white text-sm rounded-md hover:bg-green-600 transition-colors"
-          >
-            ⚡ Toggle Powerlines
-          </button>
-          <button
-            onClick={() => {
-              trackEvent("generate_ao_click", { panel: "planverification.tsx" });
-              aoGeneratorRef.current?.generateAO();
-            }}
-            className="flex items-center gap-2 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors"
-          >
-            🌍 Generate Area of Operations
-          </button>
-        </div>
-      ),
-    };
+    ],
+    action: () => {
+      trackEvent("terrain_detailed_analysis_click", {
+        panel: "terrain",
+        actionLabel: "View Detailed Analysis",
+      });
+      setShowTerrainPopup(true);
+    },
+    actionLabel: "View Detailed Analysis",
+    actions: (
+      <div className="flex flex-col gap-2 mt-2">
+        <button
+          onClick={() => {
+            trackEvent("toggle_powerlines_overlay", { panel: "planverification.tsx" });
+            handleAddPowerlines(mapRef);
+          }}
+          className="flex items-center gap-2 px-3 py-1.5 bg-green-500 text-white text-sm rounded-md hover:bg-green-600 transition-colors"
+        >
+          ⚡ Toggle Powerlines
+        </button>
+        <button
+          onClick={() => {
+            trackEvent("generate_ao_click", { panel: "planverification.tsx" });
+            aoGeneratorRef.current?.generateAO();
+          }}
+          className="flex items-center gap-2 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors"
+        >
+          🌍 Analyse Terrain In AO
+        </button>
+      </div>
+    ),
   };
+};
 
   // LOS analysis section
   const getLOSAnalysis = (): VerificationSection => {
@@ -593,9 +615,10 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
         </div>
       )}
 
-      {/* Hidden AOGenerator Component */}
+      {/* Hidden AOGenerator and BYDALayerHandler Components */}
       <div className="hidden">
-        <AOGenerator ref={aoGeneratorRef} mapRef={mapRef} /> {/* Pass mapref */}
+        <AOGenerator ref={aoGeneratorRef} mapRef={mapRef} />
+        <BYDALayerHandler ref={bydLayerHandlerRef} map={mapRef.current?.getMap() || null} />
       </div>
 
       {/* Hidden ObstacleAssessment Component */}
@@ -668,9 +691,9 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
                     {subSection.content}
                   </div>
                 ))}
-                {section.actions ? (
+                {section.actions && section.id !== "terrain" ? (
                   <div className="mt-3">{section.actions}</div>
-                ) : section.action ? (
+                ) : section.action && section.id !== "terrain" ? (
                   <div className="mt-3">
                     <button
                       onClick={section.action}
@@ -683,6 +706,13 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
                     </button>
                   </div>
                 ) : null}
+              </div>
+            )}
+
+            {/* Show terrain actions when AO is uploaded */}
+            {section.id === "terrain" && aoGeometry && aoGeometry.features.length > 0 && section.actions && (
+              <div className="px-4 py-3 bg-gray-50 border-t">
+                {section.actions}
               </div>
             )}
           </div>

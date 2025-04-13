@@ -5,12 +5,14 @@ import { MapRef } from "./components/Map";
 import Calculator from "./components/Calculator";
 import Image from "next/image";
 import FlightPlanUploader from "./components/FlightPlanUploader";
+import AreaOpsUploader from "./components/AO/AreaOpsUploader"; 
 import Map from "./components/Map";
 import DisclaimerModal from "./components/DisclaimerModal";
 import {
   FlightPlanProvider,
   useFlightPlanContext,
 } from "./context/FlightPlanContext";
+import { useAreaOfOpsContext } from "./context/AreaOfOpsContext";
 import { LocationProvider } from "./context/LocationContext";
 import { LOSAnalysisProvider } from "./context/LOSAnalysisContext";
 import { FlightConfigurationProvider } from "./context/FlightConfigurationContext";
@@ -20,7 +22,6 @@ import Card from "./components/Card";
 import ELOSAnalysisCard from "./components/ELOSAnalysisCard";
 import { ObstacleAnalysisProvider } from "./context/ObstacleAnalysisContext";
 import MapSidePanel from "./components/MapSidePanel";
-import AOGenerator from "./AO/AOGenerator";
 import { Battery, Radio, GripVertical, X } from "lucide-react";
 import { trackEventWithForm as trackEvent } from "./components/tracking/tracking";
 import WelcomePitch from "./components/WelcomePitch";
@@ -66,16 +67,22 @@ const FeedbackInput = memo(() => {
     </div>
   );
 });
-FeedbackInput.displayName = "FeedbackInput"; // Added displayName
+FeedbackInput.displayName = "FeedbackInput";
 
 const HomeContent = () => {
   const mapRef = useRef<MapRef>(null);
   const [activePanel, setActivePanel] = useState<"energy" | "los" | null>(null);
   const [showUploader, setShowUploader] = useState(false);
+  const [showAreaOpsUploader, setShowAreaOpsUploader] = useState(false);
   const { flightPlan, setFlightPlan } = useFlightPlanContext();
+  const { aoGeometry } = useAreaOfOpsContext();
 
   const togglePanel = (panel: "energy" | "los") => {
     setActivePanel(activePanel === panel ? null : panel);
+  };
+
+  const handleAreaOps = () => {
+    setShowAreaOpsUploader(true);
   };
 
   return (
@@ -113,42 +120,77 @@ const HomeContent = () => {
           <div className="flex-grow relative h-full">
             <div className="relative h-full rounded-r-xl overflow-hidden">
               <Map ref={mapRef} />
-              {/* Uploader Overlay */}
-              {(!flightPlan || showUploader) && (
-                <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20">
-                  <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
-                    <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-lg font-semibold">
-                        Flight Plan Upload
-                      </h3>
-                      {/* Close Uploader Button */}
+
+              {/* Uploader Overlay
+                  This is shown only when no uploader is active and neither flightPlan nor AO geometry exists.
+                  (Note: If you choose the AO route, flightPlan is empty but once the AO is uploaded, aoGeometry becomes non‑empty.)
+              */}
+              {(!showUploader && !showAreaOpsUploader && !flightPlan && !aoGeometry) && (
+                <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20 p-4">
+                  <div className="bg-white p-4 rounded-lg shadow-lg w-full max-w-sm">
+                    <h3 className="text-xl font-semibold text-center mb-4">
+                      Choose Your Starting Point
+                    </h3>
+                    <div className="flex flex-col gap-4">
                       <button
-                        onClick={() => {
-                          trackEvent("uploader_close_click", { panel: "page.tsx" });
-                          setShowUploader(false);
-                        }}
-                        className="text-gray-500 hover:text-gray-700"
+                        onClick={() => setShowUploader(true)}
+                        className="w-full border border-blue-500 text-blue-500 rounded-lg py-2 hover:bg-blue-50 transition"
                       >
-                        <X size={20} />
+                        Start With Flight Plan
+                      </button>
+                      <button
+                        onClick={handleAreaOps}
+                        className="w-full border border-green-500 text-green-500 rounded-lg py-2 hover:bg-green-50 transition"
+                      >
+                        Start With Area of Operations
                       </button>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {showUploader && (
+                <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20 p-4">
+                  <div className="bg-white p-4 rounded-lg shadow-lg w-full max-w-sm">
+                    <h3 className="text-xl font-semibold mb-4">
+                      Flight Plan Upload
+                    </h3>
                     <FlightPlanUploader
                       onClose={() => setShowUploader(false)}
                       mapRef={mapRef}
                       onPlanUploaded={(flightData, resetMap) => {
-                        resetMap(); // Reset map before setting new plan
+                        resetMap();
                         setFlightPlan(flightData);
+                        // Close uploader overlay after successful upload.
+                        setShowUploader(false);
                       }}
                     />
                   </div>
                 </div>
               )}
+
+              {showAreaOpsUploader && (
+                <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20 p-4">
+                  <div className="bg-white p-4 rounded-lg shadow-lg w-full max-w-sm">
+                    <h3 className="text-xl font-semibold mb-4">
+                      Area of Operations Upload
+                    </h3>
+                    <AreaOpsUploader
+                      onClose={() => setShowAreaOpsUploader(false)}
+                      mapRef={mapRef}
+                    />
+                  </div>
+                </div>
+              )}
+
               {/* Analysis Control Buttons */}
               <div className="absolute top-4 left-4 z-10 flex flex-row gap-2 mb-4">
                 {/* Energy Analysis Button */}
                 <button
                   onClick={() => {
-                    trackEvent("map_energy_panel_click", { panel: "page.tsx" });
+                    trackEvent("map_energy_panel_click", {
+                      panel: "page.tsx",
+                    });
                     togglePanel("energy");
                   }}
                   className={`map-button flex items-center gap-2 transition-colors ${
@@ -181,7 +223,9 @@ const HomeContent = () => {
                 {flightPlan && (
                   <button
                     onClick={() => {
-                      trackEvent("upload_flight_plan_click", { panel: "page.tsx" });
+                      trackEvent("upload_flight_plan_click", {
+                        panel: "page.tsx",
+                      });
                       setShowUploader(true);
                     }}
                     className="map-button flex items-center gap-2 transition-colors hover:bg-gray-300/80"
@@ -215,10 +259,7 @@ const HomeContent = () => {
                   Plan Verification
                 </h3>
                 <div className="flex-1 overflow-y-auto">
-                  <PlanVerification
-                    mapRef={mapRef}
-                    onTogglePanel={togglePanel}
-                  />
+                  <PlanVerification mapRef={mapRef} onTogglePanel={togglePanel} />
                   <div className="mt-4">
                     <WelcomePitch />
                   </div>

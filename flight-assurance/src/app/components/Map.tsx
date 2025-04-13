@@ -730,6 +730,79 @@ useEffect(() => {
   }
 }, [aoTerrainGrid]);
 
+// New useEffect for area-of-operations-outline
+useEffect(() => {
+  if (!mapRef.current || !terrainLoadedRef.current || !aoGeometry) return;
+
+  const map = mapRef.current;
+  const outlineLayerId = MAP_LAYERS.AREA_OF_OPERATIONS_OUTLINE;
+  const fillLayerId = `${MAP_LAYERS.AREA_OF_OPERATIONS_OUTLINE}-fill`;
+  const sourceId = "area-of-operations-outline-source";
+
+  console.log("Adding AO outline and fill layers with IDs:", outlineLayerId, fillLayerId);
+
+  try {
+    if (aoGeometry && aoGeometry.features.length > 0) {
+      // Add or update GeoJSON source
+      if (map.getSource(sourceId)) {
+        (map.getSource(sourceId) as mapboxgl.GeoJSONSource).setData(aoGeometry);
+      } else {
+        map.addSource(sourceId, {
+          type: "geojson",
+          data: aoGeometry,
+        });
+      }
+
+      // Always add/update outline layer (blue, dashed, distinct)
+      if (!map.getLayer(outlineLayerId)) {
+        map.addLayer({
+          id: outlineLayerId,
+          type: "line",
+          source: sourceId,
+          layout: {
+            "line-join": "round",
+            "line-cap": "round",
+          },
+          paint: {
+            "line-color": "#0000FF",
+            "line-width": 3,
+            "line-opacity": 0.9,
+            "line-dasharray": [2, 2],
+          },
+        });
+      }
+
+      // Add fill layer only if aoTerrainGrid is not active
+      if (!aoTerrainGrid && !map.getLayer(fillLayerId)) {
+        map.addLayer({
+          id: fillLayerId,
+          type: "fill",
+          source: sourceId,
+          paint: {
+            "fill-color": "#ADD8E6",
+            "fill-opacity": 0.2,
+          },
+        }, outlineLayerId); // Place fill below outline
+      } else if (aoTerrainGrid && map.getLayer(fillLayerId)) {
+        map.removeLayer(fillLayerId); // Remove fill if terrain grid is active
+      }
+    } else {
+      // Remove both layers if aoGeometry is empty
+      if (map.getLayer(outlineLayerId)) {
+        map.removeLayer(outlineLayerId);
+      }
+      if (map.getLayer(fillLayerId)) {
+        map.removeLayer(fillLayerId);
+      }
+      if (map.getSource(sourceId)) {
+        map.removeSource(sourceId);
+      }
+    }
+  } catch (error) {
+    console.error("Error updating AO outline and fill layers:", error);
+  }
+}, [aoGeometry, aoTerrainGrid]);
+
   // Map initialization
   useEffect(() => {
     if (mapContainerRef.current) {

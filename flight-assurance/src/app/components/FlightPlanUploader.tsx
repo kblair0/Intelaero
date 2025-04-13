@@ -554,7 +554,7 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded,
 
   return (
     <div className="flex-1 bg-white shadow-lg p-6 rounded-lg border border-gray-200">
-      <h3 className="text-lg font-bold">📁 Upload or Use Example Flight Plan</h3>
+      <h3 className="text-lg font-bold">🚀 Upload or Use Example Flight Plan 📁</h3>
       <p className="text-sm text-gray-600">
         Upload a <strong>.waypoints</strong>, <strong>.geojson</strong>, <strong>.kml</strong>, or{" "}
         <strong>.kmz</strong> file, or use our example to analyze a drone flight path.
