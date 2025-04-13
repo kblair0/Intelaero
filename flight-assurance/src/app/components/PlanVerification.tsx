@@ -402,6 +402,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
 // Terrain analysis section
 const getTerrainAnalysis = (): VerificationSection => {
   const hasAOGeometry = aoGeometry && aoGeometry.features.length > 0;
+  const hasFlightPlan = !!flightPlan;
 
   if (!analysisData) {
     return {
@@ -409,31 +410,31 @@ const getTerrainAnalysis = (): VerificationSection => {
       title: "Obstruction Analysis",
       description: "Analyze terrain clearance for the defined area",
       status: "pending",
-      actions: hasAOGeometry ? (
+      actions: (hasAOGeometry || hasFlightPlan) ? (
         <div className="flex flex-col gap-2 mt-2">
-        <button
-          onClick={() => {
-            trackEvent("DYBDpowerlines_add_overlay_click", { panel: "planverification.tsx" });
-            if (bydLayerHandlerRef.current) {
-              bydLayerHandlerRef.current.fetchLayers();
-            } else {
-              console.warn("BYDALayerHandler ref not available.");
-            }
-          }}
-          className="flex items-center justify-center gap-2 px-3 py-1.5 bg-green-500 text-white text-sm rounded-md hover:bg-green-600 transition-colors"
-        >
-          ⚡ Toggle Powerlines
-        </button>
-        <button
-          onClick={() => {
-            trackEvent("generate_ao_click", { panel: "planverification.tsx" });
-            aoGeneratorRef.current?.generateAO();
-          }}
-          className="flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors"
-        >
-          🌍 Analyse Terrain In AO
-        </button>
-      </div>
+          <button
+            onClick={() => {
+              trackEvent("DYBDpowerlines_add_overlay_click", { panel: "planverification.tsx" });
+              if (bydLayerHandlerRef.current) {
+                bydLayerHandlerRef.current.fetchLayers();
+              } else {
+                console.warn("BYDALayerHandler ref not available.");
+              }
+            }}
+            className="flex items-center justify-center gap-2 px-3 py-1.5 bg-green-500 text-white text-sm rounded-md hover:bg-green-600 transition-colors"
+          >
+            ⚡ Toggle Powerlines
+          </button>
+          <button
+            onClick={() => {
+              trackEvent("generate_ao_click", { panel: "planverification.tsx" });
+              aoGeneratorRef.current?.generateAO();
+            }}
+            className="flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors"
+          >
+            🌍 Analyse Terrain In AO
+          </button>
+        </div>
       ) : undefined,
     };
   }
@@ -480,10 +481,14 @@ const getTerrainAnalysis = (): VerificationSection => {
       <div className="flex flex-col gap-2 mt-2">
         <button
           onClick={() => {
-            trackEvent("toggle_powerlines_overlay", { panel: "planverification.tsx" });
-            handleAddPowerlines(mapRef);
+            trackEvent("DYBDpowerlines_add_overlay_click", { panel: "planverification.tsx" });
+            if (bydLayerHandlerRef.current) {
+              bydLayerHandlerRef.current.fetchLayers();
+            } else {
+              console.warn("BYDALayerHandler ref not available.");
+            }
           }}
-          className="flex items-center gap-2 px-3 py-1.5 bg-green-500 text-white text-sm rounded-md hover:bg-green-600 transition-colors"
+          className="flex items-center justify-center gap-2 px-3 py-1.5 bg-green-500 text-white text-sm rounded-md hover:bg-green-600 transition-colors"
         >
           ⚡ Toggle Powerlines
         </button>
@@ -492,7 +497,7 @@ const getTerrainAnalysis = (): VerificationSection => {
             trackEvent("generate_ao_click", { panel: "planverification.tsx" });
             aoGeneratorRef.current?.generateAO();
           }}
-          className="flex items-center gap-2 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors"
+          className="flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors"
         >
           🌍 Analyse Terrain In AO
         </button>
@@ -709,8 +714,8 @@ const getTerrainAnalysis = (): VerificationSection => {
               </div>
             )}
 
-            {/* Show terrain actions when AO is uploaded */}
-            {section.id === "terrain" && aoGeometry && aoGeometry.features.length > 0 && section.actions && (
+            {/* Show terrain actions when AO or flight plan is uploaded */}
+            {section.id === "terrain" && (aoGeometry?.features.length > 0 || flightPlan) && section.actions && (
               <div className="px-4 py-3 bg-gray-50 border-t">
                 {section.actions}
               </div>
