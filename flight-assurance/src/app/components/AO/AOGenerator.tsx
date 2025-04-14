@@ -1,11 +1,15 @@
+// src/components/AO/AOGenerator.tsx
+
 "use client";
 import React, { useImperativeHandle, forwardRef } from "react";
 import * as turf from "@turf/turf";
 import mapboxgl from "mapbox-gl";
 import { useFlightPlanContext } from "../../context/FlightPlanContext";
 import { useAreaOfOpsContext, GridCell } from "../../context/AreaOfOpsContext";
-import { MapRef } from "../Map";
-import { layerManager, MAP_LAYERS } from "../LayerManager"; // Adjust import based on your file structure
+// Change this import to use the types file
+import type { MapRef } from "../../types/MapTypes";
+
+import { layerManager, MAP_LAYERS } from "../../services/LayerManager";
 
 export interface AOGeneratorRef {
   generateAO: () => void;

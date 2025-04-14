@@ -1,15 +1,66 @@
-// FlightPlanUploader.tsx
+/**
+ * FlightPlanUploader.tsx
+ * 
+ * Purpose:
+ * This component provides a user interface for uploading flight plan files (.waypoints, .geojson, .kml, .kmz) or loading an example flight plan.
+ * It handles parsing various flight plan formats, processes them using `useFlightPlanProcessor` to resolve altitudes and calculate distances,
+ * and stores the processed flight plan in `FlightPlanContext` for application-wide access. Additionally, it tracks uploaded flight plans in production
+ * for analytics purposes.
+ *
+ * Responsibilities:
+ * - Parse flight plan files into a standardized GeoJSON-based `FlightPlanData` format.
+ * - Process flight plans using `useFlightPlanProcessor` to handle terrain elevation queries, altitude resolution, and distance calculations.
+ * - Update `FlightPlanContext` with the processed flight plan.
+ * - Provide user feedback on the upload and processing status (e.g., uploading, processing, success, error).
+ * - Allow loading of an example flight plan for demo purposes.
+ * - Track flight plan uploads in production using a Google Form submission.
+ *
+ * Related Files and Dependencies:
+ * - **Contexts**:
+ *   - `FlightPlanContext.tsx`: Stores the processed flight plan data and provides a `setFlightPlan` method to update it.
+ *   - `MapContext.tsx`: Provides the Mapbox GL map instance required for terrain elevation queries.
+ * - **Hooks**:
+ *   - `useFlightPlanProcessor.ts`: Processes the flight plan by resolving altitudes based on terrain data and calculating distances.
+ * - **Libraries**:
+ *   - `react-dropzone`: Handles file drag-and-drop functionality for uploads.
+ *   - `@mapbox/togeojson`: Converts KML files to GeoJSON format.
+ *   - `jszip`: Extracts and processes KMZ files (zipped KML).
+ * - **Components**:
+ *   - Used in `page.tsx`: The main page component renders `FlightPlanUploader` to allow users to upload flight plans.
+ * - **Services**:
+ *   - `tracking/tracking.ts`: Tracks user actions (e.g., uploading a file or loading an example) via Google Forms.
+ *
+ * Likely Relationships:
+ * - **FlightPathDisplay.tsx**: After uploading, the processed flight plan may be visualized on the map using this component.
+ * - **LOSModal.tsx**: The flight plan may trigger line-of-sight analysis, prompting the user via this modal.
+ * - **AnalysisStatus.tsx**: Displays the status of flight plan processing or related analyses.
+ * - **useLayers.ts**: Adds the flight plan as a layer on the map after processing.
+ *
+ * Notes:
+ * - This component assumes the map is initialized (via `MapContext`) before processing, as terrain queries require a Mapbox GL instance.
+ * - Error handling is implemented to provide user feedback, but could be enhanced with toast notifications for a better UX.
+ * - The tracking functionality submits data to a Google Form in production, which may need to be updated based on analytics requirements.
+ */
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 import { useFlightPlanContext } from "../context/FlightPlanContext";
+import { useMapContext } from "../context/MapContext";
+import { useFlightPlanProcessor } from "../hooks/useFlightPlanProcessor";
 import toGeoJSON from "@mapbox/togeojson";
 import JSZip from "jszip";
 import { trackEventWithForm as trackEvent } from "./tracking/tracking";
+
+// Initialize DOMParser for parsing XML-based files (e.g., KML, KMZ), but only in browser environments
 const parser = typeof window !== "undefined" ? new DOMParser() : null;
 
-// MavLink Altitude Mode Setter
+/**
+ * Converts a MAVLink frame number to an altitude mode for flight plan waypoints.
+ * @param frame - The MAVLink frame number (e.g., 3 for relative, 10 for terrain).
+ * @returns The corresponding altitude mode ("absolute", "relative", or "terrain").
+ */
 function frameToAltitudeMode(frame: number): "absolute" | "relative" | "terrain" {
   switch (frame) {
     case 3:
@@ -22,7 +73,12 @@ function frameToAltitudeMode(frame: number): "absolute" | "relative" | "terrain"
   }
 }
 
-// Parse QGroundControl .waypoints file
+/**
+ * Parses a QGroundControl .waypoints file into a `FlightPlanData` structure.
+ * @param content - The raw content of the .waypoints file.
+ * @returns A `FlightPlanData` object representing the flight plan.
+ * @throws Error if the file format is invalid.
+ */
 function parseQGCFile(content: string): import("../context/FlightPlanContext").FlightPlanData {
   const lines = content.trim().split("\n");
   if (!lines[0].includes("QGC WPL 110")) {
@@ -36,6 +92,7 @@ function parseQGCFile(content: string): import("../context/FlightPlanContext").F
   let isTerrainMission = false;
   let isRelativeMission = false;
 
+  // Process each line of the file to extract waypoints and home position
   for (let i = 1; i < lines.length; i++) {
     const parts = lines[i].split("\t");
     if (parts.length < 12) continue;
@@ -47,9 +104,11 @@ function parseQGCFile(content: string): import("../context/FlightPlanContext").F
     const lon = parseFloat(parts[9]);
     const alt = parseFloat(parts[10]);
 
+    // Set the home position from the first waypoint
     if (i === 1) homePosition = { latitude: lat, longitude: lon, altitude: alt };
 
     const altitudeMode = frameToAltitudeMode(frame);
+    // Handle takeoff command (command 22) to determine mission type and altitude
     if (command === 22) {
       takeoffAltitude = alt;
       if (frame === 10) isTerrainMission = true;
@@ -64,11 +123,13 @@ function parseQGCFile(content: string): import("../context/FlightPlanContext").F
       frame,
     });
 
+    // Add valid coordinates to the flight path
     if (!isNaN(lat) && !isNaN(lon) && lat !== 0 && lon !== 0) {
       coordinates.push([lon, lat, alt]);
     }
   }
 
+  // Adjust home position and first waypoint based on mission type
   if (takeoffAltitude !== null) {
     if (isTerrainMission) {
       homePosition.altitude = takeoffAltitude;
@@ -109,7 +170,13 @@ function parseQGCFile(content: string): import("../context/FlightPlanContext").F
   };
 }
 
-// Parse KML file with enhanced metadata
+/**
+ * Parses a KML file into a `FlightPlanData` structure, extracting flight path coordinates and metadata.
+ * @param kmlText - The raw KML file content as a string.
+ * @param file - The File object (optional) for metadata like last modified date.
+ * @returns A `FlightPlanData` object representing the flight plan.
+ * @throws Error if the KML file lacks a valid LineString geometry.
+ */
 function parseKMLFile(kmlText: string, file?: File): import("../context/FlightPlanContext").FlightPlanData {
   if (!parser) {
     throw new Error("DOMParser is not available in this environment.");
@@ -126,6 +193,7 @@ function parseKMLFile(kmlText: string, file?: File): import("../context/FlightPl
     throw new Error("No valid LineString geometry found in KML file.");
   }
 
+  // Extract coordinates from LineString features
   const coordinates: [number, number, number][] = lineStringFeatures.flatMap((feature) =>
     (feature.geometry as GeoJSON.LineString).coordinates.map(([lon, lat, alt]) => [
       lon,
@@ -134,6 +202,7 @@ function parseKMLFile(kmlText: string, file?: File): import("../context/FlightPl
     ] as [number, number, number])
   );
 
+  // Create waypoints from coordinates, assuming absolute altitude mode
   const waypoints: import("../context/FlightPlanContext").WaypointData[] = coordinates.map((coord, index) => ({
     index,
     altitudeMode: "absolute" as const,
@@ -172,7 +241,12 @@ function parseKMLFile(kmlText: string, file?: File): import("../context/FlightPl
   };
 }
 
-// Parse GeoJSON file
+/**
+ * Parses a GeoJSON file into a `FlightPlanData` structure.
+ * @param geojsonText - The raw GeoJSON file content as a string.
+ * @returns A `FlightPlanData` object representing the flight plan.
+ * @throws Error if the GeoJSON file lacks features or a valid LineString.
+ */
 function parseGeoJSONFile(geojsonText: string): import("../context/FlightPlanContext").FlightPlanData {
   const geojsonResult = JSON.parse(geojsonText) as GeoJSON.FeatureCollection;
   if (!geojsonResult.features || geojsonResult.features.length === 0) {
@@ -211,7 +285,12 @@ function parseGeoJSONFile(geojsonText: string): import("../context/FlightPlanCon
   };
 }
 
-// Parse KMZ (DJI) file
+/**
+ * Parses a KMZ file (DJI format) into a `FlightPlanData` structure by extracting KML and WPML files.
+ * @param file - The KMZ file to parse.
+ * @returns A `FlightPlanData` object representing the flight plan.
+ * @throws Error if the KMZ file format is unsupported.
+ */
 async function parseKMZFile(file: File): Promise<import("../context/FlightPlanContext").FlightPlanData> {
   const zip = await JSZip.loadAsync(file);
   const fileNames = Object.keys(zip.files);
@@ -349,29 +428,38 @@ async function parseKMZFile(file: File): Promise<import("../context/FlightPlanCo
   throw new Error("Unsupported KMZ format. Only DJI flight plan KMZ files are supported.");
 }
 
+/**
+ * Infers the home position from the first coordinate in the flight plan.
+ * @param coordinates - Array of coordinates in the flight plan.
+ * @returns An object with latitude, longitude, and altitude for the home position.
+ */
 function inferHomePosition(coordinates: [number, number, number][]) {
   if (!coordinates.length) return { latitude: 0, longitude: 0, altitude: 0 };
   const [lon, lat, alt] = coordinates[0];
   return { latitude: lat, longitude: lon, altitude: alt ?? 0 };
 }
 
-// function to submit flight plan data to the new Google Form
+/**
+ * Tracks the uploaded flight plan by submitting it to a Google Form in production.
+ * @param flightData - The processed flight plan data.
+ * @param fileName - The name of the uploaded file.
+ */
 const trackFlightPlan = async (
   flightData: import("../context/FlightPlanContext").FlightPlanData,
   fileName: string
 ) => {
-  const formUrl = "https://docs.google.com/forms/d/e/1FAIpQLScuzovyjSaTRVVKVLa-Y88bGjBp1uG-doxALVE4aAdJTmzvJg/formResponse"; // Your form's formResponse URL
+  const formUrl = "https://docs.google.com/forms/d/e/1FAIpQLScuzovyjSaTRVVKVLa-Y88bGjBp1uG-doxALVE4aAdJTmzvJg/formResponse";
 
   const auditMetadata = {
     uploadTimestamp: new Date().toISOString(),
     userAgent: navigator.userAgent,
     screenResolution: `${window.screen.width}x${window.screen.height}`,
     language: navigator.language,
-    ipAddress: "", // Placeholder; enable IP fetch below if desired
-    userId: "", // Placeholder for future auth integration
+    ipAddress: "",
+    userId: "",
   };
 
-  // Fetch IP address 
+  // Fetch IP address for audit metadata
   try {
     const ipResponse = await fetch("https://api.ipify.org?format=json");
     const ipData = await ipResponse.json();
@@ -380,12 +468,11 @@ const trackFlightPlan = async (
     console.error("Failed to fetch IP address:", error);
   }
 
-
   const formData = {
-    "entry.2094842776": new Date().toISOString(), // Timestamp
-    "entry.1248754852": fileName, // File Name
-    "entry.1814819258": JSON.stringify(flightData), // Flight Plan Data
-    "entry.903129689": JSON.stringify(auditMetadata), // Audit Metadata
+    "entry.2094842776": new Date().toISOString(),
+    "entry.1248754852": fileName,
+    "entry.1814819258": JSON.stringify(flightData),
+    "entry.903129689": JSON.stringify(auditMetadata),
   };
 
   let iframe = document.getElementById("hidden_iframe_flightplan") as HTMLIFrameElement;
@@ -422,24 +509,94 @@ interface FlightPlanUploaderProps {
   mapRef?: React.RefObject<any>;
 }
 
+/**
+ * A component for uploading and processing flight plan files, or loading an example flight plan.
+ * @param props - Component props.
+ * @param props.onPlanUploaded - Callback to handle the processed flight plan and reset the map.
+ * @param props.onClose - Callback to close the uploader UI.
+ * @param props.mapRef - Reference to the map component for resetting layers.
+ */
 const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded, onClose, mapRef }) => {
   const [fileUploadStatus, setFileUploadStatus] = useState<"idle" | "uploading" | "processed" | "error">("idle");
   const [fileName, setFileName] = useState<string | null>(null);
   const { setFlightPlan } = useFlightPlanContext();
+  const { map } = useMapContext();
+  const { processFlightPlan, isProcessing: isProcessingFlightPlan, error: processingError } = useFlightPlanProcessor();
 
-  const onDrop = async (acceptedFiles: File[]) => {
+  /**
+   * Processes a raw flight plan and stores it in `FlightPlanContext` after processing.
+   * @param rawFlightPlan - The raw flight plan data to process.
+   * @param fileName - The name of the file being processed.
+   */
+  const processAndStoreFlightPlan = useCallback(async (
+    rawFlightPlan: import("../context/FlightPlanContext").FlightPlanData,
+    fileName: string
+  ) => {
+    if (!map) {
+      setFileUploadStatus("error");
+      throw new Error("Map not initialized");
+    }
+
+    try {
+      // Process the flight plan to resolve altitudes and calculate distances
+      const processedFlightPlan = await processFlightPlan(map, rawFlightPlan);
+      
+      // Store the processed flight plan in context for app-wide access
+      setFlightPlan(processedFlightPlan);
+
+      // Notify the parent component of the processed flight plan and provide a reset function
+      if (onPlanUploaded && mapRef?.current) {
+        onPlanUploaded(processedFlightPlan, () => {
+          const mapInstance = mapRef.current!.getMap();
+          if (mapInstance) {
+            if (mapInstance.getLayer("line-0")) {
+              mapRef.current!.toggleLayerVisibility("line-0");
+            }
+            ["ELOS_GRID", "GCS_GRID", "OBSERVER_GRID", "REPEATER_GRID", "MERGED_VISIBILITY"].forEach((layer) => {
+              if (mapInstance.getSource(layer)) {
+                mapRef.current!.toggleLayerVisibility(layer);
+              }
+            });
+            mapInstance.getStyle().layers?.forEach((layer: any) => {
+              if (layer.id.startsWith("marker")) {
+                mapInstance.removeLayer(layer.id);
+                mapInstance.removeSource(layer.id);
+              }
+            });
+          }
+        });
+      }
+
+      // Track the processed flight plan in production for analytics
+      if (process.env.NODE_ENV === "production") {
+        await trackFlightPlan(processedFlightPlan, fileName);
+      }
+
+      setFileUploadStatus("processed");
+      if (onClose) onClose();
+    } catch (error) {
+      console.error("Error processing flight plan:", error);
+      setFileUploadStatus("error");
+    }
+  }, [map, processFlightPlan, setFlightPlan, onPlanUploaded, mapRef, onClose]);
+
+  /**
+   * Handles file drop events by parsing the uploaded file and processing the flight plan.
+   * @param acceptedFiles - Array of files dropped by the user.
+   */
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
     const fileExtension = file.name.split(".").pop()?.toLowerCase() || "";
     setFileName(file.name);
     setFileUploadStatus("uploading");
 
     try {
-      let flightData: import("../context/FlightPlanContext").FlightPlanData;
+      let rawFlightData: import("../context/FlightPlanContext").FlightPlanData;
       if (fileExtension === "kmz") {
-        flightData = await parseKMZFile(file);
+        rawFlightData = await parseKMZFile(file);
       } else {
         const reader = new FileReader();
-        flightData = await new Promise<import("../context/FlightPlanContext").FlightPlanData>((resolve, reject) => {
+        rawFlightData = await new Promise<import("../context/FlightPlanContext").FlightPlanData>((resolve, reject) => {
           reader.onload = () => {
             try {
               const result = reader.result as string;
@@ -457,60 +614,21 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded,
       }
 
       const newFlightPlan = {
-        ...flightData,
-        properties: { ...flightData.properties, processed: false },
+        ...rawFlightData,
+        properties: { ...rawFlightData.properties, processed: false },
       };
 
-      if (onPlanUploaded && mapRef?.current) {
-        onPlanUploaded(newFlightPlan, () => {
-          const map = mapRef.current!.getMap();
-          if (map) {
-            if (map.getLayer("line-0")) {
-              mapRef.current!.toggleLayerVisibility("line-0");
-            }
-            ["ELOS_GRID", "GCS_GRID", "OBSERVER_GRID", "REPEATER_GRID", "MERGED_VISIBILITY"].forEach((layer) => {
-              if (map.getSource(layer)) {
-                mapRef.current!.toggleLayerVisibility(layer);
-              }
-            });
-            map.getStyle().layers?.forEach((layer: any) => {
-              if (layer.id.startsWith("marker")) {
-                map.removeLayer(layer.id);
-                map.removeSource(layer.id);
-              }
-            });
-          }
-        });
-      }
-
-      // Inside onDrop after processing the flight plan
-      setFlightPlan(newFlightPlan);
-
-      // Only track flight plan in production
-      if (process.env.NODE_ENV === "production") {
-        await trackFlightPlan(newFlightPlan, file.name);
-      }
-
-
-      setFileUploadStatus("processed");
-      if (onClose) onClose();
+      await processAndStoreFlightPlan(newFlightPlan, file.name);
     } catch (error) {
       console.error("Error processing file:", error);
       setFileUploadStatus("error");
     }
-  };
+  }, [processAndStoreFlightPlan]);
 
-  const { getRootProps, getInputProps } = useDropzone({
-    accept: {
-      "application/vnd.google-earth.kmz": [".kmz"],
-      "application/vnd.google-earth.kml+xml": [".kml"],
-      "application/geo+json": [".geojson"],
-      "application/waypoints": [".waypoints"],
-    },
-    onDrop,
-  });
-
-  const loadExampleGeoJSON = async () => {
+  /**
+   * Loads an example GeoJSON flight plan for demo purposes.
+   */
+  const loadExampleGeoJSON = useCallback(async () => {
     try {
       const response = await fetch("/example.geojson");
       const rawData = await response.json();
@@ -518,39 +636,12 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded,
       const processedData = parseGeoJSONFile(JSON.stringify(rawData));
       const newFlightPlan = { ...processedData, properties: { ...processedData.properties, processed: false } };
 
-      setFlightPlan(newFlightPlan);
-      if (onPlanUploaded && mapRef?.current) {
-        onPlanUploaded(newFlightPlan, () => {
-          const map = mapRef.current!.getMap();
-          if (map) {
-            mapRef.current!.toggleLayerVisibility("line-0");
-            ["ELOS_GRID", "GCS_GRID", "OBSERVER_GRID", "REPEATER_GRID", "MERGED_VISIBILITY"].forEach((layer) => {
-              if (map.getSource(layer)) {
-                mapRef.current!.toggleLayerVisibility(layer);
-              }
-            });
-            map.getStyle().layers?.forEach((layer: any) => {
-              if (layer.id.startsWith("marker")) {
-                map.removeLayer(layer.id);
-                map.removeSource(layer.id);
-              }
-            });
-          }
-        });
-      }
-
-      // Submit example GeoJSON to new form
-      // Only track example flight plan in production
-      if (process.env.NODE_ENV === "production") {
-        await trackFlightPlan(newFlightPlan, "example.geojson");
-      }
-
-      setFileUploadStatus("processed");
+      await processAndStoreFlightPlan(newFlightPlan, "example.geojson");
     } catch (error) {
       console.error("Error loading example GeoJSON:", error);
       setFileUploadStatus("error");
     }
-  };
+  }, [processAndStoreFlightPlan]);
 
   return (
     <div className="flex-1 bg-white shadow-lg p-6 rounded-lg border border-gray-200">
@@ -559,7 +650,7 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded,
         Upload a <strong>.waypoints</strong>, <strong>.geojson</strong>, <strong>.kml</strong>, or{" "}
         <strong>.kmz</strong> file, or use our example to analyze a drone flight path.
       </p>
-      
+
       {/* Upload Dropzone */}
       <div
         {...getRootProps()}
@@ -570,20 +661,20 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded,
         {fileName && (
           <p className="mt-2 text-sm text-gray-600">Selected file: {fileName}</p>
         )}
-        {fileUploadStatus === "uploading" && (
+        {(fileUploadStatus === "uploading" || isProcessingFlightPlan) && (
           <p className="mt-2 text-sm text-blue-600">Processing file...</p>
         )}
         {fileUploadStatus === "processed" && (
           <p className="mt-2 text-sm text-green-600">File processed successfully!</p>
         )}
         {fileUploadStatus === "error" && (
-          <p className="mt-2 text-sm text-red-600">Error processing file. Please try again.</p>
+          <p className="mt-2 text-sm text-red-600">
+            Error processing file: {processingError || "Please try again."}
+          </p>
         )}
       </div>
 
-
-
-      {/* New Message and Updated Button */}
+      {/* Example Button */}
       <div className="mt-4">
         <p className="text-sm text-gray-600 text-center">
           Don’t have a file? Try our example to get started.

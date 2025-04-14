@@ -1,13 +1,17 @@
+// src/components/AO/AreaOpsUploader.tsx
+
 "use client";
 import React, { useState, useRef } from "react";
 import { useDropzone } from "react-dropzone";
 import { useAreaOfOpsContext } from "../../context/AreaOfOpsContext";
 import * as turf from "@turf/turf";
-import AOGenerator, { AOGeneratorRef } from "../AO/AOGenerator";
+import AOGenerator, { AOGeneratorRef } from "./AOGenerator";
+// Add this import
+import type { MapRef } from "../../types/MapTypes";
 
 interface AreaOpsUploaderProps {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  mapRef: React.RefObject<any>;
+  // Update this type annotation
+  mapRef: React.RefObject<MapRef>;
   onClose?: () => void;
 }
 

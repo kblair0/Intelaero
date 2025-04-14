@@ -1,29 +1,23 @@
+"use client";
+
 import { forwardRef, useImperativeHandle, useCallback, useEffect } from "react";
 import type mapboxgl from "mapbox-gl";
+import { useMapContext } from "../../context/MapContext";
 import { useAreaOfOpsContext } from "../../context/AreaOfOpsContext";
 import * as turf from "@turf/turf";
 
-/**
- * Interface for the component props.
- */
 interface BYDALayerHandlerProps {
   map: mapboxgl.Map | null;
 }
 
-/**
- * List of ArcGIS services to query.
- */
 const services = [
   "LUAL_Network_HV_Feature_Public",
   "LUAL_Network_LV_Feature_Public",
   "LUAL_Network_SWER_Feature_Public",
   "LUAL_Network_Other_Feature_Public",
-  "LUAL_Network_Device_Feature_View"
+  "LUAL_Network_Device_Feature_View",
 ];
 
-/**
- * A mapping from service names to predetermined source and layer IDs.
- */
 const serviceLayerMapping: Record<
   string,
   { sourceId: string; layerId: string; color: string }
@@ -31,81 +25,110 @@ const serviceLayerMapping: Record<
   LUAL_Network_HV_Feature_Public: {
     sourceId: "byda-hv-source",
     layerId: "byda-hv-layer",
-    color: "#ff0000"
+    color: "#ff0000",
   },
   LUAL_Network_LV_Feature_Public: {
     sourceId: "byda-lv-source",
     layerId: "byda-lv-layer",
-    color: "#ff0000"
+    color: "#ff0000",
   },
   LUAL_Network_SWER_Feature_Public: {
     sourceId: "byda-swer-source",
     layerId: "byda-swer-layer",
-    color: "#ff0000"
+    color: "#ff0000",
   },
   LUAL_Network_Other_Feature_Public: {
     sourceId: "byda-other-source",
     layerId: "byda-other-layer",
-    color: "#ff0000"
+    color: "#ff0000",
   },
   LUAL_Network_Device_Feature_View: {
     sourceId: "byda-device-source",
     layerId: "byda-device-layer",
-    color: "#ff0000"
-  }
+    color: "#ff0000",
+  },
 };
 
-/**
- * Base URL for ArcGIS REST services.
- */
 const baseUrl =
   "https://services-ap1.arcgis.com/ug6sGLFkytbXYo4f/ArcGIS/rest/services";
 
-/**
- * Custom query parameters for each service.
- */
 const serviceQueryParams: Record<string, { where: string; outFields: string }> = {
-  "LUAL_Network_HV_Feature_Public": {
+  LUAL_Network_HV_Feature_Public: {
     where: "ASSET_TYPE IN ('US','OH')",
-    outFields: "OPERATING_VOLTAGE,OWNER"
+    outFields: "OPERATING_VOLTAGE,OWNER",
   },
-  "LUAL_Network_LV_Feature_Public": {
+  LUAL_Network_LV_Feature_Public: {
     where: "ASSET_TYPE IN ('US','OH')",
-    outFields: "OPERATING_VOLTAGE,OWNER"
+    outFields: "OPERATING_VOLTAGE,OWNER",
   },
-  "LUAL_Network_SWER_Feature_Public": {
+  LUAL_Network_SWER_Feature_Public: {
     where: "ASSET_TYPE IN ('US','OH')",
-    outFields: "OWNER,OPERATING_VOLTAGE"
+    outFields: "OWNER,OPERATING_VOLTAGE",
   },
-  "LUAL_Network_Other_Feature_Public": {
+  LUAL_Network_Other_Feature_Public: {
     where: "ASSET_TYPE IN ('US','OH')",
-    outFields: "OWNER,OPERATING_VOLTAGE"
+    outFields: "OWNER,OPERATING_VOLTAGE",
   },
-  "LUAL_Network_Device_Feature_View": {
+  LUAL_Network_Device_Feature_View: {
     where: "1=1",
-    outFields: "OWNER,ASSET_TYPE"
-  }
+    outFields: "OWNER,ASSET_TYPE",
+  },
 };
 
-// Common spatial parameters
 const geometryType = "esriGeometryEnvelope";
 const inSR = "4326";
 const spatialRel = "esriSpatialRelIntersects";
 const f = "geojson";
 
-/**
- * BYDALayerHandler Component
- *
- * This component exposes the fetchLayers function via a ref.
- * It does not automatically fetch layers on changes.
- */
 const BYDALayerHandler = forwardRef(
   ({ map }: BYDALayerHandlerProps, ref) => {
+    const { layerManager } = useMapContext();
     const { aoGeometry } = useAreaOfOpsContext();
 
+    // Initialize layers on mount
     useEffect(() => {
-      console.log("[BYDALayerHandler] Component mounted. Map:", map, "AO Geometry:", aoGeometry);
-    }, [map, aoGeometry]);
+      if (!map || !layerManager) return;
+
+      services.forEach((service) => {
+        const { sourceId, layerId, color } = serviceLayerMapping[service];
+
+        // Add empty GeoJSON source
+        if (!map.getSource(sourceId)) {
+          map.addSource(sourceId, {
+            type: "geojson",
+            data: { type: "FeatureCollection", features: [] },
+          });
+        }
+
+        // Add layer if it doesn't exist
+        if (!map.getLayer(layerId)) {
+          map.addLayer({
+            id: layerId,
+            type: "line",
+            source: sourceId,
+            layout: { visibility: "none" },
+            paint: {
+              "line-color": color,
+              "line-width": 2,
+            },
+          });
+          layerManager.registerLayer(layerId); // Register with LayerManager
+        }
+      });
+
+      // Cleanup (optional, only if layers need to be removed)
+      return () => {
+        services.forEach((service) => {
+          const { sourceId, layerId } = serviceLayerMapping[service];
+          if (map.getLayer(layerId)) {
+            map.removeLayer(layerId);
+          }
+          if (map.getSource(sourceId)) {
+            map.removeSource(sourceId);
+          }
+        });
+      };
+    }, [map, layerManager]);
 
     const fetchLayers = useCallback(() => {
       console.log("[BYDALayerHandler] fetchLayers() called.");
@@ -122,21 +145,6 @@ const BYDALayerHandler = forwardRef(
       const boundingBox = turf.bbox(aoGeometry) as [number, number, number, number];
       console.log("[BYDALayerHandler] Calculated AO bounding box:", boundingBox);
       const geometry = boundingBox.join(",");
-      console.log("[BYDALayerHandler] Geometry string:", geometry);
-
-      // Clean up existing layers and sources.
-      services.forEach((service) => {
-        const mapping = serviceLayerMapping[service];
-        if (!mapping) return;
-        if (map.getLayer(mapping.layerId)) {
-          console.log(`[BYDALayerHandler] Removing layer ${mapping.layerId}`);
-          map.removeLayer(mapping.layerId);
-        }
-        if (map.getSource(mapping.sourceId)) {
-          console.log(`[BYDALayerHandler] Removing source ${mapping.sourceId}`);
-          map.removeSource(mapping.sourceId);
-        }
-      });
 
       services.forEach((service) => {
         const params = serviceQueryParams[service];
@@ -148,7 +156,7 @@ const BYDALayerHandler = forwardRef(
           spatialRel,
           outFields: params.outFields,
           returnGeometry: "true",
-          f
+          f,
         });
         const queryUrl = `${baseUrl}/${service}/FeatureServer/0/query?${queryParams.toString()}`;
         console.log(`[BYDALayerHandler] Querying ${service} with URL:`, queryUrl);
@@ -161,38 +169,26 @@ const BYDALayerHandler = forwardRef(
           .then((data) => {
             const mapping = serviceLayerMapping[service];
             if (!mapping) return;
-            const { sourceId, layerId, color } = mapping;
+            const { sourceId, layerId } = mapping;
 
             if (data.features && data.features.length > 0) {
-              console.log(`[BYDALayerHandler] Adding ${service} with ${data.features.length} features`);
+              console.log(`[BYDALayerHandler] Updating ${service} with ${data.features.length} features`);
 
-              if (map.getLayer(layerId)) {
-                console.log(`[BYDALayerHandler] Removing existing layer ${layerId}`);
-                map.removeLayer(layerId);
+              // Update source data instead of removing/re-adding
+              const source = map.getSource(sourceId) as mapboxgl.GeoJSONSource;
+              if (source) {
+                source.setData(data);
+                console.log(`[BYDALayerHandler] Source ${sourceId} updated successfully.`);
+              } else {
+                console.warn(`[BYDALayerHandler] Source ${sourceId} not found.`);
               }
-              if (map.getSource(sourceId)) {
-                console.log(`[BYDALayerHandler] Removing existing source ${sourceId}`);
-                map.removeSource(sourceId);
-              }
-
-              map.addSource(sourceId, {
-                type: "geojson",
-                data,
-              });
-              console.log(`[BYDALayerHandler] Source ${sourceId} added successfully.`);
-
-              map.addLayer({
-                id: layerId,
-                type: "line",
-                source: sourceId,
-                paint: {
-                  "line-color": color,
-                  "line-width": 2,
-                },
-              });
-              console.log(`[BYDALayerHandler] Layer ${layerId} added successfully.`);
             } else {
               console.log(`[BYDALayerHandler] No features found for ${service}`);
+              // Clear source data if no features
+              const source = map.getSource(sourceId) as mapboxgl.GeoJSONSource;
+              if (source) {
+                source.setData({ type: "FeatureCollection", features: [] });
+              }
             }
           })
           .catch((error) => {
@@ -201,7 +197,7 @@ const BYDALayerHandler = forwardRef(
       });
     }, [map, aoGeometry]);
 
-    // Expose the fetchLayers function to the parent via ref.
+    // Expose fetchLayers to parent via ref
     useImperativeHandle(ref, () => ({
       fetchLayers,
     }), [fetchLayers]);

@@ -1,5 +1,7 @@
 import React, {} from "react";
-import { useLocation } from "../context/LocationContext";
+// import { useLocation } from "../context/MarkerContext"; this is now import { useMarkersContext } from '../context/MarkerContext'; this file need updating for this.
+
+import { useMarkersContext } from '../context/MarkerContext';
 import { LocationData } from "../components/Map";
 import { trackEventWithForm as trackEvent } from "./tracking/tracking";
 
@@ -33,7 +35,7 @@ const StationCard: React.FC<StationCardProps> = ({
     setObserverElevationOffset,
     repeaterElevationOffset,
     setRepeaterElevationOffset,
-  } = useLocation();
+  } = useMarkersContext();
 
   // Determine the correct elevation offset based on station type
   const elevationOffset =

@@ -4,11 +4,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Info } from "lucide-react";
 import React, { useCallback, useEffect, useState } from "react";
-import { useLocation } from "../context/LocationContext";
+// import { useLocation } from "../context/MarkerContext"; this is now import { useMarkersContext } from '../context/MarkerContext'; this file need updating for this.
+
+import { useMarkersContext } from '../context/MarkerContext';
+
+
 import { useLOSAnalysis } from "../context/LOSAnalysisContext";
-import { MapRef } from "./Map";
+import type { MapRef } from "../types/MapTypes";
 import { useFlightPlanContext } from "../context/FlightPlanContext";
-import { layerManager, MAP_LAYERS } from "./LayerManager";
+import { layerManager, MAP_LAYERS } from "../services/LayerManager";
 import StationCard from "./StationCard";
 import mapboxgl from 'mapbox-gl';
 import * as turf from '@turf/turf';
@@ -68,7 +72,7 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
     gcsElevationOffset,
     observerElevationOffset,
     repeaterElevationOffset 
-  } = useLocation();
+  } = useMarkersContext();
   const { flightPlan } = useFlightPlanContext();
   const isFlightPlanLoaded = flightPlan !== null && Object.keys(flightPlan).length > 0;
   const [mergedResults, setMergedResults] = useState<AnalysisResults | null>(null);   

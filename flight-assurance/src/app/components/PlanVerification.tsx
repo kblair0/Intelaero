@@ -11,7 +11,7 @@ import { MapRef } from "./Map";
 import { trackEventWithForm as trackEvent } from "./tracking/tracking";
 import { useAreaOfOpsContext } from "../context/AreaOfOpsContext";
 import AOGenerator, { AOGeneratorRef } from "./AO/AOGenerator";
-import BYDALayerHandler from "./powerlines/BYDALayerHandler";
+import BYDALayerHandler from "./Map/BYDALayerHandler";
 
 // Dynamically load components that use browser APIs
 const ObstacleAssessment = dynamic(() => import("./ObstacleAssessment"), { ssr: false });

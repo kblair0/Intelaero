@@ -1,22 +1,15 @@
-// contexts/LocationContext.tsx
-import { createContext, useContext, useState, ReactNode } from 'react';
-import { LocationData } from '../components/Map';
+// src/app/context/MarkerContext.tsx
 
-/**
- * Defines the shape of our Location Context.
- * In addition to storing station locations, we now track the elevation offset
- * for each station, allowing these values to be centrally managed.
- */
-interface LocationContextType {
-  // Station Locations
+import { createContext, useContext, useState, ReactNode } from 'react';
+import { LocationData } from '../types/LocationData';
+
+interface MarkerContextType {
   gcsLocation: LocationData | null;
   setGcsLocation: (location: LocationData | null) => void;
   observerLocation: LocationData | null;
   setObserverLocation: (location: LocationData | null) => void;
   repeaterLocation: LocationData | null;
   setRepeaterLocation: (location: LocationData | null) => void;
-
-  // Elevation Offsets (source of truth for station elevation offsets)
   gcsElevationOffset: number;
   setGcsElevationOffset: (offset: number) => void;
   observerElevationOffset: number;
@@ -25,21 +18,18 @@ interface LocationContextType {
   setRepeaterElevationOffset: (offset: number) => void;
 }
 
-const LocationContext = createContext<LocationContextType | undefined>(undefined);
+const MarkerContext = createContext<MarkerContextType | undefined>(undefined);
 
-export function LocationProvider({ children }: { children: ReactNode }) {
-  // Station location state
+export function MarkerProvider({ children }: { children: ReactNode }) {
   const [gcsLocation, setGcsLocation] = useState<LocationData | null>(null);
   const [observerLocation, setObserverLocation] = useState<LocationData | null>(null);
   const [repeaterLocation, setRepeaterLocation] = useState<LocationData | null>(null);
-
-  // Elevation offset state (default set to 3, matching previous defaults)
   const [gcsElevationOffset, setGcsElevationOffset] = useState<number>(3);
   const [observerElevationOffset, setObserverElevationOffset] = useState<number>(3);
   const [repeaterElevationOffset, setRepeaterElevationOffset] = useState<number>(3);
 
   return (
-    <LocationContext.Provider
+    <MarkerContext.Provider
       value={{
         gcsLocation,
         setGcsLocation,
@@ -56,18 +46,14 @@ export function LocationProvider({ children }: { children: ReactNode }) {
       }}
     >
       {children}
-    </LocationContext.Provider>
+    </MarkerContext.Provider>
   );
 }
 
-/**
- * Custom hook to consume the LocationContext.
- * Throws an error if used outside a LocationProvider.
- */
-export function useLocation() {
-  const context = useContext(LocationContext);
+export function useMarkersContext() {
+  const context = useContext(MarkerContext);
   if (context === undefined) {
-    throw new Error('useLocation must be used within a LocationProvider');
+    throw new Error('useMarkersContext must be used within a MarkerProvider');
   }
   return context;
 }

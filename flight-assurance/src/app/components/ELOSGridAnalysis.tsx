@@ -5,13 +5,16 @@
 import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import mapboxgl from 'mapbox-gl';
 import * as turf from '@turf/turf';
-import { layerManager, MAP_LAYERS } from './LayerManager';
+import { layerManager, MAP_LAYERS } from "../services/LayerManager";
 import { useLOSAnalysis } from '../context/LOSAnalysisContext';
 import type { 
   GridCell, 
   AnalysisResults 
 } from '../context/LOSAnalysisContext';
-import { useLocation } from '../context/LocationContext';
+// import { useLocation } from "../context/MarkerContext"; this is now import { useMarkersContext } from '../context/MarkerContext'; this file need updating for this.
+
+import { useMarkersContext } from '../context/MarkerContext';
+
 
 // Enhanced type definitions for 2D and 3D coordinates
 type Coordinates2D = [number, number];
@@ -105,7 +108,7 @@ const ELOSGridAnalysis = forwardRef<ELOSGridAnalysisRef, Props>((props, ref) => 
       gcsElevationOffset,
       observerElevationOffset,
       repeaterElevationOffset,
-    } = useLocation();
+    } = useMarkersContext();
 
     const abortControllerRef = useRef<AbortController | null>(null);
     const workerRef = useRef<Worker | null>(null);

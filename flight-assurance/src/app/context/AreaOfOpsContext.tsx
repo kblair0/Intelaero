@@ -10,7 +10,7 @@ interface AreaOfOpsContextType {
   generateAO: () => void;
 }
 
-interface GridCell {
+export interface GridCell {
   id: string;
   geometry: GeoJSON.Polygon;
   properties: {
@@ -19,6 +19,7 @@ interface GridCell {
     [key: string]: any; // Allow additional properties for flexibility
   };
 }
+
 
 const AreaOfOpsContext = createContext<AreaOfOpsContextType | undefined>(undefined);
 

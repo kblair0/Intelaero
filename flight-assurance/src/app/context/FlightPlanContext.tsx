@@ -1,5 +1,7 @@
 // FlightPlanContext.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
+//FlightPlanContext: Manages complex flight plan data (waypoints, home position, config, metadata, distances). FlightPlanContext serves as the single source of truth for flight plan data across the application.
+
 
 import React, { createContext, useState, useContext } from "react";
 

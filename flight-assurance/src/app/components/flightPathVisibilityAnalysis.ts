@@ -1,7 +1,7 @@
 // src/utils/flightPathVisibilityAnalysis.ts
 import * as turf from '@turf/turf';
 import mapboxgl from 'mapbox-gl';
-import { LocationData } from '../components/Map';
+import { LocationData } from '../types/LocationData';
 import { FlightPlanData } from '../context/FlightPlanContext';
 
 export interface VisibilitySegment {
