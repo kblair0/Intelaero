@@ -8,7 +8,6 @@ const MarkerControls: React.FC = () => {
   
   const {
     addGroundStation,
-    // Assuming addObserver, addRepeater, and removeAllMarkers are provided by useMarkers
     addObserver,
     addRepeater,
     removeAllMarkers
@@ -18,7 +17,7 @@ const MarkerControls: React.FC = () => {
   });
 
   return (
-    <div className="absolute top-4 right-4 z-10 flex flex-col space-y-2">
+    <div className="absolute top-4 right-4 z-20 flex flex-col space-y-2">
       <button 
         onClick={() => {
           trackEvent("add_ground_station_click", { panel: "map.tsx" });

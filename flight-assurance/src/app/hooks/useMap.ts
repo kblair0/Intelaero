@@ -33,8 +33,6 @@ const waitForDEM = (map: mapboxgl.Map, timeoutMs = 20000): Promise<void> => {
 
 /**
  * Custom hook that initializes a Mapbox map instance and sets up terrain.
- * Includes robust error handling and debugging capabilities.
- *
  * @param containerId - The HTML element ID to render the map into.
  * @param options - The map initialization options (style, center, zoom, etc.).
  * @returns An object with the map instance (or null) and a terrainLoaded flag.

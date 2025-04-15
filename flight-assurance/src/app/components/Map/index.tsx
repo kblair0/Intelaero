@@ -22,7 +22,7 @@
  * - hooks/useFlightPlanProcessor.ts - Processes uploaded flight plans
  */
 
-import React, { useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
+import React, { useEffect, useRef, forwardRef } from 'react';
 import { useMap } from '../../hooks/useMap';
 import { useMapContext } from '../../context/MapContext';
 import { useFlightPlanContext } from '../../context/FlightPlanContext';
@@ -43,8 +43,7 @@ import FlightPathDisplay from './FlightPathDisplay';
 import AODisplay from '../AO/AODisplay';
 
 // Types
-import type { MapRef } from "../../types/MapTypes";
-
+import type { MapRef } from '../../types/MapTypes';
 
 // Other required components
 import MapboxLayerHandler from './MapboxLayerHandler';
@@ -54,10 +53,17 @@ import ELOSGridAnalysis from '../ELOSGridAnalysis';
 // Service for tracking events
 import { trackEventWithForm as trackEvent } from '../tracking/tracking';
 
-const Map = () => {
+interface MapProps {
+  activePanel?: 'energy' | 'los' | null;
+  togglePanel?: (panel: 'energy' | 'los') => void;
+  flightPlan?: any; // Replace with FlightPlan type
+  setShowUploader?: (show: boolean) => void;
+}
+
+const Map = forwardRef<MapRef, MapProps>(({ activePanel, togglePanel, flightPlan, setShowUploader }, ref) => {
   // Contexts
   const { setMap } = useMapContext();
-  const { flightPlan, setFlightPlan, setDistance } = useFlightPlanContext();
+  const { setFlightPlan, setDistance } = useFlightPlanContext();
   const { isAnalyzing, setIsAnalyzing, setResults, setError, error } = useLOSAnalysis();
   const { aoGeometry } = useAreaOfOpsContext();
   
@@ -82,7 +88,7 @@ const Map = () => {
   useEffect(() => {
     if (map) {
       setMap(map);
-      trackEvent("map_initialized", { mapLoaded: true });
+      trackEvent('map_initialized', { mapLoaded: true });
     }
   }, [map, setMap]);
 
@@ -99,22 +105,22 @@ const Map = () => {
       // Add flight path to map
       addFlightPath(processedPlan);
       
-      trackEvent("flight_plan_processing_completed", { 
-        planId: processedPlan.properties?.id || "unknown",
+      trackEvent('flight_plan_processing_completed', { 
+        planId: processedPlan.properties?.id || 'unknown',
         distance: processedPlan.properties.totalDistance
       });
     };
     
     const handleProcessingError = (error) => {
-      console.error("Failed to process flight plan:", error);
-      setError("Failed to process flight plan. Please try again.");
-      trackEvent("flight_plan_processing_error", { 
-        error: error instanceof Error ? error.message : "Unknown error" 
+      console.error('Failed to process flight plan:', error);
+      setError('Failed to process flight plan. Please try again.');
+      trackEvent('flight_plan_processing_error', { 
+        error: error instanceof Error ? error.message : 'Unknown error' 
       });
     };
     
-    trackEvent("flight_plan_processing_started", { 
-      planId: flightPlan.properties?.id || "unknown" 
+    trackEvent('flight_plan_processing_started', { 
+      planId: flightPlan.properties?.id || 'unknown' 
     });
     
     // Use the hook to process the flight plan
@@ -138,18 +144,18 @@ const Map = () => {
     try {
       setIsAnalyzing(true);
       setError(null);
-      trackEvent("elos_analysis_started", {});
+      trackEvent('elos_analysis_started', {});
       
       // Reset any previous analysis layers
       resetLayers();
       
       await elosGridRef.current.runAnalysis();
       
-      trackEvent("elos_analysis_completed", {});
+      trackEvent('elos_analysis_completed', {});
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Analysis failed");
-      trackEvent("elos_analysis_error", { 
-        error: err instanceof Error ? err.message : "Unknown error" 
+      setError(err instanceof Error ? err.message : 'Analysis failed');
+      trackEvent('elos_analysis_error', { 
+        error: err instanceof Error ? err.message : 'Unknown error' 
       });
     } finally {
       setIsAnalyzing(false);
@@ -175,11 +181,11 @@ const Map = () => {
             map={map}
             flightPath={flightPlan?.properties?.processed ? flightPlan : undefined}
             onError={(error) => {
-              console.error("ELOS Analysis error:", error);
+              console.error('ELOS Analysis error:', error);
               setError(error.message);
             }}
             onSuccess={(result) => {
-              console.log("ELOS Analysis completed:", result);
+              console.log('ELOS Analysis completed:', result);
               setResults(result);
             }}
           />
@@ -191,10 +197,14 @@ const Map = () => {
       <LayerControls 
         onToggleDBYD={() => {
           if (bydaLayerHandlerRef.current) {
-            trackEvent("dbyd_powerlines_requested", {});
+            trackEvent('dbyd_powerlines_requested', {});
             bydaLayerHandlerRef.current.fetchLayers();
           }
-        }} 
+        }}
+        activePanel={activePanel}
+        togglePanel={togglePanel}
+        flightPlan={flightPlan}
+        setShowUploader={setShowUploader}
       />
       <MeasurementControls />
       <MapLegend />
@@ -218,7 +228,9 @@ const Map = () => {
       )}
     </div>
   );
-};
+});
+
+Map.displayName = 'Map';
 
 export default Map;
 export type { MapRef };

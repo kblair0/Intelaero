@@ -31,7 +31,6 @@ const AODebugWrapper = ({ children }: { children: ReactNode }) => {
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
   
   useEffect(() => {
-    // Create a proxy for console.log
     const originalConsoleLog = console.log;
     console.log = (...args) => {
       const message = args.map(arg => 
@@ -85,7 +84,7 @@ const HomeContent = () => {
       <div className="min-h-screen flex flex-col bg-white overflow-x-hidden">
         <DisclaimerModal />
 
-        {/* Logo Section */}
+        {/* {/* Logo Section 
         <div className="absolute z-50 bottom-4 left-4 bg-white shadow-lg rounded-2xl p-4 w-40 flex flex-col items-center border border-gray-200">
           <div className="flex flex-col items-center gap-3">
             <Image
@@ -107,7 +106,7 @@ const HomeContent = () => {
               className="max-w-full h-auto"
             />
           </div>
-        </div>
+        </div> /* Logo Section End */}
 
         {/* Main Content Area */}
         <div className="flex-1 w-full h-full mx-2">
@@ -115,7 +114,13 @@ const HomeContent = () => {
             {/* Map Section */}
             <div className="flex-grow relative h-full">
               <div className="relative h-full rounded-r-xl overflow-hidden">
-                <Map ref={mapRef} />
+                <Map
+                  ref={mapRef}
+                  activePanel={activePanel}
+                  togglePanel={togglePanel}
+                  flightPlan={flightPlan}
+                  setShowUploader={setShowUploader}
+                />
                 {/* Uploader Overlay */}
                 {(!showUploader && !showAreaOpsUploader && !flightPlan && !aoGeometry) && (
                   <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20 p-4">
@@ -173,66 +178,6 @@ const HomeContent = () => {
                     </div>
                   </div>
                 )}
-
-                {/* Analysis Control Buttons */}
-                <div className="absolute top-4 right-4 z-10 flex flex-col gap-2 mb-4">
-                  <button
-                    onClick={() => {
-                      trackEvent("map_energy_panel_click", {
-                        panel: "page.tsx",
-                      });
-                      togglePanel("energy");
-                    }}
-                    className={`map-button flex items-center gap-2 transition-colors ${
-                      activePanel === "energy"
-                        ? "bg-blue-100 border-blue-300 shadow-md"
-                        : "hover:bg-gray-300/80"
-                    }`}
-                  >
-                    <Battery className="w-4 h-4" />
-                    Energy Analysis
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      trackEvent("map_los_panel_click", { panel: "page.tsx" });
-                      togglePanel("los");
-                    }}
-                    className={`map-button flex items-center gap-2 transition-colors ${
-                      activePanel === "los"
-                        ? "bg-blue-100 border-blue-300 shadow-md"
-                        : "hover:bg-gray-300/80"
-                    }`}
-                  >
-                    <Radio className="w-4 h-4" />
-                    LOS Analysis
-                  </button>
-
-                  {flightPlan && (
-                    <button
-                      onClick={() => {
-                        trackEvent("upload_flight_plan_click", {
-                          panel: "page.tsx",
-                        });
-                        setShowUploader(true);
-                      }}
-                      className="map-button flex items-center gap-2 transition-colors hover:bg-gray-300/80"
-                    >
-                      Upload Flight Plan
-                    </button>
-                  )}
-
-                  <button
-                    onClick={() => {
-                      trackEvent("own_dem_data_request", { panel: "page.tsx" });
-                      window.alert("Coming Soon!");
-                    }}
-                    className="map-button flex items-center gap-2 transition-colors hover:bg-gray-300/80"
-                  >
-                    <GripVertical className="w-4 h-4" />
-                    Add Your Own DEM Data
-                  </button>
-                </div>
               </div>
             </div>
 
