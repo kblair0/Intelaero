@@ -40,6 +40,7 @@ import MapLegend from './MapLegend';
 import AnalysisStatus from './AnalysisStatus';
 import LOSModal from './LOSModal';
 import FlightPathDisplay from './FlightPathDisplay';
+import AODisplay from '../AO/AODisplay';
 
 // Types
 import type { MapRef } from "../../types/MapTypes";
@@ -200,6 +201,7 @@ const Map = () => {
       <AnalysisStatus />
       <LOSModal onRunAnalysis={runElosAnalysis} />
       <FlightPathDisplay />
+      <AODisplay />
       
       {/* Error display */}
       {error && (

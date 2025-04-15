@@ -10,8 +10,10 @@ import dynamic from "next/dynamic";
 import { MapRef } from "./Map";
 import { trackEventWithForm as trackEvent } from "./tracking/tracking";
 import { useAreaOfOpsContext } from "../context/AreaOfOpsContext";
-import AOGenerator, { AOGeneratorRef } from "./AO/AOGenerator";
 import BYDALayerHandler from "./Map/BYDALayerHandler";
+
+import { useAreaOpsProcessor } from "../hooks/useAreaOpsProcessor";
+import AODisplay from "./AO/AODisplay"; 
 
 // Dynamically load components that use browser APIs
 const ObstacleAssessment = dynamic(() => import("./ObstacleAssessment"), { ssr: false });
@@ -81,7 +83,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
   const { aoGeometry } = useAreaOfOpsContext();
   //Ao Draft Implementation
   // const { generateAO } = useAreaOfOpsContext();
-  const aoGeneratorRef = useRef<AOGeneratorRef>(null);
+  const { processAreaOfOperations } = useAreaOpsProcessor();
   const bydLayerHandlerRef = useRef<{ fetchLayers: () => void }>(null);
 
   const [expandedSection, setExpandedSection] = useState<string | null>("basic");
@@ -429,7 +431,7 @@ const getTerrainAnalysis = (): VerificationSection => {
           <button
             onClick={() => {
               trackEvent("generate_ao_click", { panel: "planverification.tsx" });
-              aoGeneratorRef.current?.generateAO();
+              processAreaOfOperations();
             }}
             className="flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors"
           >
@@ -496,7 +498,7 @@ const getTerrainAnalysis = (): VerificationSection => {
         <button
           onClick={() => {
             trackEvent("generate_ao_click", { panel: "planverification.tsx" });
-            aoGeneratorRef.current?.generateAO();
+            processAreaOfOperations();
           }}
           className="flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors"
         >
@@ -621,9 +623,8 @@ const getTerrainAnalysis = (): VerificationSection => {
         </div>
       )}
 
-      {/* Hidden AOGenerator and BYDALayerHandler Components */}
+      {/* Hidden BYDALayerHandler Component */}
       <div className="hidden">
-        <AOGenerator ref={aoGeneratorRef} mapRef={mapRef} />
         <BYDALayerHandler ref={bydLayerHandlerRef} map={mapRef.current?.getMap() || null} />
       </div>
 

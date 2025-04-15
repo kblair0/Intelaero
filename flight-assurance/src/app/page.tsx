@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState } from "react";
+import React, { useRef, useState, ReactNode, useEffect } from "react";
 import { MapRef } from "./components/Map";
 import Calculator from "./components/Calculator";
 import Image from "next/image";
@@ -25,6 +25,44 @@ import { Battery, Radio, GripVertical } from "lucide-react";
 import { trackEventWithForm as trackEvent } from "./components/tracking/tracking";
 import WelcomePitch from "./components/WelcomePitch";
 import { MapProvider } from "./context/MapContext";
+import 'mapbox-gl/dist/mapbox-gl.css';
+
+const AODebugWrapper = ({ children }: { children: ReactNode }) => {
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  
+  useEffect(() => {
+    // Create a proxy for console.log
+    const originalConsoleLog = console.log;
+    console.log = (...args) => {
+      const message = args.map(arg => 
+        typeof arg === 'object' ? 'Object' : String(arg)
+      ).join(' ');
+      
+      if (message.includes('AO') || message.includes('area') || message.includes('map')) {
+        setDebugLogs(prev => [...prev.slice(-15), message]);
+      }
+      originalConsoleLog(...args);
+    };
+    
+    return () => {
+      console.log = originalConsoleLog;
+    };
+  }, []);
+
+  return (
+    <>
+      {children}
+      {process.env.NODE_ENV !== 'production' && (
+        <div className="fixed bottom-4 right-4 z-50 bg-black bg-opacity-70 text-white p-2 rounded text-xs max-w-xs max-h-40 overflow-auto">
+          <div className="font-bold mb-1">AO Debug ({debugLogs.length})</div>
+          {debugLogs.map((log, i) => (
+            <div key={i}>{log}</div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+};
 
 const HomeContent = () => {
   const mapRef = useRef<MapRef>(null);
@@ -250,7 +288,9 @@ export default function Home() {
           <LOSAnalysisProvider>
             <ObstacleAnalysisProvider>
               <AreaOfOpsProvider>
-                <HomeContent />
+                <AODebugWrapper>
+                  <HomeContent />
+                </AODebugWrapper>
               </AreaOfOpsProvider>
             </ObstacleAnalysisProvider>
           </LOSAnalysisProvider>

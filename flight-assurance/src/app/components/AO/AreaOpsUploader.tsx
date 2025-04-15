@@ -1,76 +1,17 @@
-// src/components/AO/AreaOpsUploader.tsx
-
 "use client";
-import React, { useState, useRef } from "react";
+import React, { useState } from "react";
 import { useDropzone } from "react-dropzone";
-import { useAreaOfOpsContext } from "../../context/AreaOfOpsContext";
-import * as turf from "@turf/turf";
-import AOGenerator, { AOGeneratorRef } from "./AOGenerator";
-// Add this import
-import type { MapRef } from "../../types/MapTypes";
+import { useAreaOpsProcessor } from "../../hooks/useAreaOpsProcessor";
+import { trackEventWithForm as trackEvent } from "../tracking/tracking";
 
 interface AreaOpsUploaderProps {
-  // Update this type annotation
-  mapRef: React.RefObject<MapRef>;
   onClose?: () => void;
 }
 
-const AreaOpsUploader: React.FC<AreaOpsUploaderProps> = ({ mapRef, onClose }) => {
-  const { setAoGeometry, setAoTerrainGrid } = useAreaOfOpsContext();
+const AreaOpsUploader: React.FC<AreaOpsUploaderProps> = ({ onClose }) => {
   const [fileUploadStatus, setFileUploadStatus] = useState<"idle" | "uploading" | "processed" | "error">("idle");
   const [fileName, setFileName] = useState<string | null>(null);
-  // Create a ref for AOGenerator so we can trigger its analysis
-  const aoGenRef = useRef<AOGeneratorRef>(null);
-
-  // Generic function to process KML text.
-  const processKMLText = (kmlText: string) => {
-    const parser = new DOMParser();
-    const kmlDom = parser.parseFromString(kmlText, "text/xml");
-    const coordsElement = kmlDom.querySelector("Polygon > outerBoundaryIs > LinearRing > coordinates");
-
-    if (!coordsElement || !coordsElement.textContent) {
-      setFileUploadStatus("error");
-      throw new Error("No polygon coordinates found in KML");
-    }
-    
-    const coordsText = coordsElement.textContent.trim();
-    const coordinates = coordsText.split(/\s+/).map((pair) => {
-      const [lon, lat] = pair.split(",").map(Number);
-      return [lon, lat];
-    });
-
-    // Ensure the polygon is closed.
-    if (coordinates.length > 0) {
-      const first = coordinates[0];
-      const last = coordinates[coordinates.length - 1];
-      if (first[0] !== last[0] || first[1] !== last[1]) {
-        coordinates.push(first);
-      }
-    }
-    const polygon = turf.polygon([coordinates]);
-
-    // Update AO context.
-    setAoGeometry(turf.featureCollection([polygon]));
-    setAoTerrainGrid(null);
-    setFileUploadStatus("processed");
-
-    // Fly the map to the polygon bounds.
-    if (mapRef.current) {
-      const map = mapRef.current.getMap();
-      if (map) {
-        const bbox = turf.bbox(polygon);
-        map.fitBounds(bbox, { padding: 20 });
-      }
-    }
-
-    // Trigger AO generation analysis.
-    if (aoGenRef.current) {
-      aoGenRef.current.generateAO();
-    }
-
-    // Close the uploader overlay.
-    if (onClose) onClose();
-  };
+  const { processKML } = useAreaOpsProcessor();
 
   // onDrop handler for drag & drop.
   const onDrop = async (acceptedFiles: File[]) => {
@@ -79,21 +20,38 @@ const AreaOpsUploader: React.FC<AreaOpsUploaderProps> = ({ mapRef, onClose }) =>
     setFileUploadStatus("uploading");
 
     try {
+      trackEvent("ao_upload_started", { fileName: file.name });
+      
       const reader = new FileReader();
-      reader.onload = () => {
+      reader.onload = async () => {
         try {
           const kmlText = reader.result as string;
-          processKMLText(kmlText);
+          await processKML(kmlText);
+          
+          setFileUploadStatus("processed");
+          trackEvent("ao_upload_completed", { fileName: file.name });
+          
+          // Close the uploader after a delay
+          setTimeout(() => {
+            if (onClose) onClose();
+          }, 1500);
         } catch (err) {
-          console.error("Error processing KML file:", err);
+          console.error("Error processing KML:", err);
           setFileUploadStatus("error");
+          trackEvent("ao_upload_error", { error: String(err) });
         }
       };
-      reader.onerror = () => setFileUploadStatus("error");
+      
+      reader.onerror = () => {
+        setFileUploadStatus("error");
+        trackEvent("ao_upload_read_error", {});
+      };
+      
       reader.readAsText(file);
     } catch (err) {
       console.error("Error reading file:", err);
       setFileUploadStatus("error");
+      trackEvent("ao_upload_error", { error: String(err) });
     }
   };
 
@@ -108,16 +66,29 @@ const AreaOpsUploader: React.FC<AreaOpsUploaderProps> = ({ mapRef, onClose }) =>
   const loadExampleAOFromFile = async () => {
     setFileUploadStatus("uploading");
     try {
+      trackEvent("ao_example_load_started", {});
+      
       const response = await fetch("/exampleAO.kml");
       if (!response.ok) {
         throw new Error("Failed to fetch example AO KML file");
       }
+      
       const kmlText = await response.text();
       setFileName("exampleAO.kml");
-      processKMLText(kmlText);
+      
+      await processKML(kmlText);
+      
+      setFileUploadStatus("processed");
+      trackEvent("ao_example_load_completed", {});
+      
+      // Close the uploader after a delay
+      setTimeout(() => {
+        if (onClose) onClose();
+      }, 1500);
     } catch (err) {
       console.error("Error fetching example AO:", err);
       setFileUploadStatus("error");
+      trackEvent("ao_example_load_error", { error: String(err) });
     }
   };
 
@@ -161,9 +132,6 @@ const AreaOpsUploader: React.FC<AreaOpsUploaderProps> = ({ mapRef, onClose }) =>
           </button>
         </div>
       </div>
-
-      {/* Hidden AOGenerator – triggers further analysis */}
-      <AOGenerator ref={aoGenRef} mapRef={mapRef} />
     </div>
   );
 };

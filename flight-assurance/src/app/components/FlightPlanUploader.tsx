@@ -643,6 +643,16 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded,
     }
   }, [processAndStoreFlightPlan]);
 
+  const { getRootProps, getInputProps } = useDropzone({
+    onDrop,
+    accept: {
+      'text/plain': ['.waypoints'],
+      'application/json': ['.geojson'],
+      'application/vnd.google-earth.kml+xml': ['.kml'],
+      'application/vnd.google-earth.kmz': ['.kmz']
+    }
+  });
+
   return (
     <div className="flex-1 bg-white shadow-lg p-6 rounded-lg border border-gray-200">
       <h3 className="text-lg font-bold">🚀 Upload or Use Example Flight Plan 📁</h3>

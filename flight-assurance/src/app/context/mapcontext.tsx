@@ -43,6 +43,7 @@ export const MapProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     // Map is ready once it has loaded
     const handleMapLoad = () => {
+      console.log("Map is fully loaded and ready in context");
       setIsMapReady(true);
       
       // Initial sync with layer states
