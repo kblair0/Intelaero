@@ -17,7 +17,7 @@ export const useAreaOpsProcessor = () => {
     setAoTerrainGrid 
   } = useAreaOfOpsContext();
   
-  const { map, isMapReady } = useMapContext();
+  const { map, terrainLoaded } = useMapContext();
   
   /**
    * Process KML text into an Area of Operations
@@ -54,11 +54,20 @@ export const useAreaOpsProcessor = () => {
       
       console.log("Processed KML into polygon with coordinates:", coordinates.length);
       
-      // Update AO context
-      setAoGeometry(featureCollection);
+      if (map && terrainLoaded) {
+        setAoGeometry(featureCollection);
+      } else {
+        console.log("Waiting for map and terrain to load before setting AO");
+        const checkReady = setInterval(() => {
+          if (map && terrainLoaded) {
+            setAoGeometry(featureCollection);
+            clearInterval(checkReady);
+          }
+        }, 100);
+      }
       
       // Render on map if available
-      if (map && isMapReady) {
+      if (map && terrainLoaded) {
         // Add to map via layer manager
         layerManager.addAreaOfOperations(featureCollection);
         layerManager.fitToAreaOfOperations(featureCollection);
@@ -69,7 +78,7 @@ export const useAreaOpsProcessor = () => {
       console.error("Error processing KML:", error);
       throw error;
     }
-  }, [map, isMapReady, setAoGeometry]);
+  }, [map, terrainLoaded, setAoGeometry]);
   
   /**
    * Generate a terrain grid for the Area of Operations
@@ -85,8 +94,8 @@ export const useAreaOpsProcessor = () => {
       return null;
     }
     
-    if (!isMapReady) {
-      console.error("Cannot generate terrain grid: Map not ready");
+    if (!terrainLoaded) {
+      console.error("Cannot generate terrain grid: Terrain Not Available");
       return null;
     }
     
@@ -154,13 +163,13 @@ export const useAreaOpsProcessor = () => {
       console.error("Error generating terrain grid:", error);
       return null;
     }
-  }, [aoGeometry, map, isMapReady, setAoTerrainGrid]);
+  }, [aoGeometry, map, terrainLoaded, setAoTerrainGrid]);
   
   /**
    * Process an existing AO geometry or generate a new one from a flight plan
    */
   const processAreaOfOperations = useCallback(async () => {
-    if (!map || !isMapReady) {
+    if (!map || !terrainLoaded) {
       console.error("Map not available for AO processing");
       return false;
     }
@@ -177,7 +186,7 @@ export const useAreaOpsProcessor = () => {
     
     console.error("No AO geometry available to process");
     return false;
-  }, [aoGeometry, map, isMapReady, generateTerrainGrid]);
+  }, [aoGeometry, map, terrainLoaded, generateTerrainGrid]);
   
   return {
     processKML,

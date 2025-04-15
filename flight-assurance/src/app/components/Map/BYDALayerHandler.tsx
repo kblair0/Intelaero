@@ -82,22 +82,24 @@ const f = "geojson";
 
 const BYDALayerHandler = forwardRef(
   ({ map }: BYDALayerHandlerProps, ref) => {
-    const { layerManager } = useMapContext();
+    // Instead of destructuring "layerManager", extract the functions provided by the context.
+    const { setLayerVisibility } = useMapContext();
     const { aoGeometry } = useAreaOfOpsContext();
 
     // Initialize layers on mount
     useEffect(() => {
-      if (!map || !layerManager) return;
+      if (!map) return;
 
       services.forEach((service) => {
         const { sourceId, layerId, color } = serviceLayerMapping[service];
 
-        // Add empty GeoJSON source
+        // Add empty GeoJSON source if it doesn't exist
         if (!map.getSource(sourceId)) {
           map.addSource(sourceId, {
             type: "geojson",
             data: { type: "FeatureCollection", features: [] },
           });
+          console.log(`[BYDALayerHandler] Added source "${sourceId}".`);
         }
 
         // Add layer if it doesn't exist
@@ -112,23 +114,26 @@ const BYDALayerHandler = forwardRef(
               "line-width": 2,
             },
           });
-          layerManager.registerLayer(layerId); // Register with LayerManager
+          console.log(`[BYDALayerHandler] Added layer "${layerId}" using source "${sourceId}".`);
+          // If you need to register this layer in a centralized LayerManager, consider calling that here.
         }
       });
 
-      // Cleanup (optional, only if layers need to be removed)
+      // Cleanup: Optionally remove layers and sources on unmount
       return () => {
         services.forEach((service) => {
           const { sourceId, layerId } = serviceLayerMapping[service];
           if (map.getLayer(layerId)) {
             map.removeLayer(layerId);
+            console.log(`[BYDALayerHandler] Removed layer "${layerId}".`);
           }
           if (map.getSource(sourceId)) {
             map.removeSource(sourceId);
+            console.log(`[BYDALayerHandler] Removed source "${sourceId}".`);
           }
         });
       };
-    }, [map, layerManager]);
+    }, [map]);
 
     const fetchLayers = useCallback(() => {
       console.log("[BYDALayerHandler] fetchLayers() called.");
@@ -171,23 +176,44 @@ const BYDALayerHandler = forwardRef(
             if (!mapping) return;
             const { sourceId, layerId } = mapping;
 
-            if (data.features && data.features.length > 0) {
-              console.log(`[BYDALayerHandler] Updating ${service} with ${data.features.length} features`);
+            // Ensure source exists before updating
+            if (!map.getSource(sourceId)) {
+              map.addSource(sourceId, {
+                type: "geojson",
+                data: { type: "FeatureCollection", features: [] },
+              });
+              console.log(`[BYDALayerHandler] Re-added source "${sourceId}" during fetch.`);
+            }
 
-              // Update source data instead of removing/re-adding
-              const source = map.getSource(sourceId) as mapboxgl.GeoJSONSource;
-              if (source) {
-                source.setData(data);
-                console.log(`[BYDALayerHandler] Source ${sourceId} updated successfully.`);
+            if (data.features && data.features.length > 0) {
+              console.log(
+                `[BYDALayerHandler] Updating ${service} with ${data.features.length} features`
+              );
+
+              const existingSource = map.getSource(sourceId);
+              console.log(
+                `[BYDALayerHandler] Debug: Retrieved source for "${sourceId}":`,
+                existingSource
+              );
+
+              if (existingSource) {
+                (existingSource as mapboxgl.GeoJSONSource).setData(data);
+                console.log(
+                  `[BYDALayerHandler] Source "${sourceId}" updated successfully.`
+                );
+                // Set the layer to visible using the context-provided function
+                setLayerVisibility(layerId, true);
               } else {
-                console.warn(`[BYDALayerHandler] Source ${sourceId} not found.`);
+                console.warn(
+                  `[BYDALayerHandler] Warning: Source "${sourceId}" not found after re-adding.`
+                );
               }
             } else {
               console.log(`[BYDALayerHandler] No features found for ${service}`);
-              // Clear source data if no features
-              const source = map.getSource(sourceId) as mapboxgl.GeoJSONSource;
-              if (source) {
-                source.setData({ type: "FeatureCollection", features: [] });
+              // Clear source data if no features are found
+              const existingSource = map.getSource(sourceId) as mapboxgl.GeoJSONSource;
+              if (existingSource) {
+                existingSource.setData({ type: "FeatureCollection", features: [] });
               }
             }
           })
@@ -195,12 +221,16 @@ const BYDALayerHandler = forwardRef(
             console.error(`[BYDALayerHandler] Error with ${service}:`, error);
           });
       });
-    }, [map, aoGeometry]);
+    }, [map, aoGeometry, setLayerVisibility]);
 
     // Expose fetchLayers to parent via ref
-    useImperativeHandle(ref, () => ({
-      fetchLayers,
-    }), [fetchLayers]);
+    useImperativeHandle(
+      ref,
+      () => ({
+        fetchLayers,
+      }),
+      [fetchLayers]
+    );
 
     return null;
   }

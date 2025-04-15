@@ -52,6 +52,7 @@ import { useFlightPlanProcessor } from "../hooks/useFlightPlanProcessor";
 import toGeoJSON from "@mapbox/togeojson";
 import JSZip from "jszip";
 import { trackEventWithForm as trackEvent } from "./tracking/tracking";
+import MapLoadingGuard from "./Map/MapLoadingGuard";
 
 // Initialize DOMParser for parsing XML-based files (e.g., KML, KMZ), but only in browser environments
 const parser = typeof window !== "undefined" ? new DOMParser() : null;
@@ -520,7 +521,7 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded,
   const [fileUploadStatus, setFileUploadStatus] = useState<"idle" | "uploading" | "processed" | "error">("idle");
   const [fileName, setFileName] = useState<string | null>(null);
   const { setFlightPlan } = useFlightPlanContext();
-  const { map } = useMapContext();
+  const { map, terrainLoaded } = useMapContext();
   const { processFlightPlan, isProcessing: isProcessingFlightPlan, error: processingError } = useFlightPlanProcessor();
 
   /**
@@ -532,11 +533,12 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded,
     rawFlightPlan: import("../context/FlightPlanContext").FlightPlanData,
     fileName: string
   ) => {
-    if (!map) {
+    if (!map || !terrainLoaded) {
+      console.warn("Map not fully loaded yet - cannot process flight plan");
       setFileUploadStatus("error");
-      throw new Error("Map not initialized");
+      throw new Error("Map not fully initialized. Please wait and try again.");
     }
-
+  
     try {
       // Process the flight plan to resolve altitudes and calculate distances
       const processedFlightPlan = await processFlightPlan(map, rawFlightPlan);
@@ -578,7 +580,7 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded,
       console.error("Error processing flight plan:", error);
       setFileUploadStatus("error");
     }
-  }, [map, processFlightPlan, setFlightPlan, onPlanUploaded, mapRef, onClose]);
+  }, [map, terrainLoaded, processFlightPlan, setFlightPlan, onPlanUploaded, mapRef, onClose]);
 
   /**
    * Handles file drop events by parsing the uploaded file and processing the flight plan.
@@ -652,7 +654,6 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded,
       'application/vnd.google-earth.kmz': ['.kmz']
     }
   });
-
   return (
     <div className="flex-1 bg-white shadow-lg p-6 rounded-lg border border-gray-200">
       <h3 className="text-lg font-bold">🚀 Upload or Use Example Flight Plan 📁</h3>
@@ -661,46 +662,59 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({ onPlanUploaded,
         <strong>.kmz</strong> file, or use our example to analyze a drone flight path.
       </p>
 
-      {/* Upload Dropzone */}
-      <div
-        {...getRootProps()}
-        className="mt-4 border-2 border-dashed border-gray-300 p-6 rounded-lg flex flex-col items-center justify-center cursor-pointer"
+      {/* Wrap the interactive parts with MapLoadingGuard */}
+      <MapLoadingGuard
+        fallback={
+          <div className="mt-4 border-2 border-gray-300 p-6 rounded-lg flex flex-col items-center justify-center">
+            <p className="text-gray-500">Waiting for map to initialize...</p>
+            <div className="mt-4 w-8 h-8 border-t-2 border-b-2 border-blue-500 rounded-full animate-spin"></div>
+            <p className="mt-2 text-xs text-gray-400">
+              This may take a moment, especially with developer tools open
+            </p>
+          </div>
+        }
       >
-        <input {...getInputProps()} />
-        <p className="text-gray-500">Drag & Drop your file here or click to upload</p>
-        {fileName && (
-          <p className="mt-2 text-sm text-gray-600">Selected file: {fileName}</p>
-        )}
-        {(fileUploadStatus === "uploading" || isProcessingFlightPlan) && (
-          <p className="mt-2 text-sm text-blue-600">Processing file...</p>
-        )}
-        {fileUploadStatus === "processed" && (
-          <p className="mt-2 text-sm text-green-600">File processed successfully!</p>
-        )}
-        {fileUploadStatus === "error" && (
-          <p className="mt-2 text-sm text-red-600">
-            Error processing file: {processingError || "Please try again."}
-          </p>
-        )}
-      </div>
-
-      {/* Example Button */}
-      <div className="mt-4">
-        <p className="text-sm text-gray-600 text-center">
-          Don’t have a file? Try our example to get started.
-        </p>
-        <div className="flex justify-center mt-2">
-          <button
-            onClick={() => {
-              trackEvent("example_geojson_click", { panel: "flightplanuploader.tsx" });
-              loadExampleGeoJSON();
-            }}
-            className="bg-blue-500 text-white px-4 py-2 rounded shadow hover:bg-blue-600 text-sm"
-          >
-            Load Example Flight Plan
-          </button>
+        {/* Upload Dropzone - Only rendered when map is fully loaded */}
+        <div
+          {...getRootProps()}
+          className="mt-4 border-2 border-dashed border-gray-300 p-6 rounded-lg flex flex-col items-center justify-center cursor-pointer"
+        >
+          <input {...getInputProps()} />
+          <p className="text-gray-500">Drag & Drop your file here or click to upload</p>
+          {fileName && (
+            <p className="mt-2 text-sm text-gray-600">Selected file: {fileName}</p>
+          )}
+          {(fileUploadStatus === "uploading" || isProcessingFlightPlan) && (
+            <p className="mt-2 text-sm text-blue-600">Processing file...</p>
+          )}
+          {fileUploadStatus === "processed" && (
+            <p className="mt-2 text-sm text-green-600">File processed successfully!</p>
+          )}
+          {fileUploadStatus === "error" && (
+            <p className="mt-2 text-sm text-red-600">
+              Error processing file: {processingError || "Please try again."}
+            </p>
+          )}
         </div>
-      </div>
+
+        {/* Example Button */}
+        <div className="mt-4">
+          <p className="text-sm text-gray-600 text-center">
+            Don't have a file? Try our example to get started.
+          </p>
+          <div className="flex justify-center mt-2">
+            <button
+              onClick={() => {
+                trackEvent("example_geojson_click", { panel: "flightplanuploader.tsx" });
+                loadExampleGeoJSON();
+              }}
+              className="bg-blue-500 text-white px-4 py-2 rounded shadow hover:bg-blue-600 text-sm"
+            >
+              Load Example Flight Plan
+            </button>
+          </div>
+        </div>
+      </MapLoadingGuard>
     </div>
   );
 };

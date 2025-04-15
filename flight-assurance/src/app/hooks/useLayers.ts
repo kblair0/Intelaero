@@ -81,6 +81,13 @@ export function useLayers() {
     [map]
   );
 
+  const togglePowerlines = useCallback(() => {
+    toggleLayer(MAP_LAYERS.POWERLINES);
+    toggleLayer(MAP_LAYERS.POWERLINES_HITBOX);
+    return true;
+  }, [toggleLayer]);
+  
+
   /**
    * Reset all layers
    */
@@ -98,5 +105,6 @@ export function useLayers() {
     addFlightPath,
     resetLayers,
     toggleLayer,
+    togglePowerlines,
   };
 }

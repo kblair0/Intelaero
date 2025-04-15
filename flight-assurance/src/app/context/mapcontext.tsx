@@ -5,9 +5,9 @@ import { layerManager, MAP_LAYERS, LayerVisibilityMap, LayerEventType } from '..
 
 interface MapContextProps {
   map: mapboxgl.Map | null;
+  terrainLoaded: boolean;
   layerVisibility: LayerVisibilityMap;
-  isMapReady: boolean;
-  setMap: (map: mapboxgl.Map | null) => void;
+  setMap: (map: mapboxgl.Map | null, terrainLoaded: boolean) => void;
   toggleLayer: (layerId: string) => void;
   setLayerVisibility: (layerId: string, visible: boolean) => void;
   resetLayers: () => void;
@@ -16,7 +16,7 @@ interface MapContextProps {
 const initialLayerState = Object.values(MAP_LAYERS).reduce(
   (acc, layerId) => ({
     ...acc,
-    [layerId]: false
+    [layerId]: false,
   }),
   {}
 ) as LayerVisibilityMap;
@@ -25,76 +25,59 @@ const MapContext = createContext<MapContextProps | null>(null);
 
 export const MapProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [map, setMapInstance] = useState<mapboxgl.Map | null>(null);
-  const [isMapReady, setIsMapReady] = useState(false);
+  const [terrainLoaded, setTerrainLoaded] = useState(false);
   const [layerVisibility, setLayerVisibility] = useState<LayerVisibilityMap>(initialLayerState);
 
-  // Set map instance and initialize layer manager
-  const setMap = (mapInstance: mapboxgl.Map | null) => {
+  const setMap = (mapInstance: mapboxgl.Map | null, newTerrainLoaded: boolean) => {
+    if (mapInstance === map && newTerrainLoaded === terrainLoaded) {
+      return;
+    }
+
     if (mapInstance) {
       layerManager.setMap(mapInstance);
       layerManager.registerKnownLayers();
+      const layerState = layerManager.getLayerState();
+      setLayerVisibility(layerState);
     }
+
     setMapInstance(mapInstance);
+    setTerrainLoaded(newTerrainLoaded);
   };
 
-  // Sync with layer manager when map changes
   useEffect(() => {
     if (!map) return;
 
-    // Map is ready once it has loaded
-    const handleMapLoad = () => {
-      console.log("Map is fully loaded and ready in context");
-      setIsMapReady(true);
-      
-      // Initial sync with layer states
-      const layerState = layerManager.getLayerState();
-      setLayerVisibility(layerState);
-    };
-
-    if (map.loaded()) {
-      handleMapLoad();
-    } else {
-      map.once('load', handleMapLoad);
-    }
-
-    // Listen for layer changes
     const cleanup = layerManager.addEventListener(
       (event: LayerEventType, layerId: string, visible?: boolean) => {
         if (event === 'visibilityChange' && visible !== undefined) {
-          setLayerVisibility(prev => ({
+          setLayerVisibility((prev) => ({
             ...prev,
-            [layerId]: visible
+            [layerId]: visible,
           }));
         } else if (event === 'layerRemoved') {
-          setLayerVisibility(prev => ({
+          setLayerVisibility((prev) => ({
             ...prev,
-            [layerId]: false
+            [layerId]: false,
           }));
         }
       }
     );
 
-    return () => {
-      map.off('load', handleMapLoad);
-      cleanup();
-    };
+    return () => cleanup();
   }, [map]);
 
-  // Toggle a layer's visibility
   const toggleLayer = (layerId: string) => {
     if (map) {
       layerManager.toggleLayerVisibility(layerId);
     }
   };
 
-  // Set a layer's visibility directly
   const setLayerVisibilityValue = (layerId: string, visible: boolean) => {
     if (map) {
       layerManager.setLayerVisibility(layerId, visible);
     }
   };
 
-  // Reset all layers
   const resetLayers = () => {
     if (map) {
       layerManager.resetLayers();
@@ -103,18 +86,17 @@ export const MapProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const value = {
     map,
+    terrainLoaded,
     layerVisibility,
-    isMapReady,
     setMap,
     toggleLayer,
     setLayerVisibility: setLayerVisibilityValue,
-    resetLayers
+    resetLayers,
   };
 
   return <MapContext.Provider value={value}>{children}</MapContext.Provider>;
 };
 
-// Hook for accessing map context
 export const useMapContext = () => {
   const context = useContext(MapContext);
   if (!context) {

@@ -10,24 +10,24 @@ import { layerManager } from "../../services/LayerManager";
  */
 const AODisplay: React.FC = () => {
   const { aoGeometry, aoTerrainGrid } = useAreaOfOpsContext();
-  const { map, isMapReady } = useMapContext();
+  const { map, terrainLoaded } = useMapContext();
   
   // Display AO when geometry changes or map becomes ready
   useEffect(() => {
-    if (aoGeometry && map && isMapReady) {
+    if (aoGeometry && map && terrainLoaded) {
       console.log("Displaying AO on map");
       layerManager.addAreaOfOperations(aoGeometry);
       layerManager.fitToAreaOfOperations(aoGeometry);
     }
-  }, [aoGeometry, map, isMapReady]);
+  }, [aoGeometry, map, terrainLoaded]);
   
   // Display terrain grid when it changes
   useEffect(() => {
-    if (aoTerrainGrid && aoTerrainGrid.length > 0 && map && isMapReady) {
+    if (aoTerrainGrid && aoTerrainGrid.length > 0 && map && terrainLoaded) {
       console.log("Displaying AO terrain grid on map");
       layerManager.addAreaOfOperationsTerrain(aoTerrainGrid);
     }
-  }, [aoTerrainGrid, map, isMapReady]);
+  }, [aoTerrainGrid, map, terrainLoaded]);
   
   // This is a behavior-only component, so it doesn't render anything directly
   return null;

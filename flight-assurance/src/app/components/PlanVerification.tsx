@@ -11,6 +11,8 @@ import { MapRef } from "./Map";
 import { trackEventWithForm as trackEvent } from "./tracking/tracking";
 import { useAreaOfOpsContext } from "../context/AreaOfOpsContext";
 import BYDALayerHandler from "./Map/BYDALayerHandler";
+import { useLayers } from "../hooks/useLayers";
+import { MapboxLayerHandler } from "./Map/MapboxLayerHandler";
 
 import { useAreaOpsProcessor } from "../hooks/useAreaOpsProcessor";
 import AODisplay from "./AO/AODisplay"; 
@@ -93,6 +95,9 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
   const [duplicateWaypoints, setDuplicateWaypoints] = useState<WaypointCoordinate[]>([]);
   const [kmzTakeoffWarning, setKmzTakeoffWarning] = useState<string | null>(null);
   const [energyAnalysisOpened, setEnergyAnalysisOpened] = useState(false);
+
+  //layers
+  const { togglePowerlines } = useLayers();
 
   // Utility function to get minimum clearance distance
   const getMinClearanceDistance = (): number | null => {
@@ -415,18 +420,14 @@ const getTerrainAnalysis = (): VerificationSection => {
       status: "pending",
       actions: (hasAOGeometry || hasFlightPlan) ? (
         <div className="flex flex-col gap-2 mt-2">
-          <button
+          <button 
             onClick={() => {
-              trackEvent("DYBDpowerlines_add_overlay_click", { panel: "planverification.tsx" });
-              if (bydLayerHandlerRef.current) {
-                bydLayerHandlerRef.current.fetchLayers();
-              } else {
-                console.warn("BYDALayerHandler ref not available.");
-              }
-            }}
-            className="flex items-center justify-center gap-2 px-3 py-1.5 bg-green-500 text-white text-sm rounded-md hover:bg-green-600 transition-colors"
+              trackEvent("powerlines_add_overlay_click", { panel: "map.tsx" });
+              togglePowerlines();
+            }} 
+            className="map-button"
           >
-            ⚡ Toggle Powerlines
+            ⚡️ Toggle Powerlines
           </button>
           <button
             onClick={() => {
@@ -485,10 +486,10 @@ const getTerrainAnalysis = (): VerificationSection => {
         <button
           onClick={() => {
             trackEvent("DYBDpowerlines_add_overlay_click", { panel: "planverification.tsx" });
-            if (bydLayerHandlerRef.current) {
-              bydLayerHandlerRef.current.fetchLayers();
+            if (mapboxLayerHandlerRef.current) {
+              mapboxLayerHandlerRef.current.togglePowerlines();
             } else {
-              console.warn("BYDALayerHandler ref not available.");
+              console.warn("MapboxLayerHandler ref not available.");
             }
           }}
           className="flex items-center justify-center gap-2 px-3 py-1.5 bg-green-500 text-white text-sm rounded-md hover:bg-green-600 transition-colors"

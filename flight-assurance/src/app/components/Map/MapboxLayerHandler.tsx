@@ -3,6 +3,8 @@
 import { useEffect, useRef } from "react";
 import type mapboxgl from "mapbox-gl";
 import { useMapContext } from "../../context/MapContext";
+// Import layerManager directly from services if needed for registration purposes:
+import { layerManager } from "../../services/LayerManager";
 
 interface MapboxLayerHandlerProps {
   map: mapboxgl.Map | null;
@@ -33,7 +35,9 @@ const getHeightForVoltage = (voltageValue: string): string => {
 };
 
 const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
-  const { layerManager } = useMapContext(); // Access LayerManager via MapContext
+  // Even though your context doesn’t expose the layerManager,
+  // you are importing it directly from your services so you can register layers.
+  const { /* no layerManager here */ } = useMapContext();
   const eventHandlersRef = useRef<{
     onPowerlineMouseEnter?: (e: mapboxgl.MapMouseEvent & { features?: mapboxgl.MapboxGeoJSONFeature[] }) => void;
     onPowerlineMouseLeave?: () => void;
@@ -42,7 +46,7 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
   const currentFeatureRef = useRef<mapboxgl.MapboxGeoJSONFeature | null>(null);
 
   useEffect(() => {
-    if (!map || !layerManager) return;
+    if (!map) return;
 
     // Dynamically import mapbox-gl on the client side
     import("mapbox-gl").then((mapboxModule) => {
@@ -52,32 +56,38 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
       // **Powerlines Layer Setup**
       const powerSourceLayerName = "Electricity_Transmission_Line-08vle5";
 
-      // Add source if it doesn’t exist
+      // Add vector source for electricity lines if it doesn’t exist, with extra logging
       if (!map.getSource("electricity-lines")) {
         map.addSource("electricity-lines", {
           type: "vector",
           url: "mapbox://intelaero.a8qtcidy",
         });
+        console.log("[MapboxLayerHandler] Added source 'electricity-lines'.");
+      } else {
+        console.log("[MapboxLayerHandler] Source 'electricity-lines' already exists.");
       }
 
-      // Add powerlines layer and register with LayerManager
+      // Add powerlines layer and register with layerManager
       if (!map.getLayer("Electricity Transmission Lines")) {
         map.addLayer({
           id: "Electricity Transmission Lines",
           type: "line",
           source: "electricity-lines",
           "source-layer": powerSourceLayerName,
-          layout: { visibility: "none" }, // Initial visibility controlled by MapContext
+          layout: { visibility: "none" },
           paint: {
             "line-color": "#f00",
             "line-width": ["interpolate", ["linear"], ["zoom"], 11, 1, 14, 2],
           },
           minzoom: 10,
         });
-        layerManager.registerLayer("Electricity Transmission Lines"); // Register with LayerManager
+        console.log("[MapboxLayerHandler] Added layer 'Electricity Transmission Lines'.");
+        layerManager.registerLayer("Electricity Transmission Lines");
+      } else {
+        console.log("[MapboxLayerHandler] Layer 'Electricity Transmission Lines' already exists.");
       }
 
-      // Add powerlines hitbox layer and register
+      // Add powerlines hitbox layer and register with layerManager
       if (!map.getLayer("Electricity Transmission Lines Hitbox")) {
         map.addLayer({
           id: "Electricity Transmission Lines Hitbox",
@@ -88,7 +98,10 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
           paint: { "line-width": 20, "line-color": "rgba(0,0,0,0)" },
           minzoom: 10,
         });
+        console.log("[MapboxLayerHandler] Added layer 'Electricity Transmission Lines Hitbox'.");
         layerManager.registerLayer("Electricity Transmission Lines Hitbox");
+      } else {
+        console.log("[MapboxLayerHandler] Layer 'Electricity Transmission Lines Hitbox' already exists.");
       }
 
       // **Interactivity for Powerlines**
@@ -121,6 +134,7 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
           .addTo(map);
 
         extMap.__currentPopup = popup;
+        console.log("[MapboxLayerHandler] Displayed popup for powerline.");
       };
 
       const handlePowerlineMouseLeave = () => {
@@ -129,6 +143,7 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
         if (extMap.__currentPopup) {
           extMap.__currentPopup.remove();
           extMap.__currentPopup = null;
+          console.log("[MapboxLayerHandler] Removed powerline popup on mouse leave.");
         }
       };
 
@@ -145,6 +160,7 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
       map.on("mouseenter", "Electricity Transmission Lines Hitbox", handlePowerlineMouseEnter);
       map.on("mouseleave", "Electricity Transmission Lines Hitbox", handlePowerlineMouseLeave);
       map.on("mousemove", handleMapMouseMove);
+      console.log("[MapboxLayerHandler] Bound interactivity event handlers for powerlines.");
 
       eventHandlersRef.current = {
         onPowerlineMouseEnter: handlePowerlineMouseEnter,
@@ -158,6 +174,9 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
           type: "vector",
           url: "mapbox://intelaero.5d451fq2",
         });
+        console.log("[MapboxLayerHandler] Added source 'airfields'.");
+      } else {
+        console.log("[MapboxLayerHandler] Source 'airfields' already exists.");
       }
 
       if (!map.getLayer("Airfields")) {
@@ -174,7 +193,10 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
           },
           minzoom: 10,
         });
+        console.log("[MapboxLayerHandler] Added layer 'Airfields'.");
         layerManager.registerLayer("Airfields");
+      } else {
+        console.log("[MapboxLayerHandler] Layer 'Airfields' already exists.");
       }
 
       if (!map.getLayer("Airfields Labels")) {
@@ -195,13 +217,16 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
           paint: { "text-color": "#FFF" },
           minzoom: 12,
         });
+        console.log("[MapboxLayerHandler] Added layer 'Airfields Labels'.");
         layerManager.registerLayer("Airfields Labels");
+      } else {
+        console.log("[MapboxLayerHandler] Layer 'Airfields Labels' already exists.");
       }
 
-      // Note: Airfields interactivity can be added here similarly to powerlines if needed
+      // Note: Add any additional interactivity for airfields here if needed.
     });
 
-    // Cleanup
+    // Cleanup event handlers on unmount
     return () => {
       if (!map) return;
       const handlers = eventHandlersRef.current;
@@ -215,16 +240,23 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
         map.off("mousemove", handlers.onMapMouseMove);
       }
 
-      // Remove any leftover airfield event listeners (placeholders)
+      // Remove airfields event listeners if any exist
       map.off("mouseenter", "Airfields");
       map.off("mouseleave", "Airfields");
       map.off("click", "Airfields");
 
       const extMap = map as ExtendedMapboxMap;
-      if (extMap.__airfieldsPopup) extMap.__airfieldsPopup.remove();
-      if (extMap.__currentPopup) extMap.__currentPopup.remove();
+      if (extMap.__airfieldsPopup) {
+        extMap.__airfieldsPopup.remove();
+        extMap.__airfieldsPopup = null;
+      }
+      if (extMap.__currentPopup) {
+        extMap.__currentPopup.remove();
+        extMap.__currentPopup = null;
+      }
+      console.log("[MapboxLayerHandler] Cleanup complete.");
     };
-  }, [map, layerManager]);
+  }, [map]);
 
   return null;
 };

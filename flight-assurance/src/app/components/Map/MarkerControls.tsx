@@ -4,7 +4,7 @@ import { useMarkers } from '../../hooks/useMarkers';
 import { useMapContext } from '../../context/MapContext';
 import { trackEventWithForm as trackEvent } from '../tracking/tracking';
 const MarkerControls: React.FC = () => {
-  const { map, isMapReady } = useMapContext();
+  const { map, terrainLoaded } = useMapContext();
   
   const {
     addGroundStation,
@@ -13,7 +13,7 @@ const MarkerControls: React.FC = () => {
     removeAllMarkers
   } = useMarkers({ 
     map, 
-    terrainLoaded: isMapReady 
+    terrainLoaded: terrainLoaded 
   });
 
   return (
