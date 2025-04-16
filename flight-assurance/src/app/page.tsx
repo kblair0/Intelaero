@@ -26,7 +26,7 @@ import { trackEventWithForm as trackEvent } from "./components/tracking/tracking
 import WelcomePitch from "./components/WelcomePitch";
 import { MapProvider } from "./context/MapContext";
 import { AnalysisControllerProvider } from "./context/AnalysisControllerContext";
-import AnalysisDashboard from "./components/Analsyses/LOSAnalyses/UI/AnalysisDashboard";
+import AnalysisDashboard from "./components/Analyses/LOSAnalyses/UI/AnalysisDashboard";
 import 'mapbox-gl/dist/mapbox-gl.css';
 
 const AODebugWrapper = ({ children }: { children: ReactNode }) => {
