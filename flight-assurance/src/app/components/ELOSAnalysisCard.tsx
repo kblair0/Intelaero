@@ -121,58 +121,46 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
     }));
   };
 
-  const handleAnalyzeMarker = async (
-    markerType: "gcs" | "observer" | "repeater"
-  ) => {
-    if (!mapRef.current) {
-      setError("Map not initialized");
+  const handleAnalyzeMarker = async (markerType: "gcs" | "observer" | "repeater") => {
+    if (!gridAnalysisRef.current) {
+      setError("Analysis controller not initialized");
       return;
     }
-
-    const locations = {
-      gcs: gcsLocation,
-      observer: observerLocation,
-      repeater: repeaterLocation,
-    };
-
+    const locations = { gcs: gcsLocation, observer: observerLocation, repeater: repeaterLocation };
     const location = locations[markerType];
     if (!location) {
       setError(`${markerType} location not set`);
       return;
     }
-
     const range = markerConfigs[markerType].gridRange;
-
+    
     try {
       setIsAnalyzing(true);
-      await mapRef.current.runElosAnalysis({
-        markerType,
-        location,
-        range,
-      });
+      await gridAnalysisRef.current.runStationAnalysis({ stationType: markerType, location, range });
     } catch (err: any) {
       setError(err.message || "Analysis failed");
     } finally {
       setIsAnalyzing(false);
     }
   };
+  
 
-  const handleAnalysis = useCallback(async () => {
-    if (!mapRef.current) {
-      setError("Map not initialized");
+  const handleAnalysis = async () => {
+    if (!gridAnalysisRef.current) {
+      setError("Analysis controller not initialized");
       return;
     }
-    console.log("ELOS Analysis Requested");
     try {
       setIsAnalyzing(true);
       setError(null);
-      await mapRef.current.runElosAnalysis();
-    } catch (err) {
+      await gridAnalysisRef.current.runFlightPathAnalysis();
+    } catch (err: any) {
       setError(err instanceof Error ? err.message : "Analysis failed");
     } finally {
       setIsAnalyzing(false);
     }
-  }, [mapRef, setIsAnalyzing, setError]);
+  };
+  
 
   // Station to Station LOS Analysis
   // State variables to hold the selected source and target for station-to-station LOS.
@@ -205,146 +193,55 @@ const ELOSAnalysisCard: React.FC<ELOSAnalysisCardProps> = ({ mapRef }) => {
 
   // Handler for station-to-station LOS check.
   const handleStationLOSCheck = async () => {
-    if (!mapRef.current) {
-      setError("Map not initialized");
+    if (!gridAnalysisRef.current) {
+      setError("Analysis controller not initialized");
       return;
     }
-    
-    const map = mapRef.current.getMap();
-    if (!map) {
-      setError("Map instance not available");
-      return;
-    }
-    
     const source = stationLocations[sourceStation];
     const target = stationLocations[targetStation];
-    
     if (!source || !target) {
-      setError(
-        `Both ${sourceStation.toUpperCase()} and ${targetStation.toUpperCase()} locations must be set.`
-      );
+      setError(`Both ${sourceStation.toUpperCase()} and ${targetStation.toUpperCase()} locations must be set.`);
       return;
     }
-    
-    const sourceOffset = (() => {
-      switch (sourceStation) {
-        case 'gcs': return gcsElevationOffset;
-        case 'observer': return observerElevationOffset;
-        case 'repeater': return repeaterElevationOffset;
-        default: throw new Error(`Unknown station type: ${sourceStation}`);
-      }
-    })();
-    const targetOffset = (() => {
-      switch (targetStation) {
-        case 'gcs': return gcsElevationOffset;
-        case 'observer': return observerElevationOffset;
-        case 'repeater': return repeaterElevationOffset;
-        default: throw new Error(`Unknown station type: ${targetStation}`);
-      }
-    })();
-    
-    const effective1: [number, number, number] = [
-      source.lng,
-      source.lat,
-      (source.elevation || 0) + sourceOffset,
-    ];
-    const effective2: [number, number, number] = [
-      target.lng,
-      target.lat,
-      (target.elevation || 0) + targetOffset,
-    ];
-    
-    console.log("[Station LOS] Effective coordinates:", effective1, effective2);
-    
-    try {
-      const boundTerrainQuery = async (
-        coords: [number, number]
-      ): Promise<number> => {
-        if (!map) return 0;
-    
-        if (!map.isSourceLoaded("mapbox-dem")) {
-          await new Promise<void>((resolve) => {
-            const checkSource = () => {
-              if (map.isSourceLoaded("mapbox-dem")) {
-                resolve();
-              } else {
-                map.once("sourcedata", checkSource);
-              }
-            };
-            checkSource();
-          });
-        }
-    
-        const elevation = map.queryTerrainElevation(coords);
-        return elevation ?? 0;
-      };
-    
-      const result = await checkStationToStationLOS(
-        map,
-        effective1,
-        effective2,
-        boundTerrainQuery
-      );
-    
-      console.log("[Station LOS] Analysis result:", result);
-      setStationLOSResult(result);
-      setError(null);
-    
-      if (!result.clear) {
-        // Generate the LOS profile for the entire line.
-        const profile = await getLOSProfile(effective1, effective2, boundTerrainQuery);
-        // Update the obstruction segment overlay based on the profile.
-        updateObstructionSegment(map, profile, effective1, effective2, 20);
-      } else {
-        // Remove any existing obstruction segment overlay.
-        removeObstructionSegment(map);
-      }
-    } catch (error: any) {
-      console.error("[Station LOS] Analysis error:", error);
-      setError(error.message || "Station LOS check failed");
-      setStationLOSResult(null);
-      removeObstructionSegment(map);
-    }
-  };
-// Merged Analysis
-  const handleMergedAnalysis = async () => {
-    if (!mapRef.current) {
-      setError("Map not initialized");
-      return;
-    }
-  
     try {
       setIsAnalyzing(true);
-      setError(null);
-  
-      // Get available stations with their configurations
-      const stations = [
-        { type: 'gcs' as const, location: gcsLocation, config: markerConfigs.gcs },
-        { type: 'observer' as const, location: observerLocation, config: markerConfigs.observer },
-        { type: 'repeater' as const, location: repeaterLocation, config: markerConfigs.repeater }
-      ].filter((s): s is (
-        | { type: "gcs"; location: LocationData; config: MarkerConfig }
-        | { type: "observer"; location: LocationData; config: MarkerConfig }
-        | { type: "repeater"; location: LocationData; config: MarkerConfig }
-      ) => s.location !== null);
-      
-      
-  
-      // Run merged analysis
-      const results = await mapRef.current.runElosAnalysis({
-        mergedAnalysis: true,
-        stations
-      });
-  
-      setMergedResults(results);
-  
-    } catch (error) {
-      console.error('Merged analysis error:', error);
-      setError(error instanceof Error ? error.message : 'Analysis failed');
+      const losData = await gridAnalysisRef.current.checkStationToStationLOS(sourceStation, targetStation);
+      setStationLOSResult(losData.result);
+    } catch (error: any) {
+      setError(error.message || "Station LOS check failed");
+      setStationLOSResult(null);
     } finally {
       setIsAnalyzing(false);
     }
   };
+  
+// Merged Analysis
+const handleMergedAnalysis = async () => {
+  if (!gridAnalysisRef.current) {
+    setError("Analysis controller not initialized");
+    return;
+  }
+  try {
+    setIsAnalyzing(true);
+    setError(null);
+
+    // Create a list of station configurations with their location and grid range.
+    const stations = [
+      { type: 'gcs', location: gcsLocation, config: markerConfigs.gcs },
+      { type: 'observer', location: observerLocation, config: markerConfigs.observer },
+      { type: 'repeater', location: repeaterLocation, config: markerConfigs.repeater }
+    ].filter(s => s.location !== null);
+    
+    const results = await gridAnalysisRef.current.runMergedAnalysis(stations);
+    setMergedResults(results);
+  } catch (error: any) {
+    console.error('Merged analysis error:', error);
+    setError(error instanceof Error ? error.message : 'Analysis failed');
+  } finally {
+    setIsAnalyzing(false);
+  }
+};
+
   
   
   //  handler for showing the LOS profile graph.

@@ -160,13 +160,8 @@ const StationCard: React.FC<StationCardProps> = ({
         </div>
   
         {/* Analyze Button */}
-        <button
-          onClick={handleAnalyzeWithTracking}
-          aria-label="Run analysis"
-          className={`h-5 px-2 py-0 rounded text-white bg-${colors[stationType]}-500 hover:bg-${colors[stationType]}-600 flex-shrink-0 flex items-center justify-center`}
-        >
-          Analyze
-        </button>
+        <button onClick={handleAnalyzeWithTracking}>Analyze</button>
+
       </div>
     </article>
   );

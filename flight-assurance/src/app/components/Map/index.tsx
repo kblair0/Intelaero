@@ -1,3 +1,5 @@
+//components/Map/index.tsx
+"use client";
 import React, { useEffect, useRef, forwardRef } from 'react';
 import { useMap } from '../../hooks/useMap';
 import { useMapContext } from '../../context/MapContext';
@@ -19,8 +21,8 @@ import AODisplay from '../AO/AODisplay';
 
 import MapboxLayerHandler from './MapboxLayerHandler';
 import BYDALayerHandler from './BYDALayerHandler';
-import ELOSGridAnalysis from '../ELOSGridAnalysis';
-
+import GridAnalysisController, { GridAnalysisRef } from '../../services/GridAnalysis/GridAnalysisController';
+import { useAnalysisController } from "../../context/AnalysisControllerContext";
 import { trackEventWithForm as trackEvent } from '../tracking/tracking';
 
 interface MapProps {
@@ -38,7 +40,7 @@ const Map = forwardRef<MapRef, MapProps>(({ activePanel, togglePanel, flightPlan
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const bydaLayerHandlerRef = useRef<{ fetchLayers: () => void } | null>(null);
-  const elosGridRef = useRef<any>(null);
+  const { gridAnalysisRef } = useAnalysisController();
   const hasSetMapRef = useRef(false);
 
   const { map, terrainLoaded } = useMap('map-container', {
@@ -103,17 +105,17 @@ const Map = forwardRef<MapRef, MapProps>(({ activePanel, togglePanel, flightPlan
   }, [updateMarkerPopups, map, terrainLoaded]);
 
   const runElosAnalysis = async () => {
-    if (!map || !elosGridRef.current) return;
-
+    if (!map || !gridAnalysisRef.current) return;
+  
     try {
       setIsAnalyzing(true);
       setError(null);
       trackEvent('elos_analysis_started', {});
-
+  
       resetLayers();
-
-      await elosGridRef.current.runAnalysis();
-
+  
+      await gridAnalysisRef.current.runFlightPathAnalysis();
+  
       trackEvent('elos_analysis_completed', {});
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Analysis failed');
@@ -136,19 +138,7 @@ const Map = forwardRef<MapRef, MapProps>(({ activePanel, togglePanel, flightPlan
         <>
           <MapboxLayerHandler map={map} />
           {aoGeometry && <BYDALayerHandler ref={bydaLayerHandlerRef} map={map} />}
-          <ELOSGridAnalysis
-            ref={elosGridRef}
-            map={map}
-            flightPath={flightPlan?.properties?.processed ? flightPlan : undefined}
-            onError={(error) => {
-              console.error('ELOS Analysis error:', error);
-              setError(error.message);
-            }}
-            onSuccess={(result) => {
-              console.log('ELOS Analysis completed:', result);
-              setResults(result);
-            }}
-          />
+
         </>
       )}
       <MarkerControls />
@@ -182,6 +172,30 @@ const Map = forwardRef<MapRef, MapProps>(({ activePanel, togglePanel, flightPlan
           </button>
         </div>
       )}
+
+      {map && flightPlan && (
+        <GridAnalysisController
+          ref={gridAnalysisRef}
+          flightPlan={flightPlan?.properties?.processed ? flightPlan : undefined}
+          onProgress={(progress) => {
+            // Handle progress updates: log and update your local or context state.
+            console.log("Analysis progress:", progress);
+            // For example, if you keep a progress state:
+            // setProgress(progress);
+          }}
+          onError={(error) => {
+            // Handle errors: log and update the error state in your LOSAnalysisContext.
+            console.error("ELOS Analysis error:", error);
+            setError(error.message);
+          }}
+          onComplete={(result) => {
+            // Handle completion: log and update your analysis results.
+            console.log("ELOS Analysis completed:", result);
+            setResults(result);
+          }}
+        />
+      )}
+
     </div>
   );
 });

@@ -1,87 +1,394 @@
-//useMeasurement.ts 
-// This hook handles the measurement functionality on the map.
+// useMeasurement.ts
+// This hook handles distance measurement functionality on the map,
+// allowing users to click points and visualize the distance between them.
+// It integrates with the MapContext to access the map instance and provides
+// a clean API for measuring distances with visual feedback.
 
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 import { useMapContext } from '../context/MapContext';
 import * as turf from '@turf/turf';
+import mapboxgl from 'mapbox-gl';
+import { trackEventWithForm as trackEvent } from '../components/tracking/tracking';
 
 interface MeasurementResult {
   distance: number; // Meters
-  points: [number, number][];
+  points: [number, number][]; // [lng, lat] points
+  segments: number[]; // Individual segment distances in meters
 }
 
 export const useMeasurement = () => {
   const { map } = useMapContext();
   const [measurement, setMeasurement] = useState<MeasurementResult | null>(null);
   const [isMeasuring, setIsMeasuring] = useState(false);
+  
+  // Use refs to maintain consistent references for event handlers
+  const markersRef = useRef<mapboxgl.Marker[]>([]);
+  const movingPopupRef = useRef<mapboxgl.Popup | null>(null);
+  const pointsRef = useRef<[number, number][]>([]);
+  
+  // Constants for layer IDs
+  const FIXED_LINE_SOURCE = 'measurement-fixed-line-source';
+  const TEMP_LINE_SOURCE = 'measurement-temp-line-source';
+  const FIXED_LINE_LAYER = 'measurement-fixed-line-layer';
+  const TEMP_LINE_LAYER = 'measurement-temp-line-layer';
 
-  const startMeasurement = useCallback(() => {
+  // Clean up measurement resources
+  const cleanupMeasurement = useCallback(() => {
     if (!map) return;
-    setIsMeasuring(true);
-    setMeasurement({ distance: 0, points: [] });
-
-    const layerId = 'measurement-line';
-    // Remove existing measurement layer
-    if (map.getLayer(layerId)) map.removeLayer(layerId);
-    if (map.getSource(layerId)) map.removeSource(layerId);
-
-    // Add source and layer
-    map.addSource(layerId, {
-      type: 'geojson',
-      data: { type: 'FeatureCollection', features: [] },
-    });
-    map.addLayer({
-      id: layerId,
-      type: 'line',
-      source: layerId,
-      paint: {
-        'line-color': '#ff0000',
-        'line-width': 2,
-        'line-dasharray': [2, 2],
-      },
-    });
-
-    // Handle clicks to add points
-    map.on('click', handleClick);
+    
+    // Remove markers
+    markersRef.current.forEach(marker => marker.remove());
+    markersRef.current = [];
+    
+    // Remove popup
+    if (movingPopupRef.current) {
+      movingPopupRef.current.remove();
+      movingPopupRef.current = null;
+    }
+    
+    // Remove layers and sources - carefully check if they exist first
+    try {
+      if (map.getLayer(FIXED_LINE_LAYER)) {
+        map.removeLayer(FIXED_LINE_LAYER);
+      }
+      
+      if (map.getLayer(TEMP_LINE_LAYER)) {
+        map.removeLayer(TEMP_LINE_LAYER);
+      }
+      
+      if (map.getSource(FIXED_LINE_SOURCE)) {
+        map.removeSource(FIXED_LINE_SOURCE);
+      }
+      
+      if (map.getSource(TEMP_LINE_SOURCE)) {
+        map.removeSource(TEMP_LINE_SOURCE);
+      }
+    } catch (e) {
+      console.error("Error cleaning up measurement layers:", e);
+    }
+    
+    // Reset cursor and points
+    map.getCanvas().style.cursor = '';
+    pointsRef.current = [];
   }, [map]);
 
-  const handleClick = useCallback(
-    (e: mapboxgl.MapMouseEvent) => {
-      if (!map || !isMeasuring) return;
-      const point: [number, number] = [e.lngLat.lng, e.lngLat.lat];
-      setMeasurement((prev) => {
-        const points = prev ? [...prev.points, point] : [point];
-        let distance = 0;
-        if (points.length > 1) {
-          const line = turf.lineString(points);
-          distance = turf.length(line, { units: 'meters' });
-        }
-
-        // Update layer
-        const layerId = 'measurement-line';
-        const source = map.getSource(layerId) as mapboxgl.GeoJSONSource;
+  // Clear all current measurements but keep measuring active
+  const clearMeasurement = useCallback(() => {
+    if (!map) return;
+    
+    // Remove markers
+    markersRef.current.forEach(marker => marker.remove());
+    markersRef.current = [];
+    
+    // Reset the fixed line to empty
+    try {
+      if (map.getSource(FIXED_LINE_SOURCE)) {
+        const source = map.getSource(FIXED_LINE_SOURCE) as mapboxgl.GeoJSONSource;
         source.setData({
+          type: 'FeatureCollection',
+          features: []
+        });
+      }
+      
+      if (map.getSource(TEMP_LINE_SOURCE)) {
+        const tempSource = map.getSource(TEMP_LINE_SOURCE) as mapboxgl.GeoJSONSource;
+        tempSource.setData({
+          type: 'FeatureCollection',
+          features: []
+        });
+      }
+    } catch (e) {
+      console.error("Error clearing measurement lines:", e);
+    }
+    
+    // Reset points and measurement data
+    pointsRef.current = [];
+    setMeasurement({ distance: 0, points: [], segments: [] });
+    
+    trackEvent('measurement_cleared', { panel: 'measurement-controls' });
+  }, [map]);
+
+  // Handle click to add measurement point
+  const handleClick = useCallback((e: mapboxgl.MapMouseEvent) => {
+    if (!map || !isMeasuring) return;
+    
+    const point: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+    pointsRef.current.push(point);
+    const points = pointsRef.current;
+    
+    // Update GeoJSON for the line
+    try {
+      if (map.getSource(FIXED_LINE_SOURCE)) {
+        const source = map.getSource(FIXED_LINE_SOURCE) as mapboxgl.GeoJSONSource;
+        source.setData({
+          type: 'FeatureCollection',
+          features: points.length >= 2 ? [
+            {
+              type: 'Feature',
+              geometry: { 
+                type: 'LineString', 
+                coordinates: points 
+              },
+              properties: {}
+            }
+          ] : []
+        });
+      }
+    } catch (e) {
+      console.error("Error updating fixed line source:", e);
+    }
+    
+    // Calculate segment and total distances
+    let segments: number[] = [];
+    let totalDistance = 0;
+    
+    if (points.length >= 2) {
+      for (let i = 1; i < points.length; i++) {
+        const segment = turf.distance(points[i-1], points[i], { units: 'meters' });
+        segments.push(segment);
+        totalDistance += segment;
+      }
+    }
+    
+    // Add marker at clicked point
+    try {
+      const marker = new mapboxgl.Marker({ color: '#4B56D2' })
+        .setLngLat(point)
+        .addTo(map);
+      
+      // Add popup with distance information
+      if (points.length > 1) {
+        const lastSegmentDistance = segments[segments.length - 1];
+        const popup = new mapboxgl.Popup({ 
+          closeButton: false, 
+          className: 'custom-popup',
+          offset: 25
+        })
+          .setLngLat(point)
+          .setHTML(`<strong style="color: black; background: white; padding: 4px;">Segment: ${(lastSegmentDistance / 1000).toFixed(2)} km<br>Total: ${(totalDistance / 1000).toFixed(2)} km</strong>`);
+        
+        marker.setPopup(popup);
+        popup.addTo(map);
+      } else {
+        // First point just shows "Start"
+        const popup = new mapboxgl.Popup({ 
+          closeButton: false, 
+          className: 'custom-popup',
+          offset: 25
+        })
+          .setLngLat(point)
+          .setHTML(`<strong style="color: black; background: white; padding: 4px;">Start</strong>`);
+        
+        marker.setPopup(popup);
+        popup.addTo(map);
+      }
+      
+      markersRef.current.push(marker);
+    } catch (e) {
+      console.error("Error adding marker:", e);
+    }
+    
+    // Reset temporary line
+    try {
+      if (map.getSource(TEMP_LINE_SOURCE)) {
+        const tempSource = map.getSource(TEMP_LINE_SOURCE) as mapboxgl.GeoJSONSource;
+        tempSource.setData({
+          type: 'FeatureCollection',
+          features: []
+        });
+      }
+    } catch (e) {
+      console.error("Error updating temp line source:", e);
+    }
+    
+    // Update measurement state
+    setMeasurement({ 
+      distance: totalDistance, 
+      points: [...points], 
+      segments 
+    });
+  }, [map, isMeasuring]);
+
+  // Handle mouse move to update temporary line
+  const handleMouseMove = useCallback((e: mapboxgl.MapMouseEvent) => {
+    if (!map || !isMeasuring || pointsRef.current.length === 0) return;
+    
+    const mousePoint: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+    const lastPoint = pointsRef.current[pointsRef.current.length - 1];
+    
+    // Update temporary line
+    try {
+      if (map.getSource(TEMP_LINE_SOURCE)) {
+        const tempSource = map.getSource(TEMP_LINE_SOURCE) as mapboxgl.GeoJSONSource;
+        tempSource.setData({
           type: 'FeatureCollection',
           features: [
             {
               type: 'Feature',
-              geometry: { type: 'LineString', coordinates: points },
-              properties: {},
-            },
-          ],
+              geometry: { 
+                type: 'LineString', 
+                coordinates: [lastPoint, mousePoint] 
+              },
+              properties: {}
+            }
+          ]
         });
+      }
+    } catch (e) {
+      console.error("Error updating temp line source:", e);
+    }
+    
+    // Update moving popup with distance
+    const distance = turf.distance(lastPoint, mousePoint, { units: 'meters' });
+    
+    try {
+      if (!movingPopupRef.current) {
+        movingPopupRef.current = new mapboxgl.Popup({
+          closeButton: false,
+          className: 'custom-popup',
+          offset: 25
+        }).addTo(map);
+      }
+      
+      movingPopupRef.current
+        .setLngLat(e.lngLat)
+        .setHTML(`<strong style="color: black; background: white; padding: 4px;">${(distance / 1000).toFixed(2)} km</strong>`);
+    } catch (e) {
+      console.error("Error updating moving popup:", e);
+    }
+  }, [map, isMeasuring]);
 
-        return { distance, points };
+  // Start a new measurement
+  const startMeasurement = useCallback(() => {
+    if (!map) return;
+    
+    // First clean up any existing measurement
+    cleanupMeasurement();
+    
+    // Set up measurement layers
+    try {
+      // Initialize fixed line source/layer for completed segments
+      map.addSource(FIXED_LINE_SOURCE, {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] }
       });
-    },
-    [map, isMeasuring]
-  );
+      
+      map.addLayer({
+        id: FIXED_LINE_LAYER,
+        type: 'line',
+        source: FIXED_LINE_SOURCE,
+        paint: { 
+          'line-color': '#4B56D2', 
+          'line-width': 3
+        }
+      });
+      
+      // Initialize temp line source/layer for active segment
+      map.addSource(TEMP_LINE_SOURCE, {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] }
+      });
+      
+      map.addLayer({
+        id: TEMP_LINE_LAYER,
+        type: 'line',
+        source: TEMP_LINE_SOURCE,
+        paint: { 
+          'line-color': '#4B56D2', 
+          'line-width': 2, 
+          'line-dasharray': [2, 2] 
+        }
+      });
+      
+      // Change cursor to crosshair
+      map.getCanvas().style.cursor = 'crosshair';
+      
+      // Initialize state
+      setIsMeasuring(true);
+      pointsRef.current = [];
+      setMeasurement({ distance: 0, points: [], segments: [] });
+      
+      trackEvent('measurement_started', { panel: 'measurement-controls' });
+    } catch (e) {
+      console.error("Error initializing measurement:", e);
+    }
+  }, [map, cleanupMeasurement]);
 
+  // Stop measuring
   const stopMeasurement = useCallback(() => {
     if (!map) return;
+    
     setIsMeasuring(false);
-    map.off('click', handleClick);
+    
+    // Remove the temporary line and moving popup
+    try {
+      if (movingPopupRef.current) {
+        movingPopupRef.current.remove();
+        movingPopupRef.current = null;
+      }
+      
+      if (map.getSource(TEMP_LINE_SOURCE)) {
+        const tempSource = map.getSource(TEMP_LINE_SOURCE) as mapboxgl.GeoJSONSource;
+        tempSource.setData({
+          type: 'FeatureCollection',
+          features: []
+        });
+      }
+      
+      // Reset cursor
+      map.getCanvas().style.cursor = '';
+    } catch (e) {
+      console.error("Error stopping measurement:", e);
+    }
   }, [map]);
 
-  return { startMeasurement, stopMeasurement, measurement, isMeasuring };
+
+  // Handle right-click to finish measurement
+  const handleRightClick = useCallback((e: mapboxgl.MapMouseEvent) => {
+    if (!map || !isMeasuring) return;
+    
+    e.preventDefault();
+    stopMeasurement();
+    
+    trackEvent('measurement_completed', { 
+      panel: 'measurement-controls',
+      points: pointsRef.current.length,
+      distance: measurement?.distance || 0 
+    });
+  }, [map, isMeasuring, measurement, stopMeasurement]);
+
+
+  // Set up and clean up event listeners
+  useEffect(() => {
+    if (!map) return;
+    
+    if (isMeasuring) {
+      map.on('click', handleClick);
+      map.on('mousemove', handleMouseMove);
+      map.on('contextmenu', handleRightClick);
+    }
+    
+    return () => {
+      if (map) {
+        map.off('click', handleClick);
+        map.off('mousemove', handleMouseMove);
+        map.off('contextmenu', handleRightClick);
+      }
+    };
+  }, [map, isMeasuring, handleClick, handleMouseMove, handleRightClick]);
+
+  // Clean up when the component unmounts
+  useEffect(() => {
+    return () => {
+      cleanupMeasurement();
+    };
+  }, [cleanupMeasurement]);
+
+  return { 
+    startMeasurement, 
+    stopMeasurement, 
+    clearMeasurement, 
+    measurement, 
+    isMeasuring 
+  };
 };

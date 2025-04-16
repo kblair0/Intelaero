@@ -1,23 +1,32 @@
-import React from 'react';
+// IconButton.tsx
+// A reusable button component with icon support for map controls
 
-interface IconButtonProps {
-  onClick: () => void;
-  children: React.ReactNode;
-  className?: string;
-  disabled?: boolean;
+import React, { ButtonHTMLAttributes, ReactNode } from 'react';
+
+interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  children: ReactNode;
+  variant?: 'primary' | 'secondary' | 'transparent';
 }
 
-const IconButton: React.FC<IconButtonProps> = ({
-  onClick,
-  children,
-  className = '',
-  disabled = false,
+const IconButton: React.FC<IconButtonProps> = ({ 
+  children, 
+  className = '', 
+  variant = 'primary', 
+  ...props 
 }) => {
+  const baseStyles = "flex items-center justify-center rounded-md px-3 py-2 text-sm font-medium shadow transition-colors";
+  
+  const variantStyles = {
+    primary: "bg-white hover:bg-gray-100 text-gray-800",
+    secondary: "bg-blue-500 hover:bg-blue-600 text-white",
+    transparent: "bg-transparent hover:bg-black/5 text-gray-800 shadow-none"
+  };
+  
   return (
     <button
-      onClick={onClick}
-      className={`p-2 rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50 ${className}`}
-      disabled={disabled}
+      className={`${baseStyles} ${variantStyles[variant]} ${className}`}
+      type="button"
+      {...props}
     >
       {children}
     </button>

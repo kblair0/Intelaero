@@ -1,25 +1,25 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import { CheckCircle, XCircle, Loader, ChevronDown, ChevronRight, Battery, Radio, Mountain, Upload } from "lucide-react";
-import { useFlightPlanContext } from "../context/FlightPlanContext";
-import { useObstacleAnalysis } from "../context/ObstacleAnalysisContext";
-import { useFlightConfiguration } from "../context/FlightConfigurationContext";
-import { useLOSAnalysis } from "../context/LOSAnalysisContext";
-import { ObstacleAnalysisOutput } from "../context/ObstacleAnalysisContext";
+import { useFlightPlanContext } from "../../context/FlightPlanContext";
+import { useObstacleAnalysis } from "../../context/ObstacleAnalysisContext";
+import { useFlightConfiguration } from "../../context/FlightConfigurationContext";
+import { useLOSAnalysis } from "../../context/LOSAnalysisContext";
+import { ObstacleAnalysisOutput } from "../../context/ObstacleAnalysisContext";
 import dynamic from "next/dynamic";
-import { MapRef } from "./Map";
-import { trackEventWithForm as trackEvent } from "./tracking/tracking";
-import { useAreaOfOpsContext } from "../context/AreaOfOpsContext";
-import BYDALayerHandler from "./Map/BYDALayerHandler";
-import { useLayers } from "../hooks/useLayers";
-import { MapboxLayerHandler } from "./Map/MapboxLayerHandler";
+import { MapRef } from "../Map";
+import { trackEventWithForm as trackEvent } from "../tracking/tracking";
+import { useAreaOfOpsContext } from "../../context/AreaOfOpsContext";
+import BYDALayerHandler from "../Map/BYDALayerHandler";
+import { useLayers } from "../../hooks/useLayers";
+import { MapboxLayerHandler } from "../Map/MapboxLayerHandler";
 
-import { useAreaOpsProcessor } from "../hooks/useAreaOpsProcessor";
-import AODisplay from "./AO/AODisplay"; 
+import { useAreaOpsProcessor } from "../../hooks/useAreaOpsProcessor";
+import AODisplay from "../AO/AODisplay"; 
 
 // Dynamically load components that use browser APIs
-const ObstacleAssessment = dynamic(() => import("./ObstacleAssessment"), { ssr: false });
-const TerrainClearancePopup = dynamic(() => import("./TerrainClearancePopup"), { ssr: false });
+const ObstacleAssessment = dynamic(() => import("../ObstacleAssessment"), { ssr: false });
+const TerrainClearancePopup = dynamic(() => import("../TerrainClearancePopup"), { ssr: false });
 
 // Define layer toggle functions
 const toggleLayerVisibility = (mapRef: React.RefObject<MapRef>, layerName: string) => {
