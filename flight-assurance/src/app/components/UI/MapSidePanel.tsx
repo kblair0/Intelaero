@@ -1,3 +1,6 @@
+// This component is designed to be used beside the map where you want to show additional information or controls
+// in a side panel that can be toggled open or closed.
+
 import React from 'react';
 import { ChevronRight } from 'lucide-react';
 
@@ -37,17 +40,22 @@ const MapSidePanel: React.FC<MapSidePanelProps> = ({
               {icon && <span className="text-gray-600">{icon}</span>}
               <h3 className="font-medium text-gray-900">{title}</h3>
             </div>
+
             {/* Close button */}
             {isExpanded && (
-              <button
-                onClick={onToggle}
-                className="p-1.5 hover:bg-gray-200 rounded-full transition-colors
-                  focus:outline-none focus:ring-2 focus:ring-blue-500"
-                aria-label="Close panel"
-              >
-                <ChevronRight className="w-5 h-5 text-gray-600" />
-              </button>
-            )}
+            <button
+              onClick={() => {
+                console.log("Close button clicked"); // Debug log
+                onToggle();
+              }}
+              className="p-1.5 hover:bg-gray-200 rounded-full transition-colors
+                focus:outline-none focus:ring-2 focus:ring-blue-500"
+              aria-label="Close panel"
+            >
+              <ChevronRight className="w-5 h-5 text-gray-600" />
+            </button>
+          )}
+
           </div>
           {/* Content */}
           <div className="flex-1 p-4 overflow-y-auto overscroll-contain

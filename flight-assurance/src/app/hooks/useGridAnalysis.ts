@@ -61,7 +61,8 @@ export function useGridAnalysis(options: UseGridAnalysisOptions = {}) {
     isAnalyzing, 
     setIsAnalyzing,
     setResults,
-    setError 
+    setError,
+    setProgress: setGlobalProgress
   } = useLOSAnalysis();
 
   // State
@@ -89,11 +90,13 @@ export function useGridAnalysis(options: UseGridAnalysisOptions = {}) {
    * Updates progress and notifies via callback
    */
   const updateProgress = useCallback((value: number) => {
-    setProgress(value);
+    setProgress(value);         
+    setGlobalProgress(value);    
     if (options.onProgress) {
       options.onProgress(value);
     }
-  }, [options]);
+  }, [options, setGlobalProgress]);
+  
 
   /**
    * Cleans up after analysis

@@ -1,7 +1,7 @@
-// src/app/components/Analyses/LOSAnalyses/UI/MergedAnalysisCard.tsx
 "use client";
 
 import React, { useState } from "react";
+import distance from "@turf/distance"; // Import Turf's distance function
 import { useMarkersContext } from "../../../../context/MarkerContext";
 import { useLOSAnalysis } from "../../../../context/LOSAnalysisContext";
 import type { GridAnalysisRef } from "../../../../services/GridAnalysis/GridAnalysisController";
@@ -12,14 +12,63 @@ interface MergedAnalysisCardProps {
 }
 
 const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef }) => {
-  const { gcsLocation, observerLocation, repeaterLocation } = useMarkersContext();
+  const {
+    gcsLocation,
+    observerLocation,
+    repeaterLocation,
+    gcsElevationOffset,
+    observerElevationOffset,
+    repeaterElevationOffset,
+  } = useMarkersContext();
+
   const { markerConfigs, isAnalyzing, setError, setIsAnalyzing, results, setResults } = useLOSAnalysis();
-  
+
+  // Build the initial list based on context values.
   const availableStations = [
-    { type: "gcs", location: gcsLocation, config: markerConfigs.gcs },
-    { type: "observer", location: observerLocation, config: markerConfigs.observer },
-    { type: "repeater", location: repeaterLocation, config: markerConfigs.repeater }
-  ].filter(station => station.location !== null);
+    {
+      type: "gcs",
+      location: gcsLocation,
+      // Initially using context gridRange as placeholder (will be overridden)
+      range: markerConfigs.gcs.gridRange,
+      elevationOffset: gcsElevationOffset,
+    },
+    {
+      type: "observer",
+      location: observerLocation,
+      range: markerConfigs.observer.gridRange,
+      elevationOffset: observerElevationOffset,
+    },
+    {
+      type: "repeater",
+      location: repeaterLocation,
+      range: markerConfigs.repeater.gridRange,
+      elevationOffset: repeaterElevationOffset,
+    },
+  ].filter((station) => station.location !== null);
+
+  // Compute a per-station analysis range based on distances between each station.
+  // For each station, calculate the maximum distance to any other station.
+  const computedStations =
+    availableStations.length >= 2
+      ? availableStations.map((station) => {
+          let maxDistance = 0;
+          availableStations.forEach((otherStation) => {
+            if (station.type !== otherStation.type) {
+              // Use Turf to compute the geodesic distance in meters.
+              // Turf expects coordinates in [lng, lat] order.
+              const d = distance(
+                [station.location.lng, station.location.lat],
+                [otherStation.location.lng, otherStation.location.lat],
+                { units: "meters" }
+              );
+              if (d > maxDistance) {
+                maxDistance = d;
+              }
+            }
+          });
+          return { ...station, range: Math.round(maxDistance) };
+        })
+      : availableStations;
 
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -29,7 +78,7 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
       setLocalError("Analysis controller not initialized");
       return;
     }
-    if (availableStations.length < 2) {
+    if (computedStations.length < 2) {
       setError("At least two stations are required for merged analysis");
       setLocalError("At least two stations are required for merged analysis");
       return;
@@ -37,10 +86,25 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
     try {
       setIsAnalyzing(true);
       setError(null);
-      trackEvent("merged_analysis_start", {});
-      const mergedResults = await gridAnalysisRef.current.runMergedAnalysis(availableStations);
+
+      trackEvent("merged_analysis_start", {
+        stations: computedStations.map((s) => ({
+          type: s.type,
+          range: s.range,
+          elevationOffset: s.elevationOffset,
+        })),
+      });
+
+      // Run the analysis using the computed gridRange (distance based) for each station.
+      const mergedResults = await gridAnalysisRef.current.runMergedAnalysis(computedStations);
       setResults(mergedResults);
-      trackEvent("merged_analysis_success", {});
+      trackEvent("merged_analysis_success", {
+        stations: computedStations.map((s) => ({
+          type: s.type,
+          range: s.range,
+          elevationOffset: s.elevationOffset,
+        })),
+      });
     } catch (err: any) {
       setError(err.message || "Merged analysis failed");
       setLocalError(err.message || "Merged analysis failed");
@@ -49,30 +113,71 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
     }
   };
 
+  // Utility to get a friendly display name for the station.
+  const getStationDisplayName = (type: string) => {
+    switch (type) {
+      case "gcs":
+        return "GCS Station";
+      case "observer":
+        return "Observer Station";
+      case "repeater":
+        return "Repeater Station";
+      default:
+        return type;
+    }
+  };
+
   return (
-    <div className="p-4 bg-white rounded shadow mb-4">
-      <h2 className="text-lg font-semibold mb-2">Merged Analysis</h2>
-      <p className="text-sm mb-2">
+    <div className="bg-white rounded shadow p-3 mb-4">
+      <h2 className="text-sm font-semibold mb-2">Merged Analysis</h2>
+      <p className="text-xs mb-2">
         This analysis combines visibility from all available stations.
       </p>
-      <button
-        onClick={handleRunMergedAnalysis}
-        disabled={isAnalyzing}
-        className={`w-full py-2 rounded ${
-          isAnalyzing ? "bg-gray-300 cursor-not-allowed" : "bg-blue-500 hover:bg-blue-600 text-white"
-        }`}
-      >
-        {isAnalyzing ? "Analyzing..." : "Run Merged Analysis"}
-      </button>
-      {results && results.stats && (
+      {computedStations.length < 2 ? (
+        <div className="p-2 bg-yellow-100 border border-yellow-400 text-xs text-yellow-700 rounded">
+          ⚠️ Please place at least two station markers (GCS, Observer, or Repeater) on the map to enable merged analysis.
+          {computedStations.length === 1 && (
+            <p className="mt-1">
+              Currently placed: {getStationDisplayName(computedStations[0].type)}
+            </p>
+          )}
+        </div>
+      ) : (
+        <>
+          <div className="mb-2 text-xs">
+            <p>
+              <strong>Available Stations (computed grid ranges):</strong>
+            </p>
+            {computedStations.map((station) => (
+              <p key={station.type} className="ml-2">
+                - {getStationDisplayName(station.type)}: (
+                {station.location.lat.toFixed(3)}, {station.location.lng.toFixed(3)}, {station.location.elevation.toFixed(1)}m)
+                , Range: {station.range}m, Elevation Offset: {station.elevationOffset}m
+              </p>
+            ))}
+          </div>
+          <button
+            onClick={handleRunMergedAnalysis}
+            disabled={isAnalyzing || computedStations.length < 2}
+            className={`w-full py-1 rounded mt-3 ${
+              isAnalyzing || computedStations.length < 2
+                ? "bg-gray-300 cursor-not-allowed"
+                : "bg-blue-500 hover:bg-blue-600 text-white text-sm"
+            }`}
+          >
+            {isAnalyzing ? "Analyzing..." : "Run Merged Analysis"}
+          </button>
+        </>
+      )}
+      {results && results.stats && computedStations.length >= 2 && (
         <div className="mt-4">
-          <p className="text-sm">
+          <p className="text-xs">
             <strong>Visible Areas:</strong> {results.stats.visibleCells} / {results.stats.totalCells}
           </p>
-          <p className="text-sm">
+          <p className="text-xs">
             <strong>Average Visibility:</strong> {results.stats.averageVisibility.toFixed(1)}%
           </p>
-          <p className="text-sm">
+          <p className="text-xs">
             <strong>Analysis Time:</strong> {(results.stats.analysisTime / 1000).toFixed(1)}s
           </p>
         </div>

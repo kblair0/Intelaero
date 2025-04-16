@@ -18,10 +18,9 @@ import { LOSAnalysisProvider } from "./context/LOSAnalysisContext";
 import { FlightConfigurationProvider } from "./context/FlightConfigurationContext";
 import { AreaOfOpsProvider } from "./context/AreaOfOpsContext";
 import PlanVerification from "./components/Plan Verification/PlanVerification";
-import Card from "./components/Card";
-import ELOSAnalysisCard from "./components/ELOSAnalysisCard";
+import Card from "./components/UI/Card";
 import { ObstacleAnalysisProvider } from "./context/ObstacleAnalysisContext";
-import MapSidePanel from "./components/MapSidePanel";
+import MapSidePanel from "./components/UI/MapSidePanel";
 import { Battery, Radio, GripVertical } from "lucide-react";
 import { trackEventWithForm as trackEvent } from "./components/tracking/tracking";
 import WelcomePitch from "./components/WelcomePitch";
@@ -75,8 +74,13 @@ const HomeContent = () => {
   const { aoGeometry } = useAreaOfOpsContext();
 
   const togglePanel = (panel: "energy" | "los") => {
-    setActivePanel(activePanel === panel ? null : panel);
+    console.log("togglePanel called with:", panel);
+    setActivePanel((prev) => (prev === panel ? null : panel));
   };
+  
+  useEffect(() => {
+    console.log("🔄 activePanel:", activePanel);
+  }, [activePanel]);
 
   const handleAreaOps = () => {
     setShowAreaOpsUploader(true);

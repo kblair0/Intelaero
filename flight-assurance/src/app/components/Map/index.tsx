@@ -173,7 +173,7 @@ const Map = forwardRef<MapRef, MapProps>(({ activePanel, togglePanel, flightPlan
         </div>
       )}
 
-      {map && flightPlan && (
+      {map && (
         <GridAnalysisController
           ref={gridAnalysisRef}
           flightPlan={flightPlan?.properties?.processed ? flightPlan : undefined}

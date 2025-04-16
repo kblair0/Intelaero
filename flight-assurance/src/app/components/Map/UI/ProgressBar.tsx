@@ -1,4 +1,4 @@
-// ProgressBar.tsx
+// components/Map/UI/ProgressBar.tsx
 import React from 'react';
 
 interface ProgressBarProps {

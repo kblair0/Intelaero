@@ -56,7 +56,7 @@ interface GridAnalysisControllerProps {
 const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControllerProps>(
   ({ flightPlan, onProgress, onError, onComplete }, ref) => {
     const { map } = useMapContext();
-    const { setResults, setError, setIsAnalyzing } = useLOSAnalysis();
+    const { setResults, setError, setProgress, setIsAnalyzing } = useLOSAnalysis();
     const [internalProgress, setInternalProgress] = useState(0);
     
     // Use our grid analysis hook

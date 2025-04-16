@@ -1,4 +1,5 @@
 // src/context/LOSAnalysisContext.tsx
+"use client";
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 
 // ======== Type Definitions ========
@@ -103,6 +104,7 @@ export function LOSAnalysisProvider({ children }: { children: ReactNode }) {
   const [results, setResults] = useState<AnalysisResults | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [autoAnalysisRunning, setAutoAnalysisRunning] = useState<boolean>(false);
+  const [progress, setProgress] = useState<number>(0);
 
   // Marker Configuration Handler (now only updates gridRange)
   const handleMarkerConfigUpdate = (
@@ -123,6 +125,7 @@ export function LOSAnalysisProvider({ children }: { children: ReactNode }) {
     setResults(null);
     setError(null);
     setIsAnalyzing(false);
+    setProgress(0);
   };
 
   const contextValue = {
@@ -137,6 +140,8 @@ export function LOSAnalysisProvider({ children }: { children: ReactNode }) {
     error,
     autoAnalysisRunning,
     setAutoAnalysisRunning,
+    progress,
+    setProgress,
     
     // Configuration Actions
     setGridSize,
