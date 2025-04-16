@@ -620,7 +620,7 @@ const getTerrainAnalysis = (): VerificationSection => {
       {isAnalyzing && (
         <div className="flex items-center gap-2 p-2 bg-blue-100 text-blue-700 rounded">
           <Loader className="w-5 h-5 animate-spin" />
-          <span className="text-sm">Analyzing flight plan...</span>
+          <span className="text-sm">Analysing flight plan...</span>
         </div>
       )}
 

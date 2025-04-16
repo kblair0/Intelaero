@@ -1,9 +1,12 @@
+//src/app/components/Analsyses/LOSAnalyses/UI/FlightPathAnalysisCard.tsx
+
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useLOSAnalysis } from "../../../../context/LOSAnalysisContext";
 import type { GridAnalysisRef } from "../../../../services/GridAnalysis/GridAnalysisController";
 import { trackEventWithForm as trackEvent } from "../../../tracking/tracking";
+import { layerManager, MAP_LAYERS } from "../../../../services/LayerManager";
 
 interface FlightPathAnalysisCardProps {
   gridAnalysisRef: React.RefObject<GridAnalysisRef>;
@@ -41,11 +44,33 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
       setIsAnalyzing(false);
     }
   };
+  
+  
+  useEffect(() => {
+    const unsubscribe = layerManager.addEventListener((event, layerId) => {
+      if (
+        layerId === MAP_LAYERS.ELOS_GRID &&
+        (event === "visibilityChange" || event === "layerAdded")
+      ) {
+      }
+    });
+    return unsubscribe;
+  }, []);
 
   return (
     <div className="p-3 bg-white rounded shadow mb-4">
-      <h2 className="text-sm font-semibold mb-2">Flight Path Analysis</h2>
-      
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs text-gray-600">Show/Hide</span>
+        <label className="toggle-switch">
+          <input
+            type="checkbox"
+            checked={layerManager.isLayerVisible(MAP_LAYERS.ELOS_GRID)}
+            onChange={() => layerManager.toggleLayerVisibility(MAP_LAYERS.ELOS_GRID)}
+          />
+          <span className="toggle-slider"></span>
+        </label>
+      </div>
+      <p className="text-xs mb-2">This analysis shows the ground features visible along the flight path within the specific analysis range.</p>
       {/* Slider for Analysis Range (Grid Range) */}
       <div className="mb-2">
         <div className="flex justify-between items-center">
@@ -92,7 +117,7 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
           isAnalyzing ? "bg-gray-300 cursor-not-allowed" : "bg-blue-500 hover:bg-blue-600 text-sm text-white"
         }`}
       >
-        {isAnalyzing ? "Analyzing..." : "Run Flight Path Analysis"}
+        {isAnalyzing ? "Analysing..." : "Run Flight Path Analysis"}
       </button>
 
       {results && results.stats && (

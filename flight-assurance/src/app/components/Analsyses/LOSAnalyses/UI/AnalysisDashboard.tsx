@@ -65,11 +65,14 @@ const AnalysisDashboard: React.FC = () => {
         <FlightPathAnalysisCard gridAnalysisRef={gridAnalysisRef} />
       </AnalysisSection>
       <AnalysisSection
+      
         title="Station Analysis"
         icon={<RadioTower className="w-4 h-4" />}
         isExpanded={expandedSections.station}
         onToggle={() => toggleSection("station")}
       >
+        <p className="text-xs p-2 mb-2">This analysis shows the ground features visible to the station within the specific analysis range.</p>
+      
         <div className="p-0 space-y-3">
           <StationAnalysisCard gridAnalysisRef={gridAnalysisRef} stationType="gcs" />
           <StationAnalysisCard gridAnalysisRef={gridAnalysisRef} stationType="observer" />

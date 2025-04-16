@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useMarkersContext } from "../../../../context/MarkerContext";
 import { useLOSAnalysis } from "../../../../context/LOSAnalysisContext";
 import type { GridAnalysisRef } from "../../../../services/GridAnalysis/GridAnalysisController";
@@ -27,6 +27,7 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
   const { markerConfigs, setMarkerConfig, isAnalyzing, setError, setIsAnalyzing, results, gridSize, setGridSize } =
     useLOSAnalysis();
 
+
   const stations = {
     gcs: {
       location: gcsLocation,
@@ -52,12 +53,26 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
   };
   const station = stations[stationType];
   const [localError, setLocalError] = useState<string | null>(null);
-  const [layerVisibility, setLayerVisibility] = useState<boolean>(true);
 
   const toggleLayerVisibility = () => {
     layerManager.toggleLayerVisibility(station.layerId);
     setLayerVisibility((prev) => !prev);
   };
+
+  const [, forceUpdate] = React.useReducer((x) => x + 1, 0);
+
+  useEffect(() => {
+    const unsubscribe = layerManager.addEventListener((event, layerId) => {
+      if (
+        layerId === station.layerId &&
+        (event === "visibilityChange" || event === "layerAdded")
+      ) {
+        forceUpdate();
+      }
+    });
+    return unsubscribe;
+  }, [station.layerId]);
+  
 
   const handleRunStationAnalysis = async () => {
     if (!gridAnalysisRef.current) {
@@ -92,11 +107,11 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
   const getStationDisplayName = () => {
     switch (stationType) {
       case "gcs":
-        return "GCS Station";
+        return "GCS";
       case "observer":
-        return "Observer Station";
+        return "Observer";
       case "repeater":
-        return "Repeater Station";
+        return "Repeater";
       default:
         return stationType.toUpperCase();
     }
@@ -106,14 +121,15 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
     <div className="bg-white rounded shadow p-3 mb-4">
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-sm font-semibold">{getStationDisplayName()} Analysis</h2>
-        {station.location && results && (
+        {station.location && layerManager.isLayerVisible(station.layerId) !== undefined && (
+
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-600">Show/Hide</span>
             <label className="toggle-switch">
-              <input
+            <input
                 type="checkbox"
-                checked={layerVisibility}
-                onChange={toggleLayerVisibility}
+                checked={layerManager.isLayerVisible(station.layerId)}
+                onChange={() => layerManager.toggleLayerVisibility(station.layerId)}
                 disabled={isAnalyzing}
               />
               <span className="toggle-slider"></span>
@@ -207,7 +223,7 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
                 : "bg-blue-500 hover:bg-blue-600 text-sm text-white"
             }`}
           >
-            {isAnalyzing ? "Analyzing..." : "Run Analysis"}
+            {isAnalyzing ? "Analysing..." : "Run Analysis"}
           </button>
         </>
       )}

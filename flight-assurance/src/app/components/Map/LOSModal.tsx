@@ -1,25 +1,31 @@
 // components/Map/LOSModal.tsx
-import React, { useState, useEffect } from 'react';
-import { useFlightPlanContext } from '../../context/FlightPlanContext';
-import { useLOSAnalysis } from '../../context/LOSAnalysisContext';
-import { AlertTriangle } from 'lucide-react';
-import { trackEventWithForm as trackEvent } from '../tracking/tracking';
+"use client";
+
+import React, { useState, useEffect } from "react";
+import { useFlightPlanContext } from "../../context/FlightPlanContext";
+import { useLOSAnalysis } from "../../context/LOSAnalysisContext";
+import { useAnalysisController } from "../../context/AnalysisControllerContext";
+import { AlertTriangle } from "lucide-react";
+import { trackEventWithForm as trackEvent } from "../tracking/tracking";
 
 /**
- * Modal to prompt the user to run Line of Sight analysis when a flight plan is loaded
- * Appears when a new flight plan is loaded and processed
+ * Modal to prompt the user to run Flight Path analysis when a flight plan is loaded.
+ * Appears when a new flight plan is loaded and processed.
  */
 const LOSModal: React.FC = () => {
   const { flightPlan } = useFlightPlanContext();
-  const { isAnalyzing, runAnalysis, setError } = useLOSAnalysis();
+  const { isAnalyzing, setError, setIsAnalyzing } = useLOSAnalysis();
+  const { gridAnalysisRef } = useAnalysisController();
   const [showModal, setShowModal] = useState(false);
+  const [hasBeenSeen, setHasBeenSeen] = useState(false);
 
   // Show modal when flight plan is loaded and processed
   useEffect(() => {
-    if (flightPlan && flightPlan.properties?.processed && !isAnalyzing) {
+    if (flightPlan && flightPlan.properties?.processed && !isAnalyzing && !hasBeenSeen) {
       setShowModal(true);
     }
-  }, [flightPlan, isAnalyzing]);
+  }, [flightPlan, isAnalyzing, hasBeenSeen]);
+  
 
   // Auto-hide modal when analysis starts
   useEffect(() => {
@@ -29,18 +35,29 @@ const LOSModal: React.FC = () => {
   }, [isAnalyzing]);
 
   const handleRunAnalysis = async () => {
+    if (!gridAnalysisRef.current) {
+      setError("Analysis controller not initialized");
+      return;
+    }
     try {
+      setIsAnalyzing(true);
       setError(null);
-      await runAnalysis();
-      trackEvent("full_elos_analysis_from_modal_click", { panel: "map" });
-      setShowModal(false);
-    } catch (err) {
+      // Tracking analysis start – similar to FlightPathAnalysisCard
+      trackEvent("flight_path_analysis_start", { panel: "map" });
+      await gridAnalysisRef.current.runFlightPathAnalysis();
+      trackEvent("flight_path_analysis_success", { panel: "map" });
+      setHasBeenSeen(true);
+      setShowModal(false);      
+    } catch (err: any) {
       setError(err instanceof Error ? err.message : "Analysis failed");
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
   const handleDismiss = () => {
     trackEvent("dismiss_los_modal_click", { panel: "map" });
+    setHasBeenSeen(true);
     setShowModal(false);
   };
 

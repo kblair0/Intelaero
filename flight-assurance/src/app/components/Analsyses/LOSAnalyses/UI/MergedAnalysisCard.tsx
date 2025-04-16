@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState, useEffect } from "react";
+import { layerManager, MAP_LAYERS } from "../../../../services/LayerManager";
 import distance from "@turf/distance"; // Import Turf's distance function
 import { useMarkersContext } from "../../../../context/MarkerContext";
 import { useLOSAnalysis } from "../../../../context/LOSAnalysisContext";
@@ -127,9 +128,32 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
     }
   };
 
+  useEffect(() => {
+    const unsubscribe = layerManager.addEventListener((event, layerId) => {
+      if (
+        layerId === MAP_LAYERS.MERGED_VISIBILITY &&
+        (event === "visibilityChange" || event === "layerAdded")
+      ) {
+      }
+    });
+    return unsubscribe;
+  }, []);
+
   return (
     <div className="bg-white rounded shadow p-3 mb-4">
-      <h2 className="text-sm font-semibold mb-2">Merged Analysis</h2>
+      <div className="flex items-center gap-2 mt-2">
+  <span className="text-xs text-gray-600">Show/Hide</span>
+  <label className="toggle-switch">
+    <input
+      type="checkbox"
+      checked={layerManager.isLayerVisible(MAP_LAYERS.MERGED_VISIBILITY)}
+      onChange={() => layerManager.toggleLayerVisibility(MAP_LAYERS.MERGED_VISIBILITY)}
+    />
+    <span className="toggle-slider"></span>
+  </label>
+</div>
+
+
       <p className="text-xs mb-2">
         This analysis combines visibility from all available stations.
       </p>
@@ -165,7 +189,7 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
                 : "bg-blue-500 hover:bg-blue-600 text-white text-sm"
             }`}
           >
-            {isAnalyzing ? "Analyzing..." : "Run Merged Analysis"}
+            {isAnalyzing ? "Analysing..." : "Run Merged Analysis"}
           </button>
         </>
       )}
