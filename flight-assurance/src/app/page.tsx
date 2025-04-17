@@ -1,7 +1,6 @@
 // page.tsx
 "use client";
-import React, { useRef, useState, ReactNode, useEffect } from "react";
-import { MapRef } from "./components/Map";
+import React, { useState, ReactNode, useEffect } from "react";
 import Calculator from "./components/Calculator";
 import Image from "next/image";
 import FlightPlanUploader from "./components/FlightPlanUploader";
@@ -66,7 +65,6 @@ const AODebugWrapper = ({ children }: { children: ReactNode }) => {
 };
 
 const HomeContent = () => {
-  const mapRef = useRef<MapRef>(null);
   const [activePanel, setActivePanel] = useState<"energy" | "los" | null>(null);
   const [showUploader, setShowUploader] = useState(false);
   const [showAreaOpsUploader, setShowAreaOpsUploader] = useState(false);
@@ -74,21 +72,16 @@ const HomeContent = () => {
   const { aoGeometry } = useAreaOfOpsContext();
 
   const togglePanel = (panel: "energy" | "los") => {
-    console.log("togglePanel called with:", panel);
     setActivePanel((prev) => (prev === panel ? null : panel));
   };
-  
-  useEffect(() => {
-    console.log("🔄 activePanel:", activePanel);
-  }, [activePanel]);
+
 
   const handleAreaOps = () => {
     setShowAreaOpsUploader(true);
   };
 
   return (
-    <MapProvider>
-      <AnalysisControllerProvider>
+
         <div className="min-h-screen flex flex-col bg-white overflow-x-hidden">
           <DisclaimerModal />
   
@@ -99,7 +92,6 @@ const HomeContent = () => {
               <div className="flex-grow relative h-full">
                 <div className="relative h-full rounded-r-xl overflow-hidden">
                   <Map
-                    ref={mapRef}
                     activePanel={activePanel}
                     togglePanel={togglePanel}
                     flightPlan={flightPlan}
@@ -138,9 +130,7 @@ const HomeContent = () => {
                         </h3>
                         <FlightPlanUploader
                           onClose={() => setShowUploader(false)}
-                          mapRef={mapRef}
-                          onPlanUploaded={(flightData, resetMap) => {
-                            resetMap();
+                          onPlanUploaded={(flightData) => {
                             setFlightPlan(flightData);
                             setShowUploader(false);
                           }}
@@ -157,7 +147,6 @@ const HomeContent = () => {
                         </h3>
                         <AreaOpsUploader
                           onClose={() => setShowAreaOpsUploader(false)}
-                          mapRef={mapRef}
                         />
                       </div>
                     </div>
@@ -173,7 +162,7 @@ const HomeContent = () => {
                       Plan Verification
                     </h3>
                     <div className="flex-1 overflow-y-auto">
-                      <PlanVerification mapRef={mapRef} onTogglePanel={togglePanel} />
+                      <PlanVerification onTogglePanel={togglePanel} />
                       <div className="mt-4">
                         <WelcomePitch />
                       </div>
@@ -206,26 +195,28 @@ const HomeContent = () => {
             </div>
           </div>
         </div>
-      </AnalysisControllerProvider>
-    </MapProvider>
   );
 }
 export default function Home() {
   return (
-    <FlightPlanProvider>
-      <FlightConfigurationProvider>
-        <MarkerProvider>
-          <LOSAnalysisProvider>
-            <ObstacleAnalysisProvider>
-              <AreaOfOpsProvider>
-                <AODebugWrapper>
-                  <HomeContent />
-                </AODebugWrapper>
-              </AreaOfOpsProvider>
-            </ObstacleAnalysisProvider>
-          </LOSAnalysisProvider>
-        </MarkerProvider>
-      </FlightConfigurationProvider>
-    </FlightPlanProvider>
+    <MapProvider>  {/* Move this to the outermost level */}
+      <FlightPlanProvider>
+        <FlightConfigurationProvider>
+          <MarkerProvider>
+            <LOSAnalysisProvider>
+              <ObstacleAnalysisProvider>
+                <AreaOfOpsProvider>
+                  <AnalysisControllerProvider>  {/* Move this here */}
+                    <AODebugWrapper>
+                      <HomeContent />
+                    </AODebugWrapper>
+                  </AnalysisControllerProvider>
+                </AreaOfOpsProvider>
+              </ObstacleAnalysisProvider>
+            </LOSAnalysisProvider>
+          </MarkerProvider>
+        </FlightConfigurationProvider>
+      </FlightPlanProvider>
+    </MapProvider>
   );
 }

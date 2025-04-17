@@ -1,6 +1,5 @@
-//components/Map/index.tsx
 "use client";
-import React, { useEffect, useRef, forwardRef } from 'react';
+import React, { useEffect, useRef, FC } from 'react';
 import { useMap } from '../../hooks/useMap';
 import { useMapContext } from '../../context/MapContext';
 import { useFlightPlanContext } from '../../context/FlightPlanContext';
@@ -32,10 +31,11 @@ interface MapProps {
   setShowUploader?: (show: boolean) => void;
 }
 
-const Map = forwardRef<MapRef, MapProps>(({ activePanel, togglePanel, flightPlan, setShowUploader }, ref) => {
+const Map: FC<MapProps> = ({ activePanel, togglePanel, flightPlan, setShowUploader }) => {
   const { setMap } = useMapContext();
   const { setFlightPlan, setDistance } = useFlightPlanContext();
-  const { isAnalyzing, setIsAnalyzing, setResults, setError, error } = useLOSAnalysis();
+  const { isAnalyzing, setIsAnalyzing, setResults, setError, error, resetAnalysis } = useLOSAnalysis();
+  
   const { aoGeometry } = useAreaOfOpsContext();
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -43,12 +43,15 @@ const Map = forwardRef<MapRef, MapProps>(({ activePanel, togglePanel, flightPlan
   const { gridAnalysisRef } = useAnalysisController();
   const hasSetMapRef = useRef(false);
 
-  const { map, terrainLoaded } = useMap('map-container', {
-    style: 'mapbox://styles/intelaero/cm7pqu42s000601svdp7m3h0b',
-    center: [0, 0],
-    zoom: 2.5,
-    projection: 'globe',
-  });
+  const { map, terrainLoaded } = useMap(
+       'map-container',
+      {
+        style: 'mapbox://styles/intelaero/cm7pqu42s000601svdp7m3h0b',
+        center: [0, 0],
+        zoom: 2.5,
+       projection: 'globe',
+     } as any
+    );
 
   const { processFlightPlan } = useFlightPlanProcessor();
   const { updateMarkerPopups } = useMarkers({ map, terrainLoaded });
@@ -156,8 +159,8 @@ const Map = forwardRef<MapRef, MapProps>(({ activePanel, togglePanel, flightPlan
       />
       <MeasurementControls />
       <MapLegend />
-      <AnalysisStatus />
-      <LOSModal onRunAnalysis={runElosAnalysis} />
+      <AnalysisStatus onStop={resetAnalysis} />
+      <LOSModal />
       <FlightPathDisplay />
       <AODisplay />
       {error && (
@@ -178,18 +181,13 @@ const Map = forwardRef<MapRef, MapProps>(({ activePanel, togglePanel, flightPlan
           ref={gridAnalysisRef}
           flightPlan={flightPlan?.properties?.processed ? flightPlan : undefined}
           onProgress={(progress) => {
-            // Handle progress updates: log and update your local or context state.
             console.log("Analysis progress:", progress);
-            // For example, if you keep a progress state:
-            // setProgress(progress);
           }}
           onError={(error) => {
-            // Handle errors: log and update the error state in your LOSAnalysisContext.
             console.error("ELOS Analysis error:", error);
             setError(error.message);
           }}
           onComplete={(result) => {
-            // Handle completion: log and update your analysis results.
             console.log("ELOS Analysis completed:", result);
             setResults(result);
           }}
@@ -198,9 +196,8 @@ const Map = forwardRef<MapRef, MapProps>(({ activePanel, togglePanel, flightPlan
 
     </div>
   );
-});
+};
 
 Map.displayName = 'Map';
 
 export default Map;
-export type { MapRef };

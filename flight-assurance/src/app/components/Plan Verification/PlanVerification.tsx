@@ -1,50 +1,64 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
-import { CheckCircle, XCircle, Loader, ChevronDown, ChevronRight, Battery, Radio, Mountain, Upload } from "lucide-react";
+import { 
+  CheckCircle, 
+  XCircle, 
+  Loader, 
+  ChevronDown, 
+  ChevronRight, 
+  Battery, 
+  Radio, 
+  Mountain, 
+  Upload, 
+  RefreshCw
+} from "lucide-react";
 import { useFlightPlanContext } from "../../context/FlightPlanContext";
 import { useObstacleAnalysis } from "../../context/ObstacleAnalysisContext";
 import { useFlightConfiguration } from "../../context/FlightConfigurationContext";
 import { useLOSAnalysis } from "../../context/LOSAnalysisContext";
-import { ObstacleAnalysisOutput } from "../../context/ObstacleAnalysisContext";
-import dynamic from "next/dynamic";
-import { MapRef } from "../Map";
-import { trackEventWithForm as trackEvent } from "../tracking/tracking";
 import { useAreaOfOpsContext } from "../../context/AreaOfOpsContext";
-import BYDALayerHandler from "../Map/BYDALayerHandler";
-import { useLayers } from "../../hooks/useLayers";
-import { MapboxLayerHandler } from "../Map/MapboxLayerHandler";
-
+import { useMapContext } from "../../context/MapContext";
+import { trackEventWithForm as trackEvent } from "../tracking/tracking";
+import { useLayers } from "../../hooks/useLayers"
 import { useAreaOpsProcessor } from "../../hooks/useAreaOpsProcessor";
 import AODisplay from "../AO/AODisplay"; 
 
 // Dynamically load components that use browser APIs
-const ObstacleAssessment = dynamic(() => import("../ObstacleAssessment"), { ssr: false });
-const TerrainClearancePopup = dynamic(() => import("../TerrainClearancePopup"), { ssr: false });
+import dynamic from "next/dynamic";
 
-// Define layer toggle functions
-const toggleLayerVisibility = (mapRef: React.RefObject<MapRef>, layerName: string) => {
-  if (!mapRef.current) return;
-  const map = mapRef.current.getMap();
-  if (!map) return;
-  const visibility = map.getLayoutProperty(layerName, "visibility");
-  map.setLayoutProperty(layerName, "visibility", visibility === "visible" ? "none" : "visible");
+// only load on client:
+const BYDALayerHandler = dynamic(
+  () => import("../Map/BYDALayerHandler"), 
+  { ssr: false }
+);
+
+const MapboxLayerHandler = dynamic(
+  () => import("../Map/MapboxLayerHandler").then(m => m.MapboxLayerHandler),
+  { ssr: false }
+);
+
+const TerrainProfileChart = dynamic(
+  () => import("../ObstacleAnalysis").then(m => m.TerrainProfileChart),
+  { ssr: false }
+);
+
+const ObstacleAnalysisDashboard = dynamic(
+  () => import("../ObstacleAnalysis").then(m => m.default),
+  { ssr: false }
+);
+
+// Define layer toggle functions. use toggleLayer(id) directly:
+const handleAddPowerlines = () => {
+  toggleLayer("Electricity Transmission Lines");
+  toggleLayer("Electricity Transmission Lines Hitbox");
+};
+const handleAddAirspaceOverlay = () => {
+  toggleLayer("Airfields");
+  toggleLayer("Airfields Labels");
 };
 
-// Powerlines and Airspace Overlays Toggle
-const handleAddPowerlines = (mapRef: React.RefObject<MapRef>) => {
-  if (!mapRef.current) return;
-  toggleLayerVisibility(mapRef, "Electricity Transmission Lines");
-  toggleLayerVisibility(mapRef, "Electricity Transmission Lines Hitbox");
-};
-
-const handleAddAirspaceOverlay = (mapRef: React.RefObject<MapRef>) => {
-  if (!mapRef.current) return;
-  toggleLayerVisibility(mapRef, "Airfields");
-  toggleLayerVisibility(mapRef, "Airfields Labels");
-};
 
 interface PlanVerificationProps {
-  mapRef: React.RefObject<MapRef>;
   onTogglePanel: (panel: "energy" | "los" | null) => void;
 }
 
@@ -77,16 +91,17 @@ interface FlightPlanFeature {
   properties: Record<string, any>; // Adjusted to `any` for flexibility
 }
 
-const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePanel }) => {
+const PlanVerification: React.FC<PlanVerificationProps> = ({ onTogglePanel }) => {
+  const { map, toggleLayer } = useMapContext();
   const { flightPlan } = useFlightPlanContext();
   const { metrics } = useFlightConfiguration();
   const { analysisData, setAnalysisData } = useObstacleAnalysis();
   const { results: losResults } = useLOSAnalysis();
   const { aoGeometry } = useAreaOfOpsContext();
+
   //Ao Draft Implementation
   // const { generateAO } = useAreaOfOpsContext();
   const { processAreaOfOperations } = useAreaOpsProcessor();
-  const bydLayerHandlerRef = useRef<{ fetchLayers: () => void }>(null);
 
   const [expandedSection, setExpandedSection] = useState<string | null>("basic");
   const [showTerrainPopup, setShowTerrainPopup] = useState(false);
@@ -299,7 +314,7 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
           <button
             onClick={() => {
               trackEvent("toggle_airspace_overlay", { panel: "planverification.tsx" });
-              handleAddAirspaceOverlay(mapRef);
+              handleAddAirspaceOverlay();
             }}
             className="flex gap-2 px-3 py-1.5 bg-blue-500 justify-center text-white text-sm rounded-md hover:bg-blue-600 transition-colors"
           >
@@ -411,102 +426,155 @@ const PlanVerification: React.FC<PlanVerificationProps> = ({ mapRef, onTogglePan
 const getTerrainAnalysis = (): VerificationSection => {
   const hasAOGeometry = aoGeometry && aoGeometry.features.length > 0;
   const hasFlightPlan = !!flightPlan;
+  const { results, runAnalysis, status, error } = useObstacleAnalysis();
 
-  if (!analysisData) {
+  if (!flightPlan && !hasAOGeometry) {
     return {
       id: "terrain",
       title: "Obstruction Analysis",
       description: "Analyze terrain clearance for the defined area",
       status: "pending",
-      actions: (hasAOGeometry || hasFlightPlan) ? (
+    };
+  }
+  
+  // If we have a flight plan but no analysis has been run yet
+  if (status === 'idle' && flightPlan) {
+    return {
+      id: "terrain",
+      title: "Obstruction Analysis",
+      description: "Analyze terrain clearance for the flight path",
+      status: "pending",
+      actions: (
         <div className="flex flex-col gap-2 mt-2">
+          <button 
+            onClick={() => {
+              console.log("Running obstacle analysis...");
+              trackEvent("run_obstacle_analysis", { panel: "planverification.tsx" });
+              runAnalysis();
+            }} 
+            className="flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors"
+          >
+            <Mountain className="w-4 h-4" />
+            Analyze Terrain Obstacles
+          </button>
           <button 
             onClick={() => {
               trackEvent("powerlines_add_overlay_click", { panel: "map.tsx" });
               togglePowerlines();
             }} 
-            className="map-button"
+            className="flex items-center justify-center gap-2 px-3 py-1.5 bg-green-500 text-white text-sm rounded-md hover:bg-green-600 transition-colors"
           >
-            ⚡️ Toggle Powerlines
-          </button>
-          <button
-            onClick={() => {
-              trackEvent("generate_ao_click", { panel: "planverification.tsx" });
-              processAreaOfOperations();
-            }}
-            className="flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors"
-          >
-            🌍 Analyse Terrain In AO
+            ⚡ Toggle Powerlines
           </button>
         </div>
-      ) : undefined,
+      )
+    };
+  }
+  
+  // If analysis is in progress
+  if (status === 'loading') {
+    return {
+      id: "terrain",
+      title: "Obstruction Analysis",
+      description: "Analyzing terrain obstacles...",
+      status: "loading",
+    };
+  }
+  
+  // If there was an error
+  if (status === 'error') {
+    return {
+      id: "terrain",
+      title: "Obstruction Analysis",
+      description: `Error analyzing terrain obstacles: ${error}`,
+      status: "error",
+      actions: (
+        <div className="flex flex-col gap-2 mt-2">
+          <button 
+            onClick={() => {
+              console.log("Retrying obstacle analysis...");
+              trackEvent("retry_obstacle_analysis", { panel: "planverification.tsx" });
+              runAnalysis();
+            }} 
+            className="flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Retry Analysis
+          </button>
+        </div>
+      )
     };
   }
 
-  const isSafe = analysisData.minimumClearanceHeight >= 0;
+  // If we have results
+  if (status === 'success' && results) {
+    const isSafe = results.minimumClearance >= 0;
+    
+    return {
+      id: "terrain",
+      title: "Obstruction Analysis",
+      description: "Terrain obstacle analysis complete",
+      status: isSafe ? "success" : "error",
+      subSections: [
+        {
+          title: "Terrain Profile",
+          content: (
+            <div className="space-y-2">
+              {/* Only render the chart if we have valid data */}
+              <TerrainProfileChart height={200} showControls={false} />
+              
+              {/* Stats with additional safety checks */}
+              <div className="grid grid-cols-2 gap-2 text-sm mt-3">
+                <div>Minimum Clearance:</div>
+                <div className={isSafe ? "text-green-600" : "text-red-600"}>
+                  {results.minimumClearance.toFixed(1)}m
+                </div>
+                <div>Critical Point:</div>
+                <div>
+                  {results.criticalPointDistance !== null 
+                    ? `${(results.criticalPointDistance / 1000).toFixed(2)} km along route` 
+                    : 'N/A'}
+                </div>
+                <div>Highest Obstacle:</div>
+                <div>{results.highestObstacle.toFixed(1)}m</div>
+              </div>
+            </div>
+          ),
+        },
+      ],
+      actions: (
+        <div className="flex flex-col gap-2 mt-2">
+          <button
+            onClick={() => {
+              console.log("Opening detailed terrain analysis...");
+              trackEvent("view_detailed_terrain_analysis", { panel: "planverification.tsx" });
+              setShowTerrainPopup(true);
+            }}
+            className="flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors"
+          >
+            <Mountain className="w-4 h-4" />
+            View Detailed Analysis
+          </button>
+          <button 
+            onClick={() => {
+              trackEvent("powerlines_add_overlay_click", { panel: "map.tsx" });
+              togglePowerlines();
+            }} 
+            className="flex items-center justify-center gap-2 px-3 py-1.5 bg-green-500 text-white text-sm rounded-md hover:bg-green-600 transition-colors"
+          >
+            ⚡ Toggle Powerlines
+          </button>
+        </div>
+      ),
+    };
+  }
+
+  // Default case - should not reach here
   return {
     id: "terrain",
     title: "Obstruction Analysis",
-    description: "Obstruction clearance verification",
-    status: isSafe ? "success" : "error",
-    subSections: [
-      {
-        title: "Clearance Analysis",
-        content: (
-          <div className="space-y-2">
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <div>Minimum Clearance:</div>
-              <div className={isSafe ? "text-green-600" : "text-red-600"}>
-                {analysisData.minimumClearanceHeight.toFixed(1)}m
-              </div>
-              <div>Closest Approach:</div>
-              <div>{getMinClearanceDistance()?.toFixed(2)} km along route</div>
-              <div>Highest Terrain:</div>
-              <div>{analysisData.highestObstacle.toFixed(1)}m</div>
-              <div>Flight Plan Altitude Range:</div>
-              <div>
-                {Math.min(...analysisData.flightAltitudes).toFixed(1)}m -{" "}
-                {Math.max(...analysisData.flightAltitudes).toFixed(1)}m
-              </div>
-            </div>
-          </div>
-        ),
-      },
-    ],
-    action: () => {
-      trackEvent("terrain_detailed_analysis_click", {
-        panel: "terrain",
-        actionLabel: "View Detailed Analysis",
-      });
-      setShowTerrainPopup(true);
-    },
-    actionLabel: "View Detailed Analysis",
-    actions: (
-      <div className="flex flex-col gap-2 mt-2">
-        <button
-          onClick={() => {
-            trackEvent("DYBDpowerlines_add_overlay_click", { panel: "planverification.tsx" });
-            if (mapboxLayerHandlerRef.current) {
-              mapboxLayerHandlerRef.current.togglePowerlines();
-            } else {
-              console.warn("MapboxLayerHandler ref not available.");
-            }
-          }}
-          className="flex items-center justify-center gap-2 px-3 py-1.5 bg-green-500 text-white text-sm rounded-md hover:bg-green-600 transition-colors"
-        >
-          ⚡ Toggle Powerlines
-        </button>
-        <button
-          onClick={() => {
-            trackEvent("generate_ao_click", { panel: "planverification.tsx" });
-            processAreaOfOperations();
-          }}
-          className="flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors"
-        >
-          🌍 Analyse Terrain In AO
-        </button>
-      </div>
-    ),
+    description: "Analyze terrain clearance for the defined area",
+    status: "pending",
   };
 };
 
@@ -605,14 +673,6 @@ const getTerrainAnalysis = (): VerificationSection => {
     }
   };
 
-  // Auto terrain analysis on flight plan upload (guarded)
-  useEffect(() => {
-    if (flightPlan && mapRef.current?.getMap() && typeof window !== "undefined") {
-      const event = new CustomEvent("triggerTerrainAnalysis");
-      window.dispatchEvent(event);
-      console.log("triggerTerrainAnalysis event dispatched.");
-    }
-  }, [flightPlan, mapRef]);
 
   return (
     <div className="flex flex-col gap-2">
@@ -626,20 +686,7 @@ const getTerrainAnalysis = (): VerificationSection => {
 
       {/* Hidden BYDALayerHandler Component */}
       <div className="hidden">
-        <BYDALayerHandler ref={bydLayerHandlerRef} map={mapRef.current?.getMap() || null} />
-      </div>
-
-      {/* Hidden ObstacleAssessment Component */}
-      <div className="hidden">
-        <ObstacleAssessment
-          flightPlan={flightPlan}
-          map={mapRef.current?.getMap() || null}
-          onDataProcessed={async (data: ObstacleAnalysisOutput) => {
-            console.log("ObstacleAssessment onDataProcessed fired", data);
-            setAnalysisData(data);
-            setIsAnalyzing(false);
-          }}
-        />
+        <BYDALayerHandler map={map || undefined} />
       </div>
 
       {/* Render sections */}
@@ -729,12 +776,17 @@ const getTerrainAnalysis = (): VerificationSection => {
 
       {/* Terrain Clearance Popup */}
       {showTerrainPopup && (
-        <TerrainClearancePopup
-          onClose={() => {
-            setShowTerrainPopup(false);
-            setIsAnalyzing(false);
-          }}
-        />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg p-6 w-11/12 max-w-4xl max-h-full overflow-y-auto">
+            <ObstacleAnalysisDashboard 
+              onClose={() => {
+                setShowTerrainPopup(false);
+                setIsAnalyzing(false);
+              }}
+              autoRun={false} // Don't auto-run since we already have results
+            />
+          </div>
+        </div>
       )}
     </div>
   );

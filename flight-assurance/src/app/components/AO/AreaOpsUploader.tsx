@@ -18,7 +18,7 @@ const AreaOpsUploader: React.FC<AreaOpsUploaderProps> = ({ onClose }) => {
     const file = acceptedFiles[0];
     setFileName(file.name);
     setFileUploadStatus("uploading");
-
+x
     try {
       trackEvent("ao_upload_started", { fileName: file.name });
       

@@ -48,7 +48,6 @@ const AnalysisDashboard: React.FC = () => {
     stationLOS: false,
   });
   const { gridAnalysisRef } = useAnalysisController();
-  console.log("AnalysisDashboard gridAnalysisRef:", gridAnalysisRef.current);
 
   const toggleSection = (section: keyof typeof expandedSections) => {
     setExpandedSections((prev) => ({ ...prev, [section]: !prev[section] }));

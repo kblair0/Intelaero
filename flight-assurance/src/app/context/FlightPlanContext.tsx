@@ -1,19 +1,11 @@
-// FlightPlanContext.tsx
-/* eslint-disable @typescript-eslint/no-explicit-any */
-//FlightPlanContext: Manages complex flight plan data (waypoints, home position, config, metadata, distances). FlightPlanContext serves as the single source of truth for flight plan data across the application.
-
-
 import React, { createContext, useState, useContext } from "react";
 
-/**
- * WaypointData with unified altitude mode
- */
 export interface WaypointData {
   index: number;
-  altitudeMode: "terrain" | "relative" | "absolute"; // Single source of truth for altitude interpretation
-  originalAltitude: number; // Raw altitude from file
-  commandType?: number; // Optional for MAVLink compatibility (e.g., .waypoints)
-  frame?: number; // Optional for MAVLink compatibility
+  altitudeMode: "terrain" | "relative" | "absolute";
+  originalAltitude: number;
+  commandType?: number;
+  frame?: number;
   params?: number[];
 }
 
@@ -29,50 +21,33 @@ export interface FlightPlanMetadata {
   distance?: number;
   processed: boolean;
   source?: string;
-  metadata?: {
-    file?: Record<string, any>;
-    segments?: Record<string, any>[];
-  };
+  metadata?: { file?: Record<string, any>; segments?: Record<string, any>[] };
 }
 
-
-/**
- * FlightPlanFeature with simplified properties
- */
 export interface FlightPlanFeature extends GeoJSON.Feature {
   type: "Feature";
   geometry: {
     type: "LineString";
-    coordinates: [number, number, number][]; // [lon, lat, alt]
+    coordinates: [number, number, number][];
   };
   properties: {
-    waypoints: WaypointData[]; // Waypoint details
-    originalCoordinates?: [number, number, number][]; // Post-processed original waypoints
+    waypoints: WaypointData[];
+    originalCoordinates?: [number, number, number][];
   };
 }
 
-/**
- * FlightPlanData with streamlined top-level properties
- */
 export interface FlightPlanData extends GeoJSON.FeatureCollection {
   properties: {
-    homePosition: {
-      longitude: number;
-      latitude: number;
-      altitude: number;
-    };
+    homePosition: { longitude: number; latitude: number; altitude: number };
     config?: FlightPlanConfig;
     metadata?: FlightPlanMetadata;
-    totalDistance?: number; // Total flight path length
-    processed?: boolean; // Processing state
+    totalDistance?: number;
+    processed?: boolean;
   };
   features: FlightPlanFeature[];
-  waypointDistances?: number[]; // Cumulative distances
+  waypointDistances?: number[];
 }
 
-/**
- * Context interface
- */
 interface FlightPlanContextProps {
   flightPlan: FlightPlanData | null;
   setFlightPlan: (data: FlightPlanData) => void;
@@ -87,7 +62,12 @@ export const FlightPlanProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [distance, setDistance] = useState<number | null>(null);
 
   const updateFlightPlan = (data: FlightPlanData) => {
-    setFlightPlanState((prev) => ({
+    const planId =
+      data.properties?.metadata?.source ||
+      data.properties?.metadata?.created?.toString() ||
+      `flight-plan-${Math.random().toString(36).slice(2)}`;
+
+    setFlightPlanState(prev => ({
       ...prev,
       ...data,
       properties: {
@@ -96,27 +76,22 @@ export const FlightPlanProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         processed: data.properties?.processed ?? prev?.properties?.processed ?? false,
       },
     }));
+
     setDistance(data.properties?.totalDistance ?? null);
   };
 
-  return (
-    <FlightPlanContext.Provider
-      value={{
-        flightPlan,
-        setFlightPlan: updateFlightPlan,
-        distance,
-        setDistance,
-      }}
-    >
-      {children}
-    </FlightPlanContext.Provider>
-  );
+  const contextValue: FlightPlanContextProps = {
+    flightPlan,
+    setFlightPlan: updateFlightPlan,
+    distance,
+    setDistance,
+  };
+
+  return <FlightPlanContext.Provider value={contextValue}>{children}</FlightPlanContext.Provider>;
 };
 
 export const useFlightPlanContext = (): FlightPlanContextProps => {
   const context = useContext(FlightPlanContext);
-  if (!context) {
-    throw new Error("useFlightPlanContext must be used within a FlightPlanProvider");
-  }
+  if (!context) throw new Error("useFlightPlanContext must be used within a FlightPlanProvider");
   return context;
 };
