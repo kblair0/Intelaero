@@ -43,17 +43,17 @@ const MapboxLayerHandler = dynamic(
 
 // Point directly at the named export for your dashboard
 const ObstacleAnalysisDashboard = dynamic(
-  () => import("../ObstacleAnalysis").then(m => m.ObstacleAnalysisDashboard),
+  () => import("../Analyses/ObstacleAnalysis").then(m => m.ObstacleAnalysisDashboard),
   { ssr: false }
 );
 
 const ObstacleChart = dynamic(
-  () => import("../ObstacleAnalysis").then(m => m.ObstacleChart),
+  () => import("../Analyses/ObstacleAnalysis").then(m => m.ObstacleChart),
   { ssr: false }
 );
 
 const ObstacleChartModal = dynamic(
-  () => import("../ObstacleAnalysis").then(m => m.ObstacleChartModal),
+  () => import("../Analyses/ObstacleAnalysis").then(m => m.ObstacleChartModal),
   { ssr: false }
 );
 
@@ -439,7 +439,41 @@ const getTerrainAnalysis = (): VerificationSection => {
       status: "pending",
     };
   }
-  
+
+  // Handle AO-only case
+  if (hasAOGeometry && !flightPlan) {
+    return {
+      id: "terrain",
+      title: "Obstruction Analysis",
+      description: "Analyze terrain within the Area of Operations",
+      status: "pending",
+      actions: (
+        <div className="flex flex-col gap-2 mt-2">
+          <button
+            onClick={() => {
+              trackEvent("run_ao_terrain_analysis", { panel: "planverification.tsx" });
+              setIsAnalyzing(true);
+              processAreaOfOperations()
+                .then(() => {
+                  setIsAnalyzing(false);
+                  console.log("AO terrain analysis complete");
+                })
+                .catch((err) => {
+                  setIsAnalyzing(false);
+                  console.error("AO terrain analysis failed:", err);
+                });
+            }}
+            className="flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={isAnalyzing || !map || !elevationService || !hasAOGeometry}
+          >
+            <Mountain className="w-4 h-4" />
+            {isAnalyzing ? "Analyzing..." : "Analyse Terrain In AO"}
+          </button>
+        </div>
+      ),
+    };
+  }
+
   // If we have a flight plan but no analysis has been run yet
   if (status === 'idle' && flightPlan) {
     return {
@@ -480,7 +514,9 @@ const getTerrainAnalysis = (): VerificationSection => {
           <button 
             onClick={() => {
               trackEvent("powerlines_add_overlay_click", { panel: "map.tsx" });
+              trackEvent("DYBDpowerlines_add_overlay_click", { panel: "map.tsx" });
               togglePowerlines();
+              toggleLayer("DBYD_POWERLINES"); // Add DBYD powerline layer
             }} 
             className="flex items-center justify-center gap-2 px-3 py-1.5 bg-green-500 text-white text-sm rounded-md hover:bg-green-600 transition-colors"
           >
@@ -575,9 +611,11 @@ const getTerrainAnalysis = (): VerificationSection => {
           <button 
             onClick={() => {
               trackEvent("powerlines_add_overlay_click", { panel: "map.tsx" });
+              trackEvent("DYBDpowerlines_add_overlay_click", { panel: "map.tsx" });
               togglePowerlines();
+              toggleLayer("DBYD_POWERLINES"); // Add DBYD powerline layer
             }} 
-            className="flex items-center justify-center gap-2 px-3 py-1.5 bg-green-500 text-white text-sm rounded-md hover:bg-green-600 transition-colors"
+            className="flex items-center justify-center gap-2 px-3 py-1.5 bg-green-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors"
           >
             ⚡ Toggle Powerlines
           </button>

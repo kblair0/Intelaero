@@ -141,7 +141,7 @@ export function useLayers() {
             bounds as [number, number, number, number],
             {
               padding: 50,
-              duration: 1000,
+              duration: 500,
               pitch: 70,
               zoom: 10.5,
             }
@@ -149,7 +149,7 @@ export function useLayers() {
           console.log('addFlightPath: map.fitBounds', {
             timestamp: new Date().toISOString(),
             bounds,
-            options: { padding: 50, duration: 1000, pitch: 70, zoom: 10.5 },
+            options: { padding: 50, duration: 500, pitch: 70, zoom: 10.5 },
             message: 'Map view adjusted to fit bounds'
           });
         } catch (error) {

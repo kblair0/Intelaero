@@ -28,41 +28,6 @@ import { AnalysisControllerProvider } from "./context/AnalysisControllerContext"
 import AnalysisDashboard from "./components/Analyses/LOSAnalyses/UI/AnalysisDashboard";
 import 'mapbox-gl/dist/mapbox-gl.css';
 
-const AODebugWrapper = ({ children }: { children: ReactNode }) => {
-  const [debugLogs, setDebugLogs] = useState<string[]>([]);
-  
-  useEffect(() => {
-    const originalConsoleLog = console.log;
-    console.log = (...args) => {
-      const message = args.map(arg => 
-        typeof arg === 'object' ? 'Object' : String(arg)
-      ).join(' ');
-      
-      if (message.includes('AO') || message.includes('area') || message.includes('map')) {
-        setDebugLogs(prev => [...prev.slice(-15), message]);
-      }
-      originalConsoleLog(...args);
-    };
-    
-    return () => {
-      console.log = originalConsoleLog;
-    };
-  }, []);
-
-  return (
-    <>
-      {children}
-      {process.env.NODE_ENV !== 'production' && (
-        <div className="fixed bottom-4 right-4 z-50 bg-black bg-opacity-70 text-white p-2 rounded text-xs max-w-xs max-h-40 overflow-auto">
-          <div className="font-bold mb-1">AO Debug ({debugLogs.length})</div>
-          {debugLogs.map((log, i) => (
-            <div key={i}>{log}</div>
-          ))}
-        </div>
-      )}
-    </>
-  );
-};
 
 const HomeContent = () => {
   const [activePanel, setActivePanel] = useState<"energy" | "los" | null>(null);
@@ -206,9 +171,9 @@ export default function Home() {
               <ObstacleAnalysisProvider>
                 <AreaOfOpsProvider>
                   <AnalysisControllerProvider>  {/* Move this here */}
-                    <AODebugWrapper>
+
                       <HomeContent />
-                    </AODebugWrapper>
+
                   </AnalysisControllerProvider>
                 </AreaOfOpsProvider>
               </ObstacleAnalysisProvider>

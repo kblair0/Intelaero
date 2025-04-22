@@ -152,34 +152,63 @@ const generateChartData = useCallback((result: ObstacleAnalysisResult): TerrainC
   const highestTerrain = Math.max(...result.terrainElevations);
   const highestFlight = Math.max(...result.flightAltitudes);
   
-  // Extract waypoints from flight plan if available
+  // Extract waypoints and POIs from flight plan using original data
   const waypoints: WaypointData[] = [];
-  if (flightPlan?.features?.[0]?.geometry?.coordinates) {
-    const coords = flightPlan.features[0].geometry.coordinates;
-    const waypointDistances = flightPlan.waypointDistances || [];
-    
-    coords.forEach((_, index) => {
-      // Use actual waypoint distances if available
-      if (waypointDistances[index] !== undefined) {
+  const pointsOfInterest: PointOfInterest[] = [];
+
+  // Log distance sources and units
+  console.groupCollapsed('[generateChartData] Distance Sources and Units');
+  console.log('Sampled Distances (meters, source: sampleFlightPath via result.distances):', result.distances);
+  console.log('Sampled Distances (km, source: result.distances / 1000):', distancesInKm);
+
+  if (flightPlan?.features?.[0]?.properties?.waypoints && flightPlan?.features?.[0]?.geometry?.coordinates) {
+    const waypointData = flightPlan.features[0].properties.waypoints;
+    const coordinates = flightPlan.features[0].geometry.coordinates;
+
+    console.log('Flight Plan Coordinates (source: flightPlan.geometry.coordinates):', coordinates);
+
+    // Recompute waypoint distances from coordinates
+    let cumulativeDistance = 0;
+    const waypointDistances: number[] = [0];
+    for (let i = 1; i < coordinates.length; i++) {
+      const segmentDistance = turf.distance(
+        [coordinates[i - 1][0], coordinates[i - 1][1]],
+        [coordinates[i][0], coordinates[i][1]],
+        { units: 'meters' }
+      );
+      cumulativeDistance += segmentDistance;
+      waypointDistances.push(cumulativeDistance);
+    }
+
+    console.log('Computed Waypoint Distances (meters, source: turf.distance on coordinates):', waypointDistances);
+    console.log('Converted Waypoint Distances (km, source: computed distances / 1000):', waypointDistances.map(d => d / 1000));
+
+    waypointData.forEach((wp, idx) => {
+      if (idx < waypointDistances.length && idx < coordinates.length) {
+        const distanceInKm = waypointDistances[idx] / 1000;
+        const label = `WP ${idx + 1}`;
+        
+        // Use originalAltitude for absolute/relative modes, coordinate altitude for terrain mode
+        const elevation = altitudeMode === 'terrain' ? coordinates[idx][2] : wp.originalAltitude;
+
+        // Add to waypoints for chart markers
         waypoints.push({
-          distance: waypointDistances[index] / 1000, // Convert to km
-          label: `WP ${index + 1}`
+          distance: distanceInKm,
+          label: label
         });
-      } else {
-        // Fallback to estimated position
-        const waypointIdx = Math.floor((index * result.distances.length) / coords.length);
-        if (waypointIdx < distancesInKm.length) {
-          waypoints.push({
-            distance: distancesInKm[waypointIdx],
-            label: `WP ${index + 1}`
-          });
-        }
+
+        // Add to pointsOfInterest for precise POI placement
+        pointsOfInterest.push({
+          type: 'waypoint',
+          distance: distanceInKm,
+          elevation: elevation,
+          label: label
+        });
       }
     });
   }
-  
-  // Format points of interest
-  const pointsOfInterest: PointOfInterest[] = [];
+
+  console.groupEnd();
   
   // Add minimum clearance point if we have it
   if (result.criticalPointDistance !== null) {
@@ -197,7 +226,6 @@ const generateChartData = useCallback((result: ObstacleAnalysisResult): TerrainC
   
   // Add collision points if minimum clearance is negative
   if (result.minimumClearance < 0) {
-    // Find all points where clearance is negative
     result.distances.forEach((d, i) => {
       const clearance = result.flightAltitudes[i] - result.terrainElevations[i];
       if (clearance < 0) {
@@ -212,35 +240,14 @@ const generateChartData = useCallback((result: ObstacleAnalysisResult): TerrainC
     });
   }
   
-  // Add existing points of interest
+  // Add existing non-waypoint points of interest
   if (result.pointsOfInterest && result.pointsOfInterest.length > 0) {
     result.pointsOfInterest.forEach(poi => {
-      // Skip if we already have equivalent points
-      if (poi.type === 'minimumClearance' && pointsOfInterest.some(p => p.type === 'minimumClearance')) {
-        return;
-      }
-      
-      pointsOfInterest.push({
-        ...poi,
-        distance: poi.distance / 1000, // Convert to km
-        elevation: poi.elevation || 0
-      });
-    });
-  }
-  
-  // For absolute and relative modes, add waypoints as points of interest
-  if (altitudeMode !== 'terrain' && waypoints.length > 0) {
-    waypoints.forEach((waypoint, idx) => {
-      // Find corresponding point in result data
-      const wpDistance = waypoint.distance * 1000; // Convert back to meters for comparison
-      const resultIndex = result.distances.findIndex(d => Math.abs(d - wpDistance) < 10); // 10m tolerance
-      
-      if (resultIndex >= 0) {
+      if (poi.type !== 'waypoint') {
         pointsOfInterest.push({
-          type: 'waypoint',
-          distance: waypoint.distance,
-          elevation: result.flightAltitudes[resultIndex],
-          label: waypoint.label
+          ...poi,
+          distance: poi.distance / 1000, // Convert to km
+          elevation: poi.elevation || 0
         });
       }
     });
@@ -297,10 +304,10 @@ async function fillTerrain(
       
       // Skip if points are too close
       const segmentDistance = endPoint.distanceFromStart - startPoint.distanceFromStart;
-      if (segmentDistance < 50) continue; // Skip if less than 50m
+      if (segmentDistance < 2) continue; // Skip if less than 2m
       
       // Create 5 points between waypoints to check terrain
-      const numPoints = Math.min(Math.floor(segmentDistance / 100), 10);
+      const numPoints = Math.min(Math.floor(segmentDistance / 2), 10);
       
       for (let j = 1; j < numPoints; j++) {
         const ratio = j / numPoints;
@@ -364,7 +371,7 @@ async function fillTerrain(
       // Add critical points to the original array
       criticalPoints.forEach(cp => {
         // Don't add points if too close to existing points (within 50m)
-        const tooClose = pts.some(p => Math.abs(p.distanceFromStart - cp.distanceFromStart) < 50);
+        const tooClose = pts.some(p => Math.abs(p.distanceFromStart - cp.distanceFromStart) < 2);
         if (!tooClose) {
           pts.push(cp);
         }
@@ -377,16 +384,6 @@ async function fillTerrain(
   
   console.log(`Terrain filling complete for ${pts.length} sample points`);
 }
-  /**
-   * Clears analysis results
-   */
-  const clearResults = useCallback(() => {
-    setResults(null);
-    setChartData(null);
-    setStatus('idle');
-    setProgress(0);
-    setError(null);
-  }, []);
 
 /**
  * Runs the obstacle analysis for the flight plan
@@ -432,7 +429,7 @@ const runAnalysis = useCallback(async (options?: Partial<AnalysisOptions>) => {
     if (!flightFeature || flightFeature.geometry.type !== 'LineString') {
       throw new Error('Invalid flight plan geometry. Expected LineString.');
     }
-    const coords = flightFeature.geometry.coordinates;
+    const coords = flightFeature.geometry.coordinates as [number, number, number][];
     if (!Array.isArray(coords) || coords.length < 2) {
       throw new Error('Flight plan must have at least 2 waypoints.');
     }
@@ -451,55 +448,17 @@ const runAnalysis = useCallback(async (options?: Partial<AnalysisOptions>) => {
     const altitudeMode = waypoints[0]?.altitudeMode ?? 'absolute';
     console.log(`Flight plan altitude mode: ${altitudeMode}`);
 
-    let samplePoints: SamplePoint[] = [];
-
-    if (altitudeMode === 'terrain') {
-      // For terrain mode, use dense sampling along the path
-      console.time("sampleFlightPath");
-      samplePoints = await sampleFlightPath(
-        flightFeature.geometry as GeoJSON.LineString,
-        {
-          resolution: analysisOptions.samplingResolution,
-          progressCallback,
-          isTerrainMode: true
-        }
-      );
-      console.timeEnd("sampleFlightPath");
-    } else {
-      // For absolute and relative modes, use the waypoints directly without dense sampling
-      console.log("Using waypoints directly for absolute/relative mode");
-      
-      // Convert waypoints to sample points
-      const waypointCoords = coords as [number, number, number][];
-      
-      // Calculate cumulative distances for each waypoint
-      let cumulativeDistance = 0;
-      const distances: number[] = [0];
-      
-      for (let i = 1; i < waypointCoords.length; i++) {
-        const prevCoord = waypointCoords[i-1];
-        const currCoord = waypointCoords[i];
-        const segmentDistance = turf.distance(
-          [prevCoord[0], prevCoord[1]], 
-          [currCoord[0], currCoord[1]], 
-          { units: 'meters' }
-        );
-        cumulativeDistance += segmentDistance;
-        distances.push(cumulativeDistance);
+    // Sample the flight path densely for all modes
+    console.time("sampleFlightPath");
+    let samplePoints: SamplePoint[] = await sampleFlightPath(
+      flightFeature.geometry as GeoJSON.LineString,
+      {
+        resolution: analysisOptions.samplingResolution,
+        progressCallback,
+        isTerrainMode: altitudeMode === 'terrain'
       }
-      
-      // Create sample points from waypoint coordinates
-      samplePoints = waypointCoords.map((coord, index) => ({
-        position: coord,
-        distanceFromStart: distances[index],
-        flightElevation: coord[2],
-        terrainElevation: 0, // Will be filled later
-        clearance: 0, // Will be calculated later
-      }));
-      
-      // Simulate progress to match UI expectations
-      progressCallback(60);
-    }
+    );
+    console.timeEnd("sampleFlightPath");
 
     if (cancelAnalysisRef.current) {
       console.log("Analysis cancelled during sampling");
@@ -507,6 +466,42 @@ const runAnalysis = useCallback(async (options?: Partial<AnalysisOptions>) => {
       return;
     }
 
+    // For absolute/relative modes, assign flight elevations to match start waypoint altitude
+    if (altitudeMode !== 'terrain') {
+      console.log("Assigning waypoint-based flight elevations for absolute/relative mode");
+
+      // Calculate cumulative distances for waypoints
+      let cumulativeDistance = 0;
+      const waypointDistances: number[] = [0];
+      for (let i = 1; i < coords.length; i++) {
+        const prevCoord = coords[i - 1];
+        const currCoord = coords[i];
+        const segmentDistance = turf.distance(
+          [prevCoord[0], prevCoord[1]],
+          [currCoord[0], currCoord[1]],
+          { units: 'meters' }
+        );
+        cumulativeDistance += segmentDistance;
+        waypointDistances.push(cumulativeDistance);
+      }
+
+      // Assign flight elevations based on start waypoint of each segment
+      samplePoints.forEach(point => {
+        // Find the segment this point belongs to
+        let segmentIndex = 0;
+        while (
+          segmentIndex < waypointDistances.length - 1 &&
+          point.distanceFromStart > waypointDistances[segmentIndex + 1] + Number.EPSILON
+        ) {
+          segmentIndex++;
+        }
+
+        // Use the start waypoint's altitude for the entire segment
+        point.flightElevation = coords[segmentIndex][2];
+      });
+    }
+
+    // Fill terrain elevations
     await fillTerrain(samplePoints, (p) => {
       setProgress(60 + Math.round(p * 0.4)); // Sampler ≈60%, DEM ≈40%
       return cancelAnalysisRef.current;
@@ -535,7 +530,7 @@ const runAnalysis = useCallback(async (options?: Partial<AnalysisOptions>) => {
 
     // Create basic points of interest
     const pointsOfInterest: PointOfInterest[] = [];
-    
+
     // Create the analysis result
     const result: ObstacleAnalysisResult = {
       samplePoints,
@@ -559,27 +554,39 @@ const runAnalysis = useCallback(async (options?: Partial<AnalysisOptions>) => {
     setStatus('error');
   }
 }, [map, elevationService, flightPlan, isProcessed, analysisOptions, generateChartData]);
-  /**
-   * Cancels the ongoing analysis
-   */
-  const cancelAnalysis = useCallback(() => {
-    cancelAnalysisRef.current = true;
-    setStatus('idle');
-    setProgress(0);
-  }, []);
 
-  const value = {
-    status,
-    progress,
-    error,
-    results,
-    chartData,
-    runAnalysis,
-    cancelAnalysis,
-    clearResults,
-  };
+/**
+ * Cancels the ongoing analysis
+ */
+const cancelAnalysis = useCallback(() => {
+  cancelAnalysisRef.current = true;
+  setStatus('idle');
+  setProgress(0);
+}, []);
 
-  return <ObstacleAnalysisContext.Provider value={value}>{children}</ObstacleAnalysisContext.Provider>;
+/**
+ * Clears analysis results
+ */
+const clearResults = useCallback(() => {
+  setResults(null);
+  setChartData(null);
+  setStatus('idle');
+  setProgress(0);
+  setError(null);
+}, []);
+
+const value = {
+  status,
+  progress,
+  error,
+  results,
+  chartData,
+  runAnalysis,
+  cancelAnalysis,
+  clearResults,
+};
+
+return <ObstacleAnalysisContext.Provider value={value}>{children}</ObstacleAnalysisContext.Provider>;
 };
 
 /**

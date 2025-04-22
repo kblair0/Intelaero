@@ -51,10 +51,10 @@ const LayerControls: React.FC<LayerControlsProps> = ({
           }}
           className="map-button"
         >
-          Add Powerlines ⚡️
+      Toggle Powerlines ⚡️
         </button>
         <button onClick={handleDBYDPowerlines} className="map-button">
-          Add DBYD Powerlines 🏡
+          Toggle DBYD Powerlines 🏡
         </button>
         <button
           onClick={() => {
@@ -64,10 +64,10 @@ const LayerControls: React.FC<LayerControlsProps> = ({
           }}
           className="map-button"
         >
-          Add Airspace Overlay ✈️
+          Toggle Airspace Overlay ✈️
         </button>
         <button onClick={handleToggleTerrainGrid} className="map-button">
-          {isTerrainGridVisible ? 'Hide AO Terrain Grid 🌍' : 'Show AO Terrain Grid 🌍'}
+          {isTerrainGridVisible ? 'Show AO Terrain Grid 🌍' : 'Hide AO Terrain Grid 🌍'}
         </button>
       </div>
   

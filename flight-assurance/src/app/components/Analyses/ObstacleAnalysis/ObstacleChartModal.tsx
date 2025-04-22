@@ -13,10 +13,10 @@
 
 import React, { useRef, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { useObstacleAnalysis } from "../../context/ObstacleAnalysisContext";
+import { useObstacleAnalysis } from "../../../context/ObstacleAnalysisContext";
 import { CheckCircle, XCircle, RefreshCw, Loader, Mountain } from "lucide-react";
 import ObstacleChart from "./ObstacleChart";
-import { useFlightPlanContext } from "../../context/FlightPlanContext";
+import { useFlightPlanContext } from "../../../context/FlightPlanContext";
 
 interface ObstacleChartModalProps {
   onClose: () => void;

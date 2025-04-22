@@ -421,7 +421,7 @@ fitToAreaOfOperations(geometry: GeoJSON.FeatureCollection): boolean {
           [bbox[0], bbox[1]],
           [bbox[2], bbox[3]]
         ],
-        { padding: 50, duration: 1000 }
+        { padding: 50, duration: 200 }
       );
       return true;
     } catch (turfError) {
@@ -446,7 +446,7 @@ fitToAreaOfOperations(geometry: GeoJSON.FeatureCollection): boolean {
             [minLng, minLat],
             [maxLng, maxLat]
           ],
-          { padding: 50, duration: 1000 }
+          { padding: 50, duration: 200 }
         );
         return true;
       }
