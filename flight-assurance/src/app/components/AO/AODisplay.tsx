@@ -1,7 +1,7 @@
 "use client";
 import { useEffect } from "react";
 import { useAreaOfOpsContext } from "../../context/AreaOfOpsContext";
-import { useMapContext } from "../../context/MapContext";
+import { useMapContext } from "../../context/mapcontext";
 import { layerManager } from "../../services/LayerManager";
 
 /**

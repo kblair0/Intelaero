@@ -15,7 +15,7 @@
 
 import React, { useRef, useContext } from 'react';
 import { useMarkers } from '../../hooks/useMarkers';
-import { useMapContext } from '../../context/MapContext';
+import { useMapContext } from '../../context/mapcontext';
 import { useLOSAnalysis } from '../../context/LOSAnalysisContext';
 import { GridAnalysisRef } from '../Analysis/GridAnalysisController';
 import { trackEventWithForm as trackEvent } from '../tracking/tracking';

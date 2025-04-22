@@ -23,7 +23,7 @@ import MapSidePanel from "./components/UI/MapSidePanel";
 import { Battery, Radio, GripVertical } from "lucide-react";
 import { trackEventWithForm as trackEvent } from "./components/tracking/tracking";
 import WelcomePitch from "./components/WelcomePitch";
-import { MapProvider } from "./context/MapContext";
+import { MapProvider } from "./context/mapcontext";
 import { AnalysisControllerProvider } from "./context/AnalysisControllerContext";
 import AnalysisDashboard from "./components/Analyses/LOSAnalyses/UI/AnalysisDashboard";
 import 'mapbox-gl/dist/mapbox-gl.css';
@@ -131,7 +131,6 @@ const HomeContent = () => {
                         <FlightPlanUploader
                           onClose={() => setShowUploader(false)}
                           onPlanUploaded={(flightData) => {
-                            setFlightPlan(flightData);
                             setShowUploader(false);
                           }}
                         />

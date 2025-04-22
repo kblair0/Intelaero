@@ -1,164 +1,126 @@
-// src/hooks/useFlightPathSampling.ts
+import * as turf from "@turf/turf";
 
-import { useCallback } from 'react';
-import * as turf from '@turf/turf';
-import { useMapContext } from '../context/MapContext';
-import { SamplePoint } from '../context/ObstacleAnalysisContext';
+export interface SamplePoint {
+  /** [lon, lat, alt] */
+  position: [number, number, number];
+  /** metres */
+  distanceFromStart: number;
+  /** metres AMSL */
+  flightElevation: number;
+  /** metres AMSL – caller must fill */
+  terrainElevation: number;
+  /** flightElevation – terrainElevation */
+  clearance: number;
+}
 
 export interface SamplingOptions {
+  /** Spacing between samples in *metres* */
   resolution: number;
-  progressCallback?: (progress: number) => boolean;
+  /**
+   * Callback invoked with *percentage* (0–100). If it returns true the
+   * sampling aborts early (used for Cancel buttons).
+   */
+  progressCallback?: (progressPercent: number) => boolean;
+  /**
+   * If the flight plan is already in terrain-following mode we can skip
+   * querying terrain in the caller.
+   */
+  isTerrainMode?: boolean;
 }
 
-export function useFlightPathSampling() {
-  // Pull both map *and* terrainLoaded flag from context
-  const { map, terrainLoaded } = useMapContext();
-  
-  const getTerrainElevation = useCallback(
-    async ([lng, lat]: [number, number]): Promise<number> => {
-      // guard until map + terrain is ready
-      if (!map || !map.loaded() || !terrainLoaded) {
-        console.warn('Map or terrain not loaded for terrain elevation query');
-        return 0;
+/**
+ * Interpolates a 3‑D LineString at a fixed step size.
+ *
+ * NOTE: The heavy work – querying terrain – is *not* performed here;
+ *       we only calculate the geometrical skeleton. That keeps this
+ *       function pure and unit-testable.
+ */
+export async function sampleFlightPath(
+  line: GeoJSON.LineString,
+  {
+    resolution = 10,
+    progressCallback,
+    isTerrainMode = false,
+  }: SamplingOptions
+): Promise<SamplePoint[]> {
+  const coords3d = line.coordinates as [number, number, number][];
+  if (coords3d.length < 2) throw new Error("LineString must contain ≥2 points");
+
+  /* ───────────────────── 1. Build flat segment table ───────────────────── */
+  interface SegmentMeta {
+    start: number; // cumulative distance from origin (metres)
+    len: number; // segment length (metres)
+    a0: number; // start altitude (m)
+    a1: number; // end altitude (m)
+  }
+  const segments: SegmentMeta[] = [];
+  let cumulative = 0;
+
+  for (let i = 0; i < coords3d.length - 1; i++) {
+    const [sx, sy] = coords3d[i];
+    const [ex, ey] = coords3d[i + 1];
+    const len = turf.distance([sx, sy], [ex, ey], { units: "meters" });
+    segments.push({ start: cumulative, len, a0: coords3d[i][2], a1: coords3d[i + 1][2] });
+    cumulative += len;
+  }
+
+  const totalLen = cumulative; // metres
+  const totalSteps = Math.floor(totalLen / resolution);
+
+  /* ───────────────────── 2. Sampling loop (O(n)) ──────────────────────── */
+  const samples: SamplePoint[] = [];
+  let segIdx = 0;
+
+  for (let step = 0; step <= totalSteps; step++) {
+    const dist = step * resolution; // metres from start
+
+    // Advance segment pointer lazily (monotonically)
+    while (
+      segIdx < segments.length - 1 &&
+      dist > segments[segIdx].start + segments[segIdx].len + Number.EPSILON
+    ) {
+      segIdx++;
+    }
+
+    const seg = segments[segIdx];
+
+    // Fraction along current segment, clamped [0,1]
+    const t = Math.min(Math.max((dist - seg.start) / seg.len, 0), 1);
+    const flightElev = seg.a0 + t * (seg.a1 - seg.a0);
+
+    // Interpolate lon/lat linearly – cheap and good enough at ≤10 m steps
+    const [sx, sy] = coords3d[segIdx];
+    const [ex, ey] = coords3d[segIdx + 1];
+    const lon = sx + t * (ex - sx);
+    const lat = sy + t * (ey - sy);
+
+    samples.push({
+      position: [lon, lat, flightElev],
+      distanceFromStart: dist,
+      flightElevation: flightElev,
+      terrainElevation: 0, // will be filled with DEM in the analysis step
+      clearance: 0,
+    });
+
+    /* ── progress callback every ~5 % (cheap) ── */
+    if (progressCallback && step % Math.max(1, Math.floor(totalSteps / 20)) === 0) {
+      if (progressCallback((step / totalSteps) * 100)) {
+        // user requested cancellation
+        return [];
       }
-  
-      try {
-        // sanity‐check coords
-        if (!isFinite(lng) || !isFinite(lat)) {
-          console.warn('Invalid coordinates for elevation query:', [lng, lat]);
-          return 0;
-        }
+    }
+  }
 
-        // ensure DEM source + terrain is set up
-        if (!map.getSource('mapbox-dem')) {
-          map.addSource('mapbox-dem', {
-            type: 'raster-dem',
-            url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
-            tileSize: 512,
-            maxzoom: 15,
-          });
-          map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 });
-        }
-  
-        const elevation = map.queryTerrainElevation([lng, lat]);
-        if (elevation == null) {
-          console.warn('Null elevation returned for', [lng, lat]);
-          return 0;
-        }
-        return elevation;
-      } catch (err) {
-        console.error('Error getting terrain elevation:', err);
-        return 0;
-      }
-    },
-    [map, terrainLoaded]  // <-- depend on terrainLoaded now
-  );
-  
-  const sampleFlightPath = useCallback(
-    async (
-      flightPath: GeoJSON.LineString,
-      options: SamplingOptions = { resolution: 10 }
-    ): Promise<SamplePoint[]> => {
-      // validate geometry
-      if (
-        !flightPath.coordinates ||
-        !Array.isArray(flightPath.coordinates) ||
-        flightPath.coordinates.length < 2
-      ) {
-        throw new Error('Invalid flight path: Missing or invalid coordinates');
-      }
+  // force 100 % when done
+  progressCallback?.(100);
 
-      // build 3‑component coordinate array, removing duplicates
-      const coords3d: [number, number, number][] = [];
-      for (const raw of flightPath.coordinates) {
-        const [lon, lat, alt = 0] = raw;
-        if (
-          !isFinite(lon) ||
-          !isFinite(lat) ||
-          (coords3d.length &&
-           coords3d[coords3d.length - 1][0] === lon &&
-           coords3d[coords3d.length - 1][1] === lat)
-        ) {
-          continue;
-        }
-        coords3d.push([lon, lat, alt]);
-      }
-      if (coords3d.length < 2) {
-        throw new Error('Not enough valid coordinates after removing duplicates');
-      }
-
-      // create turf line
-      const line2d = turf.lineString(coords3d.map(c => [c[0], c[1]] as [number, number]));
-      const totalLength = turf.length(line2d, { units: 'meters' });
-
-      const samples: SamplePoint[] = [];
-      const totalSteps = Math.max(Math.ceil(totalLength / options.resolution), 1);
-      for (let step = 0; step <= totalSteps; step++) {
-        // progress callback
-        if (options.progressCallback) {
-          const p = (step / totalSteps) * 100;
-          if (options.progressCallback(p)) return samples;
-        }
-
-        const distance = step * options.resolution;
-        if (distance > totalLength) break;
-
-        // position along the line
-        const pt = turf.along(line2d, distance / 1000, { units: 'kilometers' });
-        const [lng, lat] = pt.geometry.coordinates as [number, number];
-
-        // interpolate flight elevation
-        let flightElevation = 0;
-        for (let i = 0; i < coords3d.length - 1; i++) {
-          const [sLon, sLat, sAlt] = coords3d[i];
-          const [eLon, eLat, eAlt] = coords3d[i + 1];
-          const seg = turf.lineString([
-            [sLon, sLat],
-            [eLon, eLat],
-          ]);
-          const segLen = turf.length(seg, { units: 'meters' });
-          const startDist = i === 0
-            ? 0
-            : turf.length(
-                turf.lineSlice(
-                  turf.point([coords3d[0][0], coords3d[0][1]]),
-                  turf.point([sLon, sLat]),
-                  line2d
-                ),
-                { units: 'meters' }
-              );
-          if (distance >= startDist && distance <= startDist + segLen) {
-            const t = (distance - startDist) / segLen;
-            flightElevation = sAlt + (eAlt - sAlt) * t;
-            break;
-          }
-          // if we reach the final segment
-          if (i === coords3d.length - 2 && distance > totalLength - options.resolution) {
-            flightElevation = coords3d[coords3d.length - 1][2];
-          }
-        }
-
-        // fetch terrain elevation (now guarded)
-        let terrainElevation = 0;
-        try {
-          terrainElevation = await getTerrainElevation([lng, lat]);
-        } catch (e) {
-          console.warn(`Error querying terrain at [${lng},${lat}]:`, e);
-        }
-
-        samples.push({
-          position: [lng, lat, flightElevation],
-          distanceFromStart: distance,
-          flightElevation,
-          terrainElevation,
-          clearance: flightElevation - terrainElevation,
-        });
-      }
-
-      return samples;
-    },
-    [getTerrainElevation]
-  );
-  
-  return { sampleFlightPath, getTerrainElevation };
+  return samples;
 }
+
+/**
+ * Hook to access the sampleFlightPath function
+ * @returns Object containing the sampleFlightPath function
+ */
+export const useFlightPathSampling = () => {
+  return { sampleFlightPath };
+};

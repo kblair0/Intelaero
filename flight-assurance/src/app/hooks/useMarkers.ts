@@ -381,6 +381,7 @@ export function useMarkers({ map, terrainLoaded }: UseMarkersProps) {
       repeaterMarkerRef.current = null;
       setRepeaterLocation(null);
     }
+    layerManager.removeLayer(MAP_LAYERS.ELOS_GRID);
     layerManager.removeLayer(MAP_LAYERS.GCS_GRID);
     layerManager.removeLayer(MAP_LAYERS.OBSERVER_GRID);
     layerManager.removeLayer(MAP_LAYERS.REPEATER_GRID);

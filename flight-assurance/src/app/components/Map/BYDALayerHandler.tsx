@@ -2,7 +2,7 @@
 
 import { forwardRef, useImperativeHandle, useCallback, useEffect } from "react";
 import type mapboxgl from "mapbox-gl";
-import { useMapContext } from "../../context/MapContext";
+import { useMapContext } from "../../context/mapcontext";
 import { useAreaOfOpsContext } from "../../context/AreaOfOpsContext";
 import * as turf from "@turf/turf";
 
@@ -114,7 +114,7 @@ const BYDALayerHandler = forwardRef(
               "line-width": 2,
             },
           });
-          console.log(`[BYDALayerHandler] Added layer "${layerId}" using source "${sourceId}".`);
+          
           // If you need to register this layer in a centralized LayerManager, consider calling that here.
         }
       });

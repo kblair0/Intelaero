@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { useMapContext } from '../../context/MapContext';
+import { useMapContext } from '../../context/mapcontext';
 import { MAP_LAYERS } from '../../services/LayerManager';
 import { trackEventWithForm as trackEvent } from '../tracking/tracking';
 import { Battery, Radio, GripVertical } from 'lucide-react';

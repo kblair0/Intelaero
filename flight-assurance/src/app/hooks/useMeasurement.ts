@@ -5,7 +5,7 @@
 // a clean API for measuring distances with visual feedback.
 
 import { useCallback, useState, useEffect, useRef } from 'react';
-import { useMapContext } from '../context/MapContext';
+import { useMapContext } from '../context/mapcontext';
 import * as turf from '@turf/turf';
 import mapboxgl from 'mapbox-gl';
 import { trackEventWithForm as trackEvent } from '../components/tracking/tracking';

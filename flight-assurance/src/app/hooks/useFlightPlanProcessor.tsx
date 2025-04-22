@@ -1,212 +1,173 @@
 "use client";
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState } from 'react';
 import * as turf from '@turf/turf';
 import { FlightPlanData, WaypointData } from '../context/FlightPlanContext';
+import { useMapContext } from '../context/mapcontext';
 
 /**
- * Custom hook for processing flight plans
- * Handles terrain queries, distance calculations, and altitude resolutions
+ * Hook to process flight plans, integrating elevation data using ElevationService.
+ * @returns Functions and state for processing flight plans.
  */
 export const useFlightPlanProcessor = () => {
+  const { map, elevationService } = useMapContext();
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
   /**
-   * Query terrain elevation at given coordinates
-   * Includes fallback mechanism with retry capability
-   */
-  const queryTerrainElevation = useCallback(async (
-    map: mapboxgl.Map,
-    coordinates: [number, number],
-    retryCount = 3
-  ): Promise<number> => {
-    try {
-      const elevation = map.queryTerrainElevation(coordinates);
-      if (elevation !== null && elevation !== undefined) {
-        return elevation;
-      }
-      throw new Error("Invalid elevation value");
-    } catch (error) {
-      console.warn("Primary terrain query failed, trying fallback:", error);
-      if (retryCount > 0) {
-        try {
-          const fallbackElevation = await fetchTerrainElevation(coordinates[0], coordinates[1]);
-          return fallbackElevation;
-        } catch (fallbackError) {
-          if (retryCount > 1) {
-            console.warn("Fallback failed, retrying:", fallbackError);
-            return queryTerrainElevation(map, coordinates, retryCount - 1);
-          }
-          throw fallbackError;
-        }
-      }
-      throw error;
-    }
-  }, []);
-
-  /**
-   * Densify a segment of flight coordinates in terrain mode.
-   * Takes an array of coordinates and samples points every 10 meters along the segment.
-   */
-  const densifyTerrainSegment = useCallback(async (
-    map: mapboxgl.Map,
-    segmentCoords: [number, number, number][]
-  ): Promise<[number, number, number][]> => {
-    if (segmentCoords.length < 2) return segmentCoords;
-    
-    // Build a 2D LineString (ignoring altitude)
-    const coords2D = segmentCoords.map(coord => [coord[0], coord[1]]);
-    const line = turf.lineString(coords2D);
-    
-    // Compute cumulative distances along the segment in meters
-    const cumDistances: number[] = [0];
-    for (let i = 1; i < segmentCoords.length; i++) {
-      const segmentDist = turf.distance(segmentCoords[i - 1], segmentCoords[i], { units: "meters" });
-      cumDistances.push(cumDistances[i - 1] + segmentDist);
-    }
-    const totalLength = cumDistances[cumDistances.length - 1];
-    
-    const densified: [number, number, number][] = [];
-    // Sample every 10 meters along the line
-    for (let d = 0; d <= totalLength; d += 10) {
-      const pt = turf.along(line, d, { units: "meters" });
-      const [lon, lat] = pt.geometry.coordinates;
-      
-      // Interpolate the raw offset from segmentCoords (these are raw AGL values for terrain mode)
-      let interpOffset = segmentCoords[0][2]; // default to the first point's offset
-      if (d <= cumDistances[0]) {
-        interpOffset = segmentCoords[0][2];
-      } else if (d >= cumDistances[cumDistances.length - 1]) {
-        interpOffset = segmentCoords[segmentCoords.length - 1][2];
-      } else {
-        for (let i = 0; i < cumDistances.length - 1; i++) {
-          if (d >= cumDistances[i] && d <= cumDistances[i + 1]) {
-            const fraction = (d - cumDistances[i]) / (cumDistances[i + 1] - cumDistances[i]);
-            interpOffset = segmentCoords[i][2] + fraction * (segmentCoords[i + 1][2] - segmentCoords[i][2]);
-            break;
-          }
-        }
-      }
-      
-      // Query the current terrain elevation at this location and add the raw offset to compute the absolute altitude
-      const terrainElev = await queryTerrainElevation(map, [lon, lat]);
-      const resolvedAlt = terrainElev + interpOffset;
-      densified.push([lon, lat, resolvedAlt]);
-    }
-    return densified;
-  }, [queryTerrainElevation]);
-
-  /**
-   * Process a flight plan to resolve altitudes and calculate distances
-   * Handles different altitude modes (terrain, relative, absolute)
+   * Processes a flight plan by resolving altitudes with terrain data.
+   * @param flightPlan - The flight plan data to process.
+   * @returns The processed flight plan with updated coordinates.
    */
   const processFlightPlan = useCallback(async (
-    map: mapboxgl.Map,
     flightPlan: FlightPlanData
   ): Promise<FlightPlanData> => {
-    if (!flightPlan || flightPlan.properties?.processed) {
+    console.log('processFlightPlan: entry');
+    if (!map || !elevationService) {
+      console.error('processFlightPlan: Map or elevation service not available');
+      throw new Error('Map or elevation service not available');
+    }
+    if (flightPlan.properties?.processed) {
+      console.log('processFlightPlan: Flight plan already processed, skipping');
       return flightPlan;
     }
 
+    console.log('processFlightPlan: Starting flight plan processing');
     setIsProcessing(true);
     setError(null);
-    
-    try {
-      // Make a deep copy of the flight plan to avoid mutation
-      const newPlan: FlightPlanData = structuredClone(flightPlan);
-      const coordinates = newPlan.features[0].geometry.coordinates;
-      
-      // Query terrain elevation at home position
-      const homeTerrainElev = await queryTerrainElevation(map, [
-        newPlan.properties.homePosition.longitude,
-        newPlan.properties.homePosition.latitude,
-      ]);
 
-      // Helper function to resolve altitude based on mode
+    try {
+      console.log('processFlightPlan: Ensuring terrain ready');
+      await elevationService.ensureTerrainReady();
+      console.log('processFlightPlan: Terrain ready');
+
+      const newPlan: FlightPlanData = structuredClone(flightPlan);
+      console.log('processFlightPlan: Cloned flight plan');
+
+      const coordinates = newPlan.features[0].geometry.coordinates;
+      console.log('processFlightPlan: Original coordinates:', coordinates.map(c => ({
+        lng: c[0].toFixed(6),
+        lat: c[1].toFixed(6),
+        alt: c[2].toFixed(1)
+      })));
+
+      console.log('processFlightPlan: Preloading area');
+      await elevationService.preloadArea(coordinates);
+      console.log('processFlightPlan: Area preloaded');
+
+      console.log('processFlightPlan: Fetching home terrain elevation');
+      const homeTerrainElev = await elevationService.getElevation(
+        newPlan.properties.homePosition.longitude,
+        newPlan.properties.homePosition.latitude
+      );
+      console.log(`processFlightPlan: Home terrain elevation = ${homeTerrainElev.toFixed(1)}m`);
+
+      // altitude resolver
       const resolveAltitude = async (
         wp: WaypointData,
         coord: [number, number, number],
         homeElev: number
       ): Promise<number> => {
         const [lon, lat, origAlt] = coord;
-        const terrainElev = wp.altitudeMode === "terrain" || wp.altitudeMode === "relative" 
-          ? await queryTerrainElevation(map, [lon, lat]) 
+        const terrainElev = wp.altitudeMode === 'terrain' || wp.altitudeMode === 'relative'
+          ? await elevationService.getElevation(lon, lat)
           : homeElev;
-        
+
         switch (wp.altitudeMode) {
-          case "terrain": return terrainElev + origAlt;
-          case "relative": return terrainElev + origAlt;
-          case "absolute": return origAlt;
-          default: return origAlt;
+          case 'terrain': {
+            const alt = terrainElev + (wp.originalAltitude ?? origAlt);
+            console.log(`processFlightPlan: terrain mode at [${lon},${lat}] => ${alt.toFixed(1)}`);
+            return alt;
+          }
+          case 'relative': {
+            const relAlt = terrainElev + (wp.originalAltitude ?? origAlt);
+            console.log(`processFlightPlan: relative mode at [${lon},${lat}] => ${relAlt.toFixed(1)}`);
+            return relAlt;
+          }
+          case 'absolute': {
+            const absAlt = wp.originalAltitude ?? origAlt;
+            console.log(`processFlightPlan: absolute mode at [${lon},${lat}] => ${absAlt.toFixed(1)}`);
+            return absAlt;
+          }
+          default:
+            console.warn(`processFlightPlan: Unknown altitude mode at [${lon},${lat}]`);
+            return terrainElev;
         }
       };
 
-      // Process waypoints and coordinates
+      console.log('processFlightPlan: Segmenting waypoints');
       const waypoints = newPlan.features[0].properties.waypoints;
-      const segments: { waypoint: typeof waypoints[0]; coordinate: [number, number, number] }[][] = [];
-      let currentSegment: { waypoint: typeof waypoints[0]; coordinate: [number, number, number] }[] = [];
+      const segments: Array<Array<{ waypoint: WaypointData; coordinate: [number, number, number] }>> = [];
+      let currentSegment: Array<{ waypoint: WaypointData; coordinate: [number, number, number] }> = [];
 
-      // Group waypoints by altitude mode to process segments appropriately
       waypoints.forEach(wp => {
-        const coord = newPlan.features[0].geometry.coordinates[wp.index];
+        const coord = coordinates[wp.index];
         if (!coord) return;
-        
         const item = { waypoint: wp, coordinate: coord };
-        
-        if (currentSegment.length && wp.altitudeMode !== currentSegment[currentSegment.length - 1].waypoint.altitudeMode) {
+        if (
+          currentSegment.length &&
+          wp.altitudeMode !== currentSegment[currentSegment.length - 1].waypoint.altitudeMode
+        ) {
           segments.push(currentSegment);
           currentSegment = [item];
         } else {
           currentSegment.push(item);
         }
       });
-      
       if (currentSegment.length) segments.push(currentSegment);
+      console.log(`processFlightPlan: Built ${segments.length} segments`);
 
       const processedCoords: [number, number, number][] = [];
       const originalCoords: [number, number, number][] = [];
 
-      // Process each segment based on its altitude mode
+      console.log('processFlightPlan: Processing each segment');
       for (const segment of segments) {
-        const coords = segment.map(item => item.coordinate);
-        
-        if (segment[0].waypoint.altitudeMode === "terrain") {
-          // For terrain mode, densify the path to follow terrain more closely
-          const densified = await densifyTerrainSegment(map, coords);
+        const mode = segment[0].waypoint.altitudeMode;
+        console.log(`processFlightPlan: Segment mode="${mode}" length=${segment.length}`);
+
+        if (mode === 'terrain') {
+          console.log('processFlightPlan: Densifying terrain segment');
+          const densified = await densifyTerrainSegment(
+            segment.map(item => item.coordinate),
+            segment.map(item => item.waypoint)
+          );
+          console.log(`processFlightPlan: Densified to ${densified.length} points`);
           processedCoords.push(...densified);
-          
-          for (const { waypoint, coordinate } of segment) {
-            const resolvedAlt = await resolveAltitude(waypoint, coordinate, homeTerrainElev);
-            originalCoords.push([coordinate[0], coordinate[1], resolvedAlt]);
-          }
+          // record original for logging
+          segment.forEach(({ waypoint, coordinate }) => {
+            resolveAltitude(waypoint, coordinate, homeTerrainElev).then(a =>
+              console.log(`processFlightPlan: original point [${coordinate[0]},${coordinate[1]}] alt=${a.toFixed(1)}`)
+            );
+            originalCoords.push([coordinate[0], coordinate[1], coordinate[2]]);
+          });
         } else {
-          // For absolute or relative modes, just resolve the altitudes
+          console.log('processFlightPlan: Handling non-terrain segment');
           for (const { waypoint, coordinate } of segment) {
             const resolvedAlt = await resolveAltitude(waypoint, coordinate, homeTerrainElev);
-            const newCoord = [coordinate[0], coordinate[1], resolvedAlt] as [number, number, number];
-            processedCoords.push(newCoord);
-            originalCoords.push(newCoord);
+            console.log(`processFlightPlan: resolved non-terrain at [${coordinate[0]},${coordinate[1]}] => ${resolvedAlt.toFixed(1)}`);
+            processedCoords.push([coordinate[0], coordinate[1], resolvedAlt]);
+            originalCoords.push([coordinate[0], coordinate[1], resolvedAlt]);
           }
         }
       }
+      console.log(`processFlightPlan: Total processed coords=${processedCoords.length}`);
 
-      // Calculate distances between waypoints
+      console.log('processFlightPlan: Calculating distances');
       let totalDistance = 0;
-      const waypointDistances = [0];
-      
+      const waypointDistances: number[] = [0];
       for (let i = 1; i < processedCoords.length; i++) {
-        const segmentLine = turf.lineString([
-          processedCoords[i - 1].slice(0, 2), 
+        const line = turf.lineString([
+          processedCoords[i - 1].slice(0, 2),
           processedCoords[i].slice(0, 2)
         ]);
-        totalDistance += turf.length(segmentLine, { units: "kilometers" });
+        totalDistance += turf.length(line, { units: 'kilometers' });
         waypointDistances.push(totalDistance);
       }
+      console.log(`processFlightPlan: Total distance=${totalDistance.toFixed(3)}km`);
 
-      // Update flight plan with processed data
+      console.log('processFlightPlan: Finalizing flight plan');
       newPlan.properties.homePosition.altitude = await resolveAltitude(
-        waypoints[0], 
-        coordinates[0], 
+        waypoints[0],
+        coordinates[0],
         homeTerrainElev
       );
       newPlan.properties.totalDistance = totalDistance;
@@ -216,69 +177,48 @@ export const useFlightPlanProcessor = () => {
       newPlan.waypointDistances = waypointDistances;
 
       setIsProcessing(false);
+      console.log('processFlightPlan: Complete');
       return newPlan;
-    } catch (error) {
+    } catch (err) {
+      console.error('processFlightPlan: Error', err);
       setIsProcessing(false);
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      setError("Failed to process flight plan: " + errorMessage);
-      throw error;
+      const msg = err instanceof Error ? err.message : String(err);
+      setError('Failed to process flight plan: ' + msg);
+      throw err;
     }
-  }, [densifyTerrainSegment, queryTerrainElevation]);
+  }, [map, elevationService]);
 
   /**
-   * Fetch terrain elevation from Mapbox API as fallback
+   * Densifies a terrain-following segment by interpolating points every 10 meters.
    */
-  async function fetchTerrainElevation(lng: number, lat: number): Promise<number> {
-    try {
-      const tileSize = 512;
-      const zoom = 15;
-      const scale = Math.pow(2, zoom);
-  
-      const latRad = (lat * Math.PI) / 180;
-      const tileX = Math.floor(((lng + 180) / 360) * scale);
-      const tileY = Math.floor(
-        ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * scale
-      );
-  
-      const pixelX = Math.floor((((lng + 180) / 360) * scale - tileX) * tileSize);
-      const pixelY = Math.floor(
-        (((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * scale - tileY) * tileSize
-      );
-  
-      const tileURL = `https://api.mapbox.com/v4/mapbox.terrain-rgb/${zoom}/${tileX}/${tileY}@2x.pngraw?access_token=${process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}`;
-      const response = await fetch(tileURL);
-      const blob = await response.blob();
-      const imageBitmap = await createImageBitmap(blob);
-  
-      const canvas = document.createElement("canvas");
-      canvas.width = tileSize;
-      canvas.height = tileSize;
-      const context = canvas.getContext("2d");
-      if (!context) throw new Error("Failed to create canvas context");
-  
-      context.drawImage(imageBitmap, 0, 0);
-      const imageData = context.getImageData(0, 0, tileSize, tileSize);
-  
-      const idx = (pixelY * tileSize + pixelX) * 4;
-      const [r, g, b] = [
-        imageData.data[idx],
-        imageData.data[idx + 1],
-        imageData.data[idx + 2],
-      ];
-  
-      return -10000 + (r * 256 * 256 + g * 256 + b) * 0.1;
-    } catch (error) {
-      console.error("RGB elevation error:", error);
-      return 0;
-    }
-  }
+  const densifyTerrainSegment = useCallback(async (
+    segmentCoords: [number, number, number][],
+    waypoints: WaypointData[]
+  ): Promise<[number, number, number][]> => {
+    if (!elevationService) throw new Error('Elevation service not available');
+    if (segmentCoords.length < 2) return segmentCoords;
 
-  return {
-    processFlightPlan,
-    queryTerrainElevation,
-    densifyTerrainSegment,
-    isProcessing,
-    error,
-    setError
-  };
+    const coords2D = segmentCoords.map(([lon, lat]) => [lon, lat]);
+    const line = turf.lineString(coords2D);
+    const cumDist: number[] = [0];
+    for (let i = 1; i < segmentCoords.length; i++) {
+      cumDist.push(cumDist[i - 1] + turf.distance(coords2D[i - 1], coords2D[i], { units: 'meters' }));
+    }
+    const totalLen = cumDist[cumDist.length - 1];
+    const densified: [number, number, number][] = [];
+    for (let d = 0; d <= totalLen; d += 10) {
+      const pt = turf.along(line, d, { units: 'meters' });
+      const [lon, lat] = pt.geometry.coordinates;
+      // simple linear offset between endpoints
+      const ratio = d / totalLen;
+      const startAlt = waypoints[0].originalAltitude ?? segmentCoords[0][2];
+      const endAlt   = waypoints[waypoints.length - 1].originalAltitude ?? segmentCoords[segmentCoords.length-1][2];
+      const interp = startAlt + ratio * (endAlt - startAlt);
+      const elev = await elevationService.getElevation(lon, lat);
+      densified.push([lon, lat, elev + interp]);
+    }
+    return densified;
+  }, [elevationService]);
+
+  return { processFlightPlan, isProcessing, error, setError };
 };

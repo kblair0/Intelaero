@@ -18,7 +18,7 @@ import { forwardRef, useImperativeHandle, useRef, useState, useCallback } from '
 import mapboxgl from 'mapbox-gl';
 import { useGridAnalysis } from '../../hooks/useGridAnalysis';
 import { useLOSAnalysis } from '../../context/LOSAnalysisContext';
-import { useMapContext } from '../../context/MapContext';
+import { useMapContext } from '../../context/mapcontext';
 import { MAP_LAYERS, layerManager } from '../LayerManager';
 import { FlightPlanData } from '../../context/FlightPlanContext';
 import { LocationData, AnalysisType, StationLOSResult, LOSProfilePoint } from '../../types/GridAnalysisTypes';

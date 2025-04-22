@@ -12,7 +12,7 @@
 import React, { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 import { useFlightPlanContext } from "../context/FlightPlanContext";
-import { useMapContext } from "../context/MapContext";
+import { useMapContext } from "../context/mapcontext";
 import { useFlightPlanProcessor } from "../hooks/useFlightPlanProcessor";
 import toGeoJSON from "@mapbox/togeojson";
 import JSZip from "jszip";
@@ -29,6 +29,7 @@ import type {
   LineString,
   Position
 } from "geojson";
+import { ElevationService } from "../services/ElevationService";
 
 // DOMParser for KML/KMZ -> only in browser
 const parser = typeof window !== "undefined" ? new DOMParser() : null;
@@ -426,55 +427,42 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({
   >("idle");
   const [fileName, setFileName] = useState<string | null>(null);
   const { setFlightPlan } = useFlightPlanContext();
-  const { map, terrainLoaded } = useMapContext();
+  const { map, elevationService } = useMapContext();
   const { processFlightPlan, isProcessing, error } =
     useFlightPlanProcessor();
+/**
+ * Processes and stores the flight plan, ensuring terrain data is loaded.
+ * @param raw - Raw flight plan data to process.
+ * @param name - Name of the uploaded file.
+ */
+const processAndStore = useCallback(
+  async (raw: FlightPlanData, name: string) => {
+    if (!map || !elevationService) {
+      setStatus("error");
+      throw new Error("Map or elevation service not initialized");
+    }
+    try {
+      // Ensure terrain data is ready and preload the flight plan area
+      await elevationService.ensureTerrainReady();
+      await elevationService.preloadArea(raw.features[0].geometry.coordinates);
 
-  /** process & store in context */
-  const processAndStore = useCallback(
-    async (raw: FlightPlanData, name: string) => {
-      if (!map || !terrainLoaded) {
-        setStatus("error");
-        throw new Error("Map not initialized");
+      const proc = await processFlightPlan(raw);
+      setFlightPlan(proc);
+      onPlanUploaded?.(proc);
+      if (process.env.NODE_ENV === "production") {
+        await trackFlightPlan(proc, name);
       }
-          try {
-             const proc = await processFlightPlan(map, raw);
-              setFlightPlan(proc);
-              onPlanUploaded?.(proc);
-              if (process.env.NODE_ENV === "production") {
-                await trackFlightPlan(proc, name);
-              }
-              setStatus("processed");
-              onClose?.();
-            } catch (error: any) {
-              // 1️⃣ Log it
-              console.error("🔥 processAndStore error:", error);
-        
-              // 2️⃣ Immediately show the full message
-              alert(
-                `❌ Flight‑plan processing failed:\n${
-                  error?.message ?? String(error)
-                }`
-             );
-
-              // 3️⃣ Update UI
-            setStatus("error");
-        
-              // 4️⃣ Re‑throw so onDrop() can also catch (if you want)
-              throw error;
-            }
-
-
-    },
-    [
-      map,
-      terrainLoaded,
-      processFlightPlan,
-      setFlightPlan,
-      onPlanUploaded,
-      onClose
-    ]
-  );
+      setStatus("processed");
+      onClose?.();
+    } catch (error: any) {
+      console.error("🔥 processAndStore error:", error);
+      alert(`❌ Flight-plan processing failed:\n${error?.message ?? String(error)}`);
+      setStatus("error");
+      throw error;
+    }
+  },
+  [map, elevationService, processFlightPlan, setFlightPlan, onPlanUploaded, onClose]
+);
 
   /** handle file drop */
   const onDrop = useCallback(

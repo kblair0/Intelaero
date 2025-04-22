@@ -1,5 +1,5 @@
 import React from 'react';
-import { useMapContext } from '../../context/MapContext';
+import { useMapContext } from '../../context/mapcontext';
 
 interface MapLoadingGuardProps {
   children: React.ReactNode;

@@ -3,7 +3,7 @@ import React, { useEffect, useRef } from 'react';
 import mapboxgl from 'mapbox-gl';
 import * as turf from '@turf/turf';
 import { useFlightPlanContext } from '../../context/FlightPlanContext';
-import { useMapContext } from '../../context/MapContext';
+import { useMapContext } from '../../context/mapcontext';
 import { useLayers } from '../../hooks/useLayers';
 import { useFlightConfiguration } from '../../context/FlightConfigurationContext';
 

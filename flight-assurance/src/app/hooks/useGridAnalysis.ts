@@ -17,7 +17,7 @@
 import { useCallback, useState, useRef } from 'react';
 import mapboxgl from 'mapbox-gl';
 import * as turf from '@turf/turf';
-import { useMapContext } from '../context/MapContext';
+import { useMapContext } from '../context/mapcontext';
 import { useMarkersContext } from '../context/MarkerContext';
 import { useLOSAnalysis } from '../context/LOSAnalysisContext';
 import { layerManager, MAP_LAYERS } from '../services/LayerManager';

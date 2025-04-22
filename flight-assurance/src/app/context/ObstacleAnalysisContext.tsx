@@ -1,10 +1,12 @@
-import React, { createContext, useContext, useState, useCallback, useRef, ReactNode } from "react";
-import { useMapContext } from "./MapContext";
-import { useFlightPlanContext } from "./FlightPlanContext";
-import { useFlightPathSampling } from "../hooks/useFlightPathSampling";
-import * as turf from '@turf/turf';
+import React, { createContext, useContext, useState, useCallback, useRef, ReactNode } from 'react';
+import { useMapContext } from './mapcontext';
+import { useFlightPlanContext } from './FlightPlanContext';
+import { sampleFlightPath } from '../hooks/useFlightPathSampling';
 
-export interface SamplePoint {
+/**
+ * Interface for sample points used in analysis
+ */
+interface SamplePoint {
   position: [number, number, number];
   distanceFromStart: number;
   flightElevation: number;
@@ -12,101 +14,140 @@ export interface SamplePoint {
   clearance: number;
 }
 
-export interface PointOfInterest {
-  type: 'collision' | 'minimumClearance' | 'waypoint';
-  position: [number, number, number];
+/**
+ * Interface for a point of interest in the analysis
+ */
+interface PointOfInterest {
+  type: 'waypoint' | 'collision' | 'minimumClearance';
   distanceFromStart: number;
-  clearance: number;
-  obstacleType?: string;
+  position: [number, number, number];
+  clearance?: number; // Optional, used for collision or minimumClearance
 }
 
-export interface ObstacleAnalysisResult {
-  samplePoints: SamplePoint[];
-  pointsOfInterest: PointOfInterest[];
-  minimumClearance: number;
-  highestObstacle: number;
-  criticalPointDistance: number | null;
-  waypointDistances?: number[];
-}
-
-export interface ObstacleAnalysisOutput {
-  distances: number[];
-  flightAltitudes: number[];
-  terrainElevations: number[];
-  minClearance: number;
-  criticalPoint: number;
-}
-
+/**
+ * Interface for analysis options
+ */
 export interface AnalysisOptions {
   samplingResolution: number;
-  verticalBuffer: number;
-  maxDistance?: number;
 }
 
+/**
+ * Interface for analysis result
+ */
+export interface ObstacleAnalysisResult {
+  samplePoints: SamplePoint[];
+  minimumClearance: number;
+  criticalPointDistance: number | null;
+  highestObstacle: number;
+  flightAltitudes: number[];
+  terrainElevations: number[];
+  distances: number[];
+  pointsOfInterest: PointOfInterest[]; // Added property
+}
+
+/**
+ * Analysis status
+ */
 export type AnalysisStatus = 'idle' | 'loading' | 'success' | 'error';
 
-export interface ObstacleAnalysisContextValue {
-  results: ObstacleAnalysisResult | null;
+/**
+ * Interface for ObstacleAnalysisContext
+ */
+interface ObstacleAnalysisContextProps {
   status: AnalysisStatus;
   progress: number;
   error: string | null;
-  analysisOptions: AnalysisOptions;
+  results: ObstacleAnalysisResult | null;
   runAnalysis: (options?: Partial<AnalysisOptions>) => Promise<void>;
   cancelAnalysis: () => void;
-  clearResults: () => void;
-  updateOptions: (options: Partial<AnalysisOptions>) => void;
-  analysisData: ObstacleAnalysisOutput | null;
-  setAnalysisData: (data: ObstacleAnalysisOutput | null) => void;
 }
 
-const ObstacleAnalysisContext = createContext<ObstacleAnalysisContextValue | undefined>(undefined);
-
-const DEFAULT_ANALYSIS_OPTIONS: AnalysisOptions = {
+/**
+ * Default analysis options
+ */
+const defaultAnalysisOptions: AnalysisOptions = {
   samplingResolution: 10,
-  verticalBuffer: 10,
 };
 
-const ensureNumericCoords = (coords: any[]): [number, number] => {
-  if (!Array.isArray(coords) || coords.length < 2) {
-    console.error('Invalid coordinate format:', coords);
-    return [0, 0];
-  }
-  const x = Number(coords[0]);
-  const y = Number(coords[1]);
-  if (isNaN(x) || isNaN(y)) {
-    console.error('NaN values in coordinates:', coords);
-    return [0, 0];
-  }
-  return [x, y];
-};
+const ObstacleAnalysisContext = createContext<ObstacleAnalysisContextProps | null>(null);
 
+/**
+ * Provides obstacle analysis state and methods
+ * @param children - React components to render within the provider
+ */
 export const ObstacleAnalysisProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { map } = useMapContext();
-  const { flightPlan } = useFlightPlanContext();
-  const { sampleFlightPath } = useFlightPathSampling();
-
-  const [results, setResults] = useState<ObstacleAnalysisResult | null>(null);
+  const { map, elevationService } = useMapContext();
+  const { flightPlan, isProcessed } = useFlightPlanContext();
   const [status, setStatus] = useState<AnalysisStatus>('idle');
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [analysisOptions, setAnalysisOptions] = useState<AnalysisOptions>(DEFAULT_ANALYSIS_OPTIONS);
-  const [analysisData, setAnalysisData] = useState<ObstacleAnalysisOutput | null>(null);
+  const [results, setResults] = useState<ObstacleAnalysisResult | null>(null);
+  const [analysisOptions, setAnalysisOptions] = useState<AnalysisOptions>(defaultAnalysisOptions);
   const cancelAnalysisRef = useRef(false);
 
+  /**
+   * Fills terrain elevation data for sample points using ElevationService
+   * @param pts - Array of sample points to fill with terrain elevation
+   * @param onProgress - Optional callback to report progress (returns true to cancel)
+   * @returns Promise that resolves when terrain data is filled
+   */
+  async function fillTerrain(
+    pts: SamplePoint[],
+    onProgress?: (percent: number) => boolean
+  ) {
+    if (!elevationService) {
+      throw new Error("Elevation service not available");
+    }
+
+    const CHUNK = 250; // Process in chunks to keep UI responsive
+    for (let i = 0; i < pts.length; i += CHUNK) {
+      for (let j = i; j < Math.min(i + CHUNK, pts.length); j++) {
+        const p = pts[j];
+        const [lon, lat] = p.position;
+        p.terrainElevation = await elevationService.getElevation(lon, lat);
+        p.clearance = p.flightElevation - p.terrainElevation;
+      }
+
+      if (onProgress && onProgress(((i + CHUNK) / pts.length) * 100)) return;
+      await new Promise(r => requestAnimationFrame(r)); // Yield to UI
+    }
+  }
+
+  /**
+   * Runs the obstacle analysis for the flight plan
+   * @param options - Optional analysis options to override defaults
+   */
   const runAnalysis = useCallback(async (options?: Partial<AnalysisOptions>) => {
-    if (!map) {
-      setError("Map not available");
+    console.log('runAnalysis called with:', {
+      map: !!map,
+      elevationService: !!elevationService,
+      flightPlan: !!flightPlan,
+      isProcessed,
+      hasFeatures: flightPlan?.features?.length,
+      geometryType: flightPlan?.features[0]?.geometry.type,
+    });
+
+    if (!map || !elevationService || !flightPlan || !isProcessed) {
+      const errorMessage = `Map, elevation service, flight plan, or processing incomplete (map: ${!!map}, elevationService: ${!!elevationService}, flightPlan: ${!!flightPlan}, isProcessed: ${isProcessed})`;
+      console.error(errorMessage);
+      setError(errorMessage);
+      setStatus('error');
       return;
     }
-    if (!flightPlan) {
-      setError("Flight plan not available");
-      return;
-    }
+
     try {
+      console.log("Starting terrain analysis with options:", { ...analysisOptions, ...options });
       setStatus('loading');
       setProgress(0);
       setError(null);
       cancelAnalysisRef.current = false;
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      if (cancelAnalysisRef.current) {
+        console.log("Analysis cancelled during initial delay");
+        return;
+      }
 
       if (options) {
         setAnalysisOptions(prev => ({ ...prev, ...options }));
@@ -122,142 +163,102 @@ export const ObstacleAnalysisProvider: React.FC<{ children: ReactNode }> = ({ ch
       }
 
       const progressCallback = (value: number) => {
-        setProgress(value);
+        const roundedValue = Math.round(value);
+        if (roundedValue % 5 === 0 || roundedValue === 100) {
+          console.log(`Sampling progress: ${roundedValue}%`);
+          setProgress(roundedValue);
+        }
         return cancelAnalysisRef.current;
       };
 
+      const altitudeMode = flightFeature.properties?.waypoints?.[0]?.altitudeMode ?? 'absolute';
+      console.log(`Flight plan altitude mode: ${altitudeMode}`);
+
+      console.time("sampleFlightPath");
       const samplePoints = await sampleFlightPath(
         flightFeature.geometry as GeoJSON.LineString,
-        { resolution: analysisOptions.samplingResolution, progressCallback }
+        {
+          resolution: analysisOptions.samplingResolution,
+          progressCallback,
+          isTerrainMode: altitudeMode === 'terrain'
+        }
       );
+
       if (cancelAnalysisRef.current) {
+        console.log("Analysis cancelled during sampling");
         setStatus('idle');
         return;
       }
 
-      let waypointDistances: number[] = [0];
-      try {
-        const waypoints = coords.map(coord => ensureNumericCoords(coord));
-        let cumulativeDistance = 0;
-        for (let i = 1; i < waypoints.length; i++) {
-          const from = turf.point(waypoints[i - 1]);
-          const to = turf.point(waypoints[i]);
-          const d = turf.distance(from, to, { units: 'meters' });
-          cumulativeDistance += d;
-          waypointDistances.push(cumulativeDistance);
-        }
-      } catch {
-        coords.forEach((_, idx) => {
-          if (idx > 0) waypointDistances.push(idx * 100);
-        });
+      await fillTerrain(samplePoints, (p) => {
+        setProgress(60 + Math.round(p * 0.4)); // Sampler ≈60%, DEM ≈40%
+        return cancelAnalysisRef.current;
+      });
+
+      if (cancelAnalysisRef.current) {
+        console.log("Analysis cancelled during terrain filling");
+        setStatus('idle');
+        return;
       }
 
-      const clearances = samplePoints.map(p => p.clearance);
-      const minClearance = Math.min(...clearances);
-      const minIndex = clearances.indexOf(minClearance);
-      const criticalPoint = samplePoints[minIndex];
+      // Compute analysis results
+      const flightAltitudes = samplePoints.map(p => p.flightElevation);
       const terrainElevations = samplePoints.map(p => p.terrainElevation);
+      const distances = samplePoints.map(p => p.distanceFromStart);
+      const clearances = samplePoints.map(p => p.clearance);
+      const minimumClearance = Math.min(...clearances);
       const highestObstacle = Math.max(...terrainElevations);
+      const criticalPointIndex = clearances.indexOf(minimumClearance);
+      const criticalPointDistance = criticalPointIndex >= 0 ? distances[criticalPointIndex] : null;
 
-      const pointsOfInterest: PointOfInterest[] = [];
-      pointsOfInterest.push({
-        type: minClearance < 0 ? 'collision' : 'minimumClearance',
-        position: criticalPoint.position,
-        distanceFromStart: criticalPoint.distanceFromStart,
-        clearance: minClearance,
-      });
-
-      coords.forEach((coord, idx) => {
-        if (!Array.isArray(coord) || coord.length < 3) return;
-        const dist = waypointDistances[idx] || 0;
-        let closestIndex = 0;
-        let minDiff = Infinity;
-        samplePoints.forEach((sp, i) => {
-          const diff = Math.abs(sp.distanceFromStart - dist);
-          if (diff < minDiff) {
-            minDiff = diff;
-            closestIndex = i;
-          }
-        });
-        const sp = samplePoints[closestIndex];
-        pointsOfInterest.push({
-          type: 'waypoint',
-          position: [Number(coord[0]), Number(coord[1]), Number(coord[2] || 0)],
-          distanceFromStart: dist,
-          clearance: sp.clearance,
-        });
-      });
-
-      const analysisResults: ObstacleAnalysisResult = {
+      setResults({
         samplePoints,
-        pointsOfInterest,
-        minimumClearance: minClearance,
+        minimumClearance,
+        criticalPointDistance,
         highestObstacle,
-        criticalPointDistance: criticalPoint.distanceFromStart,
-        waypointDistances,
-      };
+        flightAltitudes,
+        terrainElevations,
+        distances,
+        pointsOfInterest: [],
+      });
 
-      const legacyData: ObstacleAnalysisOutput = {
-        distances: samplePoints.map(p => p.distanceFromStart),
-        flightAltitudes: samplePoints.map(p => p.flightElevation),
-        terrainElevations: samplePoints.map(p => p.terrainElevation),
-        minClearance,
-        criticalPoint: criticalPoint.distanceFromStart,
-      };
-
-      setAnalysisData(legacyData);
-      setResults(analysisResults);
+      console.timeEnd("sampleFlightPath");
       setStatus('success');
-      setProgress(100);
     } catch (err: any) {
       console.error("Analysis error:", err);
       setError(err instanceof Error ? err.message : String(err));
       setStatus('error');
     }
-  }, [map, flightPlan, sampleFlightPath, analysisOptions]);
+  }, [map, elevationService, flightPlan, isProcessed, analysisOptions]);
 
+  /**
+   * Cancels the ongoing analysis
+   */
   const cancelAnalysis = useCallback(() => {
     cancelAnalysisRef.current = true;
     setStatus('idle');
-  }, []);
-
-  const clearResults = useCallback(() => {
-    setResults(null);
-    setAnalysisData(null);
-    setStatus('idle');
     setProgress(0);
-    setError(null);
   }, []);
 
-  const updateOptions = useCallback((opts: Partial<AnalysisOptions>) => {
-    setAnalysisOptions(prev => ({ ...prev, ...opts }));
-  }, []);
-
-  const value: ObstacleAnalysisContextValue = {
-    results,
+  const value = {
     status,
     progress,
     error,
-    analysisOptions,
+    results,
     runAnalysis,
     cancelAnalysis,
-    clearResults,
-    updateOptions,
-    analysisData,
-    setAnalysisData,
   };
 
-  return (
-    <ObstacleAnalysisContext.Provider value={value}>
-      {children}
-    </ObstacleAnalysisContext.Provider>
-  );
+  return <ObstacleAnalysisContext.Provider value={value}>{children}</ObstacleAnalysisContext.Provider>;
 };
 
-export const useObstacleAnalysis = (): ObstacleAnalysisContextValue => {
+/**
+ * Hook to access the ObstacleAnalysisContext
+ * @returns The ObstacleAnalysisContext properties
+ * @throws Error if used outside of ObstacleAnalysisProvider
+ */
+export const useObstacleAnalysis = () => {
   const context = useContext(ObstacleAnalysisContext);
-  if (!context) {
-    throw new Error("useObstacleAnalysis must be used within an ObstacleAnalysisProvider");
-  }
+  if (!context) throw new Error('useObstacleAnalysis must be used within an ObstacleAnalysisProvider');
   return context;
 };

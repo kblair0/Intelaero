@@ -2,7 +2,7 @@
 import { useCallback } from 'react';
 import * as turf from '@turf/turf';
 import { useAreaOfOpsContext } from '../context/AreaOfOpsContext';
-import { useMapContext } from '../context/MapContext';
+import { useMapContext } from '../context/mapcontext';
 import { layerManager } from '../services/LayerManager';
 import type { GridCell } from '../context/AreaOfOpsContext';
 
