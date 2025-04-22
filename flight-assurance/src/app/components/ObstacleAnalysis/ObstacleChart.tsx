@@ -1,21 +1,14 @@
 /**
- * TerrainProfileChart.tsx
+ * ObstacleChart.tsx
  * 
  * Purpose:
- * This component renders a chart visualizing the terrain profile and flight path,
- * showing terrain elevation, flight altitude, waypoints, and points of interest
- * (e.g., minimum clearance, collisions). It supports interactive features like
- * zooming, panning, and tooltips.
+ * A reusable chart component for visualizing terrain and flight path data.
+ * Provides a consistent visualization across different parts of the application.
  * 
  * Related Files:
- * - ObstacleAnalysisContext.tsx: Provides analysis data via useObstacleAnalysis
- * - useFlightPathSampling.ts: Generates sample points for the chart
- * - ObstacleAnalysisDashboard.tsx: Uses this chart in the dashboard UI
- * 
- * Dependencies:
- * - react-chartjs-2: For rendering the line chart
- * - chart.js: Core charting library
- * - chartjs-plugin-zoom: For zoom and pan functionality
+ * - ObstacleAnalysisContext.tsx: Provides chart data via context
+ * - ObstacleChartModal.tsx: Uses this component in a modal popup
+ * - ObstacleAnalysisDashboard.tsx: Uses this component in dashboard view
  */
 
 import React, { useRef, useEffect } from 'react';
@@ -33,6 +26,7 @@ import {
   Filler,
 } from 'chart.js';
 import zoomPlugin from 'chartjs-plugin-zoom';
+import { TerrainChartData } from '../../context/ObstacleAnalysisContext';
 
 // Register ChartJS components and plugins
 ChartJS.register(
@@ -48,7 +42,7 @@ ChartJS.register(
 );
 
 /**
- * Custom plugin to render waypoint markers and labels at the chart bottom
+ * Custom plugin to render waypoint markers and labels
  */
 const waypointLabelsPlugin = {
   id: 'waypointLabelsPlugin',
@@ -67,7 +61,7 @@ const waypointLabelsPlugin = {
     ctx.textBaseline = options.textBaseline || "bottom";
     
     options.waypoints.forEach((wp: any) => {
-      const xPos = x.getPixelForValue(wp.value);
+      const xPos = x.getPixelForValue(wp.distance);
       
       // Draw marker line
       ctx.beginPath();
@@ -88,32 +82,42 @@ const waypointLabelsPlugin = {
 // Register the custom plugin
 ChartJS.register(waypointLabelsPlugin);
 
-interface TerrainProfileChartProps {
-  height?: number; // Chart height in pixels (default: 400)
-  showControls?: boolean; // Whether to show zoom reset button (default: true)
+interface ObstacleChartProps {
+  data?: TerrainChartData;     // Optional direct data for the chart
+  height?: number;             // Chart height in pixels (default: 400)
+  showControls?: boolean;      // Whether to show zoom reset button (default: true)
+  title?: string;              // Optional chart title
+  showLegend?: boolean;        // Whether to show chart legend (default: true)
+  chartRef?: React.RefObject<any>; // Optional external chart ref
 }
 
 /**
- * Renders a terrain profile chart with flight path and points of interest
- * @param props - Component props
- * @returns JSX.Element
+ * Renders a terrain profile chart with flight path and waypoints
  */
-const TerrainProfileChart: React.FC<TerrainProfileChartProps> = ({ 
+const ObstacleChart: React.FC<ObstacleChartProps> = ({ 
+  data,
   height = 400,
-  showControls = true
+  showControls = true,
+  title,
+  showLegend = true,
+  chartRef: externalChartRef,
 }) => {
-  const chartRef = useRef<any>(null);
-  const { results, status } = useObstacleAnalysis();
+  const internalChartRef = useRef<any>(null);
+  const chartRef = externalChartRef || internalChartRef;
+  const { chartData, status } = useObstacleAnalysis();
+  
+  // Use provided data or fall back to context data
+  const displayData = data || chartData;
 
-  // Reset zoom when results change
+  // Reset zoom when data changes
   useEffect(() => {
-    if (chartRef.current?.resetZoom && results) {
+    if (chartRef.current?.resetZoom && displayData) {
       chartRef.current.resetZoom();
     }
-  }, [results]);
+  }, [displayData, chartRef]);
 
-  // Display loading state during analysis
-  if (status === 'loading') {
+  // Display loading state
+  if (!displayData && status === 'loading') {
     return (
       <div 
         className="flex items-center justify-center bg-gray-100 rounded-lg"
@@ -124,8 +128,8 @@ const TerrainProfileChart: React.FC<TerrainProfileChartProps> = ({
     );
   }
 
-  // Display error state if analysis fails
-  if (status === 'error') {
+  // Display error state
+  if (!displayData && status === 'error') {
     return (
       <div 
         className="flex items-center justify-center bg-gray-100 rounded-lg"
@@ -136,8 +140,8 @@ const TerrainProfileChart: React.FC<TerrainProfileChartProps> = ({
     );
   }
 
-  // Check if results and required data are available
-  if (!results || !results.samplePoints || results.samplePoints.length === 0) {
+  // If no data is available, show placeholder
+  if (!displayData) {
     return (
       <div 
         className="flex items-center justify-center bg-gray-100 rounded-lg"
@@ -148,27 +152,15 @@ const TerrainProfileChart: React.FC<TerrainProfileChartProps> = ({
     );
   }
 
-  // Prepare waypoints for the plugin, safely handling pointsOfInterest
-  const waypoints = results.pointsOfInterest
-    ? results.pointsOfInterest
-        .filter((poi: { type: string }) => poi.type === 'waypoint')
-        .map((poi: { distanceFromStart: number }, index: number) => ({
-          value: poi.distanceFromStart / 1000, // Convert to km for display
-          label: `WP ${index + 1}`
-        }))
-    : [];
-
-  // Prepare chart data for terrain, flight path, and points of interest
-  const chartData = {
-    labels: results.samplePoints.map(point => 
-      (point.distanceFromStart / 1000).toFixed(2)
-    ),
+  // Prepare chart data
+  const chartDataset = {
+    labels: displayData.distances.map(d => d.toFixed(2)),
     datasets: [
       {
         label: "Terrain Elevation (m)",
-        data: results.samplePoints.map(point => ({
-          x: point.distanceFromStart / 1000, // Convert to km
-          y: point.terrainElevation
+        data: displayData.distances.map((d, i) => ({
+          x: d,
+          y: displayData.terrainElevations[i]
         })),
         borderColor: "rgba(75,192,192,1)",
         backgroundColor: "rgba(75,192,192,0.2)",
@@ -178,9 +170,9 @@ const TerrainProfileChart: React.FC<TerrainProfileChartProps> = ({
       },
       {
         label: "Flight Path (m)",
-        data: results.samplePoints.map(point => ({
-          x: point.distanceFromStart / 1000, // Convert to km
-          y: point.flightElevation
+        data: displayData.distances.map((d, i) => ({
+          x: d,
+          y: displayData.flightAltitudes[i]
         })),
         borderColor: "rgba(255,99,132,1)",
         borderWidth: 2,
@@ -188,30 +180,33 @@ const TerrainProfileChart: React.FC<TerrainProfileChartProps> = ({
         fill: false,
         pointRadius: 0,
         order: 1,
-      },
-      // Points of interest dataset (minimum clearance, collisions, waypoints)
-      {
-        label: "Points of Interest",
-        data: results.pointsOfInterest.map(poi => ({
-          x: poi.distanceFromStart / 1000, // Convert to km
-          y: poi.position[2]
-        })),
-        backgroundColor: results.pointsOfInterest.map(poi => 
-          poi.type === 'collision' ? 'rgba(255,0,0,0.8)' :
-          poi.type === 'minimumClearance' ? 'rgba(255,165,0,0.8)' :
-          'rgba(0,0,255,0.8)'
-        ),
-        borderColor: 'rgba(0,0,0,0.5)',
-        borderWidth: 1,
-        pointRadius: 6,
-        pointStyle: 'circle',
-        showLine: false,
-        order: 0,
       }
     ]
   };
 
-  // Chart options for interactivity and display
+  // Add points of interest dataset if we have any
+  if (displayData.pointsOfInterest?.length) {
+    chartDataset.datasets.push({
+      label: "Points of Interest",
+      data: displayData.pointsOfInterest.map(poi => ({
+        x: poi.distance,
+        y: poi.elevation
+      })),
+      backgroundColor: displayData.pointsOfInterest.map(poi => 
+        poi.type === 'collision' ? 'rgba(255,0,0,0.8)' :
+        poi.type === 'minimumClearance' ? 'rgba(255,165,0,0.8)' :
+        'rgba(0,0,255,0.8)'
+      ),
+      borderColor: 'rgba(0,0,0,0.5)',
+      borderWidth: 1,
+      pointRadius: 6,
+      pointStyle: 'circle',
+      showLine: false,
+      order: 0,
+    } as any); // Cast the entire object
+  }
+
+  // Chart options
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
@@ -220,22 +215,28 @@ const TerrainProfileChart: React.FC<TerrainProfileChartProps> = ({
       intersect: false,
     },
     plugins: {
+      title: {
+        display: !!title,
+        text: title || '',
+      },
       legend: {
+        display: showLegend,
         position: 'top' as const,
       },
       tooltip: {
         callbacks: {
           title: (tooltipItems: any[]) => {
             if (!tooltipItems.length) return '';
-            return `Distance: ${tooltipItems[0].parsed.x.toFixed(2)} km`;
+            const xVal = parseFloat(tooltipItems[0].label);
+            return `Distance: ${xVal.toFixed(2)} km`;
           },
           label: (context: any) => {
             const label = context.dataset.label || '';
             const value = context.parsed.y;
             
-            if (label === 'Points of Interest') {
+            if (label === 'Points of Interest' && displayData.pointsOfInterest) {
               const poiIndex = context.dataIndex;
-              const poi = results.pointsOfInterest[poiIndex];
+              const poi = displayData.pointsOfInterest[poiIndex];
               if (poi.type === 'collision') {
                 return `Collision: ${value.toFixed(1)}m (${poi.clearance?.toFixed(1)}m below terrain)`;
               } else if (poi.type === 'minimumClearance') {
@@ -276,7 +277,7 @@ const TerrainProfileChart: React.FC<TerrainProfileChartProps> = ({
         }
       },
       waypointLabelsPlugin: {
-        waypoints,
+        waypoints: displayData.waypoints || [],
         font: "10px sans-serif",
         textColor: "#000",
         textAlign: "center",
@@ -304,9 +305,9 @@ const TerrainProfileChart: React.FC<TerrainProfileChartProps> = ({
   };
 
   return (
-    <div className="terrain-profile-chart">
+    <div className="obstacle-chart">
       <div style={{ height: `${height}px` }}>
-        <Line data={chartData} options={chartOptions} ref={chartRef} />
+        <Line data={chartDataset} options={chartOptions} ref={chartRef} />
       </div>
       
       {showControls && (
@@ -323,4 +324,4 @@ const TerrainProfileChart: React.FC<TerrainProfileChartProps> = ({
   );
 };
 
-export default TerrainProfileChart;
+export default ObstacleChart;

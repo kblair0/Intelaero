@@ -47,8 +47,13 @@ const ObstacleAnalysisDashboard = dynamic(
   { ssr: false }
 );
 
-const TerrainProfileChart = dynamic(
-  () => import("../ObstacleAnalysis").then(m => m.TerrainProfileChart),
+const ObstacleChart = dynamic(
+  () => import("../ObstacleAnalysis").then(m => m.ObstacleChart),
+  { ssr: false }
+);
+
+const ObstacleChartModal = dynamic(
+  () => import("../ObstacleAnalysis").then(m => m.ObstacleChartModal),
   { ssr: false }
 );
 
@@ -535,7 +540,7 @@ const getTerrainAnalysis = (): VerificationSection => {
           title: "Terrain Profile",
           content: (
             <div className="space-y-2">
-              <TerrainProfileChart height={200} showControls={false} />
+              <ObstacleChart height={200} showControls={false} />
               <div className="grid grid-cols-2 gap-2 text-sm mt-3">
                 <div>Minimum Clearance:</div>
                 <div className={isSafe ? "text-green-600" : "text-red-600"}>
@@ -778,17 +783,13 @@ const getTerrainAnalysis = (): VerificationSection => {
         );
       })}
       {showTerrainPopup && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-lg p-6 w-11/12 max-w-4xl max-h-full overflow-y-auto">
-            <ObstacleAnalysisDashboard 
-              onClose={() => {
-                setShowTerrainPopup(false);
-                setIsAnalyzing(false);
-              }}
-              autoRun={false}
-            />
-          </div>
-        </div>
+        <ObstacleChartModal 
+          onClose={() => {
+            setShowTerrainPopup(false);
+            setIsAnalyzing(false);
+          }}
+          title="Detailed Terrain Analysis"
+        />
       )}
     </div>
   );

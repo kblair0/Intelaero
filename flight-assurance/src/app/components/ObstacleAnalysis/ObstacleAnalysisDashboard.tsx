@@ -23,7 +23,6 @@
 import React, { useEffect } from 'react';
 import { useObstacleAnalysis } from '../../context/ObstacleAnalysisContext';
 import { useFlightPlanContext } from '../../context/FlightPlanContext';
-import TerrainProfileChart from './TerrainProfileChart';
 import { AlertTriangle, CheckCircle, Loader, RefreshCw } from 'lucide-react';
 
 interface ObstacleAnalysisDashboardProps {

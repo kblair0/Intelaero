@@ -1,3 +1,18 @@
+/**
+ * ObstacleAnalysisContext.tsx
+ * 
+ * Purpose:
+ * Provides a context for obstacle analysis functionality, including state management
+ * and methods for running terrain clearance analysis. This context serves as the
+ * data layer for the obstacle analysis feature.
+ * 
+ * Related Files:
+ * - ObstacleChart.tsx: Visualizes the analysis results
+ * - ObstacleAnalysisDashboard.tsx: UI component using this context
+ * - ObstacleChartModal.tsx: Modal dialog showing the chart
+ * - useFlightPathSampling.ts: Utility for generating sample points
+ */
+
 import React, { createContext, useContext, useState, useCallback, useRef, ReactNode } from 'react';
 import { useMapContext } from './mapcontext';
 import { useFlightPlanContext } from './FlightPlanContext';
@@ -17,11 +32,42 @@ interface SamplePoint {
 /**
  * Interface for a point of interest in the analysis
  */
-interface PointOfInterest {
-  type: 'waypoint' | 'collision' | 'minimumClearance';
-  distanceFromStart: number;
-  position: [number, number, number];
-  clearance?: number; // Optional, used for collision or minimumClearance
+export interface PointOfInterest {
+  type: 'waypoint' | 'collision' | 'minimumClearance' | 'custom';
+  distance: number;                // Distance along route (km)
+  elevation: number;               // Elevation (meters) 
+  clearance?: number;              // Optional, used for collision or minimumClearance
+  label?: string;                  // Optional custom label
+}
+
+/**
+ * Waypoint data for chart display
+ */
+export interface WaypointData {
+  distance: number;                // Distance along route (km)
+  label: string;                   // Waypoint label (e.g., "WP 1")
+}
+
+/**
+ * Unified interface for terrain chart data
+ */
+export interface TerrainChartData {
+  // Core chart data
+  distances: number[];             // X-axis values (km)
+  terrainElevations: number[];     // Terrain Y-values (meters)
+  flightAltitudes: number[];       // Flight path Y-values (meters)
+  
+  // Analysis results
+  minimumClearance: number;        // Minimum terrain clearance value (meters)
+  criticalPointDistance: number | null; // Distance at which minimum clearance occurs (km)
+  highestPoint: {                  // Highest point information
+    terrain: number;               // Highest terrain elevation
+    flight: number;                // Highest flight altitude
+  };
+  
+  // Optional visualization enhancements
+  waypoints?: WaypointData[];      // Waypoint markers
+  pointsOfInterest?: PointOfInterest[]; // Special points (collisions, etc.)
 }
 
 /**
@@ -42,7 +88,7 @@ export interface ObstacleAnalysisResult {
   flightAltitudes: number[];
   terrainElevations: number[];
   distances: number[];
-  pointsOfInterest: PointOfInterest[]; // Added property
+  pointsOfInterest: PointOfInterest[]; 
 }
 
 /**
@@ -58,8 +104,10 @@ interface ObstacleAnalysisContextProps {
   progress: number;
   error: string | null;
   results: ObstacleAnalysisResult | null;
+  chartData: TerrainChartData | null; // New property for simplified chart data
   runAnalysis: (options?: Partial<AnalysisOptions>) => Promise<void>;
   cancelAnalysis: () => void;
+  clearResults: () => void; // New method to clear results
 }
 
 /**
@@ -82,8 +130,105 @@ export const ObstacleAnalysisProvider: React.FC<{ children: ReactNode }> = ({ ch
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<ObstacleAnalysisResult | null>(null);
+  const [chartData, setChartData] = useState<TerrainChartData | null>(null);
   const [analysisOptions, setAnalysisOptions] = useState<AnalysisOptions>(defaultAnalysisOptions);
   const cancelAnalysisRef = useRef(false);
+
+  /**
+   * Converts analysis results to chart data format
+   * @param result - The analysis result to convert
+   * @returns The formatted chart data
+   */
+  const generateChartData = useCallback((result: ObstacleAnalysisResult): TerrainChartData => {
+    // Convert distances from meters to kilometers for display
+    const distancesInKm = result.distances.map(d => d / 1000);
+    
+    // Find highest points
+    const highestTerrain = Math.max(...result.terrainElevations);
+    const highestFlight = Math.max(...result.flightAltitudes);
+    
+    // Extract waypoints from flight plan if available
+    const waypoints: WaypointData[] = [];
+    if (flightPlan?.features?.[0]?.geometry?.coordinates) {
+      const coords = flightPlan.features[0].geometry.coordinates;
+      // Simple conversion - in a real app you'd match coordinates more precisely
+      coords.forEach((_, index) => {
+        const waypointIdx = Math.floor((index * result.distances.length) / coords.length);
+        if (waypointIdx < distancesInKm.length) {
+          waypoints.push({
+            distance: distancesInKm[waypointIdx],
+            label: `WP ${index + 1}`
+          });
+        }
+      });
+    }
+    
+    // Format any points of interest
+    const pointsOfInterest: PointOfInterest[] = [];
+    
+    // Add minimum clearance point if we have it
+    if (result.criticalPointDistance !== null) {
+      const criticalIndex = result.distances.findIndex(d => d === result.criticalPointDistance);
+      if (criticalIndex >= 0) {
+        pointsOfInterest.push({
+          type: 'minimumClearance',
+          distance: distancesInKm[criticalIndex],
+          elevation: result.flightAltitudes[criticalIndex],
+          clearance: result.minimumClearance,
+          label: 'Min Clearance'
+        });
+      }
+    }
+    
+    // Add collision points if minimum clearance is negative
+    if (result.minimumClearance < 0) {
+      // Find all points where clearance is negative
+      result.distances.forEach((d, i) => {
+        const clearance = result.flightAltitudes[i] - result.terrainElevations[i];
+        if (clearance < 0) {
+          pointsOfInterest.push({
+            type: 'collision',
+            distance: distancesInKm[i],
+            elevation: result.flightAltitudes[i],
+            clearance: clearance,
+            label: 'Collision'
+          });
+        }
+      });
+    }
+    
+    // Add existing points of interest
+    if (result.pointsOfInterest.length > 0) {
+      result.pointsOfInterest.forEach(poi => {
+        // Skip if we already have equivalent points
+        if (poi.type === 'minimumClearance' && pointsOfInterest.some(p => p.type === 'minimumClearance')) {
+          return;
+        }
+        
+        pointsOfInterest.push({
+          ...poi,
+          distance: poi.distance / 1000, // Convert to km
+          elevation: poi.elevation || 0
+        });
+      });
+    }
+    
+    // Return formatted chart data
+    return {
+      distances: distancesInKm,
+      terrainElevations: result.terrainElevations,
+      flightAltitudes: result.flightAltitudes,
+      minimumClearance: result.minimumClearance,
+      criticalPointDistance: result.criticalPointDistance !== null ? 
+        result.criticalPointDistance / 1000 : null,
+      highestPoint: {
+        terrain: highestTerrain,
+        flight: highestFlight
+      },
+      waypoints,
+      pointsOfInterest
+    };
+  }, [flightPlan]);
 
   /**
    * Fills terrain elevation data for sample points using ElevationService
@@ -112,6 +257,17 @@ export const ObstacleAnalysisProvider: React.FC<{ children: ReactNode }> = ({ ch
       await new Promise(r => requestAnimationFrame(r)); // Yield to UI
     }
   }
+
+  /**
+   * Clears analysis results
+   */
+  const clearResults = useCallback(() => {
+    setResults(null);
+    setChartData(null);
+    setStatus('idle');
+    setProgress(0);
+    setError(null);
+  }, []);
 
   /**
    * Runs the obstacle analysis for the flight plan
@@ -211,7 +367,11 @@ export const ObstacleAnalysisProvider: React.FC<{ children: ReactNode }> = ({ ch
       const criticalPointIndex = clearances.indexOf(minimumClearance);
       const criticalPointDistance = criticalPointIndex >= 0 ? distances[criticalPointIndex] : null;
 
-      setResults({
+      // Create basic points of interest
+      const pointsOfInterest: PointOfInterest[] = [];
+      
+      // Create the analysis result
+      const result: ObstacleAnalysisResult = {
         samplePoints,
         minimumClearance,
         criticalPointDistance,
@@ -219,8 +379,12 @@ export const ObstacleAnalysisProvider: React.FC<{ children: ReactNode }> = ({ ch
         flightAltitudes,
         terrainElevations,
         distances,
-        pointsOfInterest: [],
-      });
+        pointsOfInterest,
+      };
+
+      // Set both the detailed results and the chart-friendly data
+      setResults(result);
+      setChartData(generateChartData(result));
 
       console.timeEnd("sampleFlightPath");
       setStatus('success');
@@ -229,7 +393,7 @@ export const ObstacleAnalysisProvider: React.FC<{ children: ReactNode }> = ({ ch
       setError(err instanceof Error ? err.message : String(err));
       setStatus('error');
     }
-  }, [map, elevationService, flightPlan, isProcessed, analysisOptions]);
+  }, [map, elevationService, flightPlan, isProcessed, analysisOptions, generateChartData]);
 
   /**
    * Cancels the ongoing analysis
@@ -245,8 +409,10 @@ export const ObstacleAnalysisProvider: React.FC<{ children: ReactNode }> = ({ ch
     progress,
     error,
     results,
+    chartData,
     runAnalysis,
     cancelAnalysis,
+    clearResults,
   };
 
   return <ObstacleAnalysisContext.Provider value={value}>{children}</ObstacleAnalysisContext.Provider>;
