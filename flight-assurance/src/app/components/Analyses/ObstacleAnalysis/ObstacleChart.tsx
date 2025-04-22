@@ -9,6 +9,11 @@
  * - ObstacleAnalysisContext.tsx: Provides chart data via context
  * - ObstacleChartModal.tsx: Uses this component in a modal popup
  * - ObstacleAnalysisDashboard.tsx: Uses this component in dashboard view
+ * 
+ * Tips for Future Reference To avoid scale issues:
+ * Use LinearScale for numerical axes like distance or time.
+ * Avoid CategoryScale unless plotting discrete categories (e.g., names or dates).
+ * Always log x-scale details (min, max, ticks) when debugging chart rendering issues.
  */
 
 import React, { useRef, useEffect } from 'react';
@@ -64,14 +69,6 @@ const waypointLabelsPlugin = {
     ctx.fillStyle = options.textColor || "#000";
     ctx.textAlign = options.textAlign || "center";
     ctx.textBaseline = options.textBaseline || "bottom";
-    
-    // Log waypoint pixel positions
-    console.groupCollapsed('[waypointLabelsPlugin] Waypoint Pixel Positions');
-    options.waypoints.forEach((wp: any) => {
-      const xPos = x.getPixelForValue(wp.distance);
-      console.log(`Waypoint ${wp.label}: distance_km=${wp.distance}, x_pixel=${xPos}`);
-    });
-    console.groupEnd();
     
     options.waypoints.forEach((wp: any) => {
       const xPos = x.getPixelForValue(wp.distance);
@@ -131,18 +128,6 @@ const ObstacleChart: React.FC<ObstacleChartProps> = ({
     }
   }, [displayData, chartRef]);
 
-  // Log x-scale details after chart render
-  useEffect(() => {
-    if (chartRef.current && displayData) {
-      const xScale = chartRef.current.scales.x;
-      console.log('[ObstacleChart] X-Scale Details:', {
-        min: xScale.min,
-        max: xScale.max,
-        ticks: xScale.ticks.map((tick: any) => tick.value)
-      });
-    }
-  }, [chartRef, displayData]);
-
   // Display loading state
   if (!displayData && status === 'loading') {
     return (
@@ -179,25 +164,11 @@ const ObstacleChart: React.FC<ObstacleChartProps> = ({
     );
   }
 
-  // Log chart data for debugging
-  console.groupCollapsed('[ObstacleChart] Chart Data Debug');
-  console.log('X-Axis Distances (km):', displayData.distances);
-  console.log('X-Axis Range:', {
-    min: Math.min(...displayData.distances),
-    max: Math.max(...displayData.distances),
-    count: displayData.distances.length
-  });
-  console.log('Waypoints:', displayData.waypoints?.map(wp => ({
-    label: wp.label,
-    distance_km: wp.distance
-  })) || 'No waypoints');
-  console.log('Points of Interest:', displayData.pointsOfInterest?.map(poi => ({
-    type: poi.type,
-    distance_km: poi.distance,
-    elevation_m: poi.elevation,
-    label: poi.label
-  })) || 'No POIs');
-  console.groupEnd();
+  // Compute dynamic x-axis max from flight plan distances
+  const xAxisMax = displayData.distances.length > 0 
+    ? Math.max(...displayData.distances) * 1.05 // Add 5% buffer
+    : 1; // Fallback to 1 km if no distances
+  console.log('[ObstacleChart] Computed X-Axis Max (km):', xAxisMax);
 
   // Prepare chart data
   const chartDataset = {
@@ -369,7 +340,7 @@ const ObstacleChart: React.FC<ObstacleChartProps> = ({
           text: 'Distance (km)' 
         },
         min: 0,
-        max: 17.2,
+        max: xAxisMax, // Dynamically set based on flight plan distance
       },
       y: { 
         title: { 

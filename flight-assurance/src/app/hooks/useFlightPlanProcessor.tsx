@@ -174,7 +174,7 @@ export const useFlightPlanProcessor = () => {
       newPlan.properties.processed = true;
       newPlan.features[0].geometry.coordinates = processedCoords;
       newPlan.features[0].properties.originalCoordinates = originalCoords;
-      newPlan.waypointDistances = waypointDistances;
+      newPlan.waypointDistances = processedCoords.map((_, i) => waypointDistances[i] || totalDistance);
 
       setIsProcessing(false);
       console.log('processFlightPlan: Complete');

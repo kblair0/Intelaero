@@ -61,6 +61,7 @@ export interface FlightPlanData extends GeoJSON.FeatureCollection {
   };
   features: FlightPlanFeature[];
   waypointDistances?: number[];
+  originalWaypointDistances?: number[];
 }
 
 /**

@@ -30,6 +30,7 @@ import type {
   Position
 } from "geojson";
 import { ElevationService } from "../services/ElevationService";
+import * as turf from '@turf/turf';
 
 // DOMParser for KML/KMZ -> only in browser
 const parser = typeof window !== "undefined" ? new DOMParser() : null;
@@ -442,11 +443,42 @@ const processAndStore = useCallback(
       throw new Error("Map or elevation service not initialized");
     }
     try {
+      // Compute originalWaypointDistances from coordinates
+      const coordinates = raw.features[0].geometry.coordinates;
+      let cumulativeDistance = 0;
+      const originalWaypointDistances: number[] = [0];
+      for (let i = 1; i < coordinates.length; i++) {
+        const prevCoord = coordinates[i - 1];
+        const currCoord = coordinates[i];
+        if (!prevCoord || !currCoord || !Array.isArray(prevCoord) || !Array.isArray(currCoord) || prevCoord.length < 2 || currCoord.length < 2) {
+          console.warn(`Invalid coordinate at index ${i - 1} or ${i}:`, { prevCoord, currCoord });
+          continue;
+        }
+        const segmentDistance = turf.distance(
+          [prevCoord[0], prevCoord[1]],
+          [currCoord[0], currCoord[1]],
+          { units: 'meters' }
+        );
+        cumulativeDistance += segmentDistance;
+        originalWaypointDistances.push(cumulativeDistance);
+      }
+      console.log('processAndStore: Original Waypoint Distances (meters):', originalWaypointDistances);
+
+      // Update raw with originalWaypointDistances
+      const updatedRaw: FlightPlanData = {
+        ...raw,
+        originalWaypointDistances,
+        properties: {
+          ...raw.properties,
+          totalDistance: cumulativeDistance
+        }
+      };
+
       // Ensure terrain data is ready and preload the flight plan area
       await elevationService.ensureTerrainReady();
-      await elevationService.preloadArea(raw.features[0].geometry.coordinates);
+      await elevationService.preloadArea(updatedRaw.features[0].geometry.coordinates);
 
-      const proc = await processFlightPlan(raw);
+      const proc = await processFlightPlan(updatedRaw);
       setFlightPlan(proc);
       onPlanUploaded?.(proc);
       if (process.env.NODE_ENV === "production") {
