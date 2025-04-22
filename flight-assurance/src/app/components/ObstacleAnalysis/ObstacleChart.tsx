@@ -27,6 +27,7 @@ import {
 } from 'chart.js';
 import zoomPlugin from 'chartjs-plugin-zoom';
 import { TerrainChartData } from '../../context/ObstacleAnalysisContext';
+import { useFlightPlanContext } from '../../context/FlightPlanContext';
 
 // Register ChartJS components and plugins
 ChartJS.register(
@@ -40,6 +41,12 @@ ChartJS.register(
   Filler,
   zoomPlugin
 );
+
+interface PointOfInterestContext {
+  context?: {
+    type: string;
+  };
+}
 
 /**
  * Custom plugin to render waypoint markers and labels
@@ -105,7 +112,9 @@ const ObstacleChart: React.FC<ObstacleChartProps> = ({
   const internalChartRef = useRef<any>(null);
   const chartRef = externalChartRef || internalChartRef;
   const { chartData, status } = useObstacleAnalysis();
-  
+  const { flightPlan } = useFlightPlanContext();
+  const altitudeMode = flightPlan?.features?.[0]?.properties?.waypoints?.[0]?.altitudeMode ?? 'absolute';
+
   // Use provided data or fall back to context data
   const displayData = data || chartData;
 
@@ -152,59 +161,69 @@ const ObstacleChart: React.FC<ObstacleChartProps> = ({
     );
   }
 
-  // Prepare chart data
-  const chartDataset = {
-    labels: displayData.distances.map(d => d.toFixed(2)),
-    datasets: [
-      {
-        label: "Terrain Elevation (m)",
-        data: displayData.distances.map((d, i) => ({
-          x: d,
-          y: displayData.terrainElevations[i]
-        })),
-        borderColor: "rgba(75,192,192,1)",
-        backgroundColor: "rgba(75,192,192,0.2)",
-        fill: true,
-        pointRadius: 0,
-        order: 2, // Lower order = drawn later (on top)
-      },
-      {
-        label: "Flight Path (m)",
-        data: displayData.distances.map((d, i) => ({
-          x: d,
-          y: displayData.flightAltitudes[i]
-        })),
-        borderColor: "rgba(255,99,132,1)",
-        borderWidth: 2,
-        backgroundColor: "rgba(255,99,132,0.2)",
-        fill: false,
-        pointRadius: 0,
-        order: 1,
-      }
-    ]
-  };
-
-  // Add points of interest dataset if we have any
-  if (displayData.pointsOfInterest?.length) {
-    chartDataset.datasets.push({
-      label: "Points of Interest",
-      data: displayData.pointsOfInterest.map(poi => ({
-        x: poi.distance,
-        y: poi.elevation
+// Prepare chart data
+const chartDataset = {
+  labels: displayData.distances.map(d => d.toFixed(2)),
+  datasets: [
+    {
+      label: "Terrain Elevation (m)",
+      data: displayData.distances.map((d, i) => ({
+        x: d,
+        y: displayData.terrainElevations[i]
       })),
-      backgroundColor: displayData.pointsOfInterest.map(poi => 
-        poi.type === 'collision' ? 'rgba(255,0,0,0.8)' :
-        poi.type === 'minimumClearance' ? 'rgba(255,165,0,0.8)' :
-        'rgba(0,0,255,0.8)'
-      ),
-      borderColor: 'rgba(0,0,0,0.5)',
-      borderWidth: 1,
-      pointRadius: 6,
-      pointStyle: 'circle',
-      showLine: false,
-      order: 0,
-    } as any); // Cast the entire object
-  }
+      borderColor: "rgba(75,192,192,1)",
+      backgroundColor: "rgba(75,192,192,0.2)",
+      fill: true,
+      pointRadius: 0,
+      order: 2, // Lower order = drawn later (on top)
+    },
+    {
+      label: "Flight Path (m)",
+      data: displayData.distances.map((d, i) => ({
+        x: d,
+        y: displayData.flightAltitudes[i]
+      })),
+      borderColor: "rgba(255,99,132,1)",
+      borderWidth: 2,
+      backgroundColor: "rgba(255,99,132,0.2)",
+      fill: false,
+      // For absolute/relative modes, use stepped segments to emphasize the direct lines between waypoints
+      // For terrain mode, keep smooth curves
+      stepped: altitudeMode !== 'terrain' ? 'before' : false,
+      tension: altitudeMode !== 'terrain' ? 0 : 0.4,
+      // For absolute/relative modes, emphasize waypoints with dots
+      pointRadius: altitudeMode !== 'terrain' ? 
+        displayData.distances.map((_, i) => {
+          // Check if this point is a waypoint
+          return displayData.waypoints?.some(wp => Math.abs(wp.distance - displayData.distances[i]) < 0.01) ? 4 : 0;
+        }) : 0,
+      order: 1,
+    }
+  ]
+};
+
+// Add points of interest dataset if we have any
+if (displayData.pointsOfInterest?.length) {
+  chartDataset.datasets.push({
+    label: "Points of Interest",
+    data: displayData.pointsOfInterest.map(poi => ({
+      x: poi.distance,
+      y: poi.elevation
+    })),
+    backgroundColor: displayData.pointsOfInterest.map(poi => 
+      poi.type === 'collision' ? 'rgba(255,0,0,0.8)' :
+      poi.type === 'minimumClearance' ? 'rgba(255,165,0,0.8)' :
+      poi.type === 'waypoint' ? 'rgba(0,0,255,0.8)' :
+      'rgba(0,0,255,0.8)'
+    ),
+    borderColor: 'rgba(0,0,0,0.5)',
+    borderWidth: 1,
+    pointRadius: 6,
+    pointStyle: (poi: PointOfInterestContext) => poi.context?.type === 'waypoint' ? 'triangle' : 'circle',
+    showLine: false,
+    order: 0,
+  });
+}
 
   // Chart options
   const chartOptions = {
@@ -241,6 +260,8 @@ const ObstacleChart: React.FC<ObstacleChartProps> = ({
                 return `Collision: ${value.toFixed(1)}m (${poi.clearance?.toFixed(1)}m below terrain)`;
               } else if (poi.type === 'minimumClearance') {
                 return `Min Clearance: ${poi.clearance?.toFixed(1)}m above terrain`;
+              } else if (poi.type === 'waypoint') {
+                return `Waypoint: ${value.toFixed(1)}m (flight altitude)`;
               } else {
                 return `Waypoint: ${value.toFixed(1)}m (flight altitude)`;
               }
@@ -261,10 +282,22 @@ const ObstacleChart: React.FC<ObstacleChartProps> = ({
             if (!flightItem || !terrainItem) return '';
             
             const clearance = flightItem.parsed.y - terrainItem.parsed.y;
-            return `Clearance: ${clearance.toFixed(1)}m`;
+            let footerText = `Clearance: ${clearance.toFixed(1)}m`;
+            
+            // Add altitude mode info
+            if (altitudeMode === 'absolute') {
+              footerText += ' (Absolute Mode)';
+            } else if (altitudeMode === 'relative') {
+              footerText += ' (Relative Mode)';
+            } else if (altitudeMode === 'terrain') {
+              footerText += ' (Terrain-Following Mode)';
+            }
+            
+            return footerText;
           }
         }
       },
+
       zoom: {
         pan: {
           enabled: true,
