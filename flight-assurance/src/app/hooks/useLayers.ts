@@ -188,6 +188,7 @@ export function useLayers() {
     layerManager.removeLayer(MAP_LAYERS.OBSERVER_GRID);
     layerManager.removeLayer(MAP_LAYERS.REPEATER_GRID);
     layerManager.removeLayer(MAP_LAYERS.MERGED_VISIBILITY);
+    layerManager.removeLayer(MAP_LAYERS.FLIGHT_PATH_VISIBILITY);
     return true;
   }, []);
 

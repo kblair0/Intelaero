@@ -6,6 +6,7 @@ import * as turf from '@turf/turf';
 export const MAP_LAYERS = {
   ELOS_GRID: 'elos-grid-layer',
   FLIGHT_PATH: 'flight-path-layer',
+  FLIGHT_PATH_VISIBILITY: 'flight-path-visibility-layer',
   TERRAIN: 'terrain-layer',
   GCS_GRID: 'gcs-grid-layer',
   OBSERVER_GRID: 'observer-grid-layer',

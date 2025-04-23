@@ -22,6 +22,12 @@ import {
   createError
 } from '../Utils/gridAnalysisUtils';
 import {
+  analyzeFlightPathVisibility,
+  FlightPathVisibilityResult,
+  addVisibilityLayer,
+  removeVisibilityLayer
+} from '../LOSAnalyses/Utils/StationToFlightPathVisibilityAnalysis';
+import {
   AnalysisResults,
   GridCell,
   LocationData,
@@ -984,6 +990,141 @@ export function useGridAnalysis(options: UseGridAnalysisOptions = {}) {
   );
 
   /**
+   * Analyzes visibility of a flight path from available stations
+   */
+  const analyzeFlightPathVisibilityCoverage = useCallback(
+    async (flightPlan: FlightPlanData, options: {
+      sampleInterval?: number;
+      minimumOffset?: number;
+      showLayer?: boolean;
+    } = {}): Promise<FlightPathVisibilityResult> => {
+      if (!map) {
+        throw createError('Map not initialized', 'MAP_INTERACTION');
+      }
+
+      console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] analyzeFlightPathVisibilityCoverage called`);
+      setIsAnalyzing(true);
+      setAnalysisInProgress(AnalysisType.FLIGHT_PATH_VISIBILITY);
+      abortControllerRef.current = new AbortController();
+
+      try {
+        updateProgress(5);
+
+        // Get available stations for analysis
+        const availableStations = [];
+        
+        if (gcsLocation) {
+          availableStations.push({
+            type: 'gcs' as const,
+            location: gcsLocation,
+            elevationOffset: gcsElevationOffset
+          });
+        }
+        
+        if (observerLocation) {
+          availableStations.push({
+            type: 'observer' as const,
+            location: observerLocation,
+            elevationOffset: observerElevationOffset
+          });
+        }
+        
+        if (repeaterLocation) {
+          availableStations.push({
+            type: 'repeater' as const,
+            location: repeaterLocation,
+            elevationOffset: repeaterElevationOffset
+          });
+        }
+        
+        if (availableStations.length === 0) {
+          throw createError('At least one station is required for analysis', 'INVALID_INPUT');
+        }
+
+        console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] Analyzing with ${availableStations.length} stations`);
+        
+        // Set up terrain elevation query function
+        const queryTerrainElevation = async (coords: Coordinates2D): Promise<number> => {
+          if (abortControllerRef.current?.signal.aborted) {
+            throw createError('Analysis aborted', 'VISIBILITY_ANALYSIS');
+          }
+          
+          if (elevationService) {
+            try {
+              await elevationService.ensureTerrainReady();
+              return await elevationService.getElevation(coords[0], coords[1]);
+            } catch (elevError) {
+              console.warn('ElevationService query failed, falling back to direct query:', elevError);
+            }
+          }
+          
+          try {
+            const elevation = map.queryTerrainElevation(coords);
+            if (elevation !== null && elevation !== undefined) {
+              return elevation;
+            }
+            return 0;
+          } catch (mapError) {
+            console.error('All elevation query methods failed:', mapError);
+            return 0;
+          }
+        };
+        
+        // Clean up any existing visibility layer
+        removeVisibilityLayer(map);
+        
+        // Run the analysis
+        const results = await analyzeFlightPathVisibility(
+          map,
+          flightPlan,
+          availableStations,
+          queryTerrainElevation,
+          {
+            sampleInterval: options.sampleInterval || 10,
+            minimumOffset: options.minimumOffset || 1,
+            onProgress: (progress) => {
+              updateProgress(5 + progress * 0.9); // Scale to 5-95%
+            }
+          }
+        );
+        
+        updateProgress(95);
+        
+        // Add the visibility layer to the map if requested
+        if (options.showLayer !== false) {
+          addVisibilityLayer(map, results.segments);
+        }
+        
+        updateProgress(100);
+        setLastAnalysisTime(Date.now());
+        
+        return results;
+      } catch (error) {
+        console.error(`[${new Date().toISOString()}] [useGridAnalysis.ts] Flight path visibility analysis error:`, error);
+        throw error;
+      } finally {
+        cleanupAnalysis();
+        setIsAnalyzing(false);
+      }
+    },
+    [
+      map,
+      elevationService,
+      gcsLocation,
+      observerLocation,
+      repeaterLocation,
+      gcsElevationOffset,
+      observerElevationOffset,
+      repeaterElevationOffset,
+      updateProgress,
+      setAnalysisInProgress,
+      setIsAnalyzing,
+      cleanupAnalysis,
+      setLastAnalysisTime
+    ]
+  );
+
+  /**
    * Main analysis function that handles all analysis types
    */
   const runAnalysis = useCallback(
@@ -1095,5 +1236,6 @@ export function useGridAnalysis(options: UseGridAnalysisOptions = {}) {
     checkStationToStationLOS,
     abortAnalysis,
     visualizeGrid,
+    analyzeFlightPathVisibilityCoverage,
   };
 }
