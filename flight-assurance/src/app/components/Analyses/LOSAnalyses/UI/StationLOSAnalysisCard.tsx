@@ -72,15 +72,6 @@ const StationLOSAnalysisCard: React.FC<StationLOSAnalysisCardProps> = ({ gridAna
       
       setError(null);
       setLocalError(null);
-
-      if (elevationService) {
-        try {
-          await elevationService.ensureTerrainReady();
-        } catch (e) {
-          console.warn("Failed to ensure terrain readiness, continuing anyway:", e);
-        }
-      }
-
       trackEvent("station_to_station_los_start", { source: sourceStation, target: targetStation });
 
       const losData = await gridAnalysisRef.current.checkStationToStationLOS(sourceStation, targetStation);

@@ -92,15 +92,6 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
       
       setError(null);
       setLocalError(null);
-
-      if (elevationService) {
-        try {
-          await elevationService.ensureTerrainReady();
-        } catch (e) {
-          console.warn("Failed to ensure terrain readiness, continuing anyway:", e);
-        }
-      }
-
       trackEvent("merged_analysis_start", {
         stations: computedStations.map((s) => ({
           type: s.type,

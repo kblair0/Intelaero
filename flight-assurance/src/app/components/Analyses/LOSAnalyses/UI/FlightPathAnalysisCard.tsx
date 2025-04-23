@@ -36,16 +36,6 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
       
       setError(null);
       setLocalError(null);
-
-      // Ensure terrain is ready before analysis using ElevationService
-      if (elevationService) {
-        try {
-          await elevationService.ensureTerrainReady();
-        } catch (e) {
-          console.warn("Failed to ensure terrain readiness, continuing anyway:", e);
-        }
-      }
-
       trackEvent("flight_path_analysis_start", {
         gridSize,
         analysisRange: elosGridRange,

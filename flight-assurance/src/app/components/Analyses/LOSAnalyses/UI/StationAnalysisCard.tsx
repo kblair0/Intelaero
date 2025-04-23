@@ -61,17 +61,6 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
   
   const station = stations[stationType];
   const [localError, setLocalError] = useState<string | null>(null);
-  
-  //logging the context values
-  useEffect(() => {
-    console.log(`[${new Date().toISOString()}] [StationAnalysisCard.tsx] MarkersContext:`, { 
-      gcsLocation, 
-      observerLocation, 
-      repeaterLocation 
-    });
-    console.log(`[${new Date().toISOString()}] [StationAnalysisCard.tsx] Running station analysis, stationType:`, stationType);
-    console.log(`[${new Date().toISOString()}] [StationAnalysisCard.tsx] Station data:`, station);
-  }, [gcsLocation, observerLocation, repeaterLocation, station, stationType]);
 
   const handleRunStationAnalysis = async () => {
     if (!gridAnalysisRef.current) {
@@ -101,15 +90,6 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
     try {
       setError(null);
       setLocalError(null);
-
-      if (elevationService) {
-        try {
-          await elevationService.ensureTerrainReady();
-        } catch (e) {
-          console.warn("Failed to ensure terrain readiness, continuing anyway:", e);
-        }
-      }
-
       trackEvent("station_analysis_start", { station: stationType });
       
       console.log(`[${new Date().toISOString()}] [StationAnalysisCard.tsx] Running analysis with:`, {

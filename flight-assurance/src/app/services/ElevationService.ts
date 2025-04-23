@@ -14,6 +14,7 @@ export class ElevationService {
   private map: mapboxgl.Map;
   private cache: Map<string, number> = new Map();
   private pendingLoads: Set<string> = new Set();
+  private terrainReady: boolean = false;
 
   /**
    * Initializes the service with a Mapbox map instance.
@@ -39,6 +40,8 @@ export class ElevationService {
    * @returns A promise that resolves when the terrain source is ready.
    */
   async ensureTerrainReady(): Promise<void> {
+    if (this.terrainReady) return;
+
     if (!this.map.getSource("mapbox-dem")) {
       this.map.addSource("mapbox-dem", {
         type: "raster-dem",
@@ -58,21 +61,21 @@ export class ElevationService {
           }
         };
         this.map!.on("sourcedata", checkDEM);
-        
-        // Safety timeout to avoid hanging indefinitely
         setTimeout(() => {
           this.map!.off("sourcedata", checkDEM);
           resolve();
         }, 5000);
       });
     }
+
+    this.terrainReady = true;
   }
 
   /**
-   * Preloads DEM tiles for a given set of coordinates by adjusting the map view.
+   * Preloads DEM tiles for a given set of coordinates without altering the map view.
    * Optimized for LOS analysis by ensuring all necessary tiles are loaded.
    * @param coordinates - Array of [lon, lat, alt] coordinates defining the area.
-   * @returns A promise that resolves when the map is idle and tiles are loaded.
+   * @returns A promise that resolves when the tiles are loaded.
    */
   async preloadArea(coordinates: [number, number, number][]): Promise<void> {
     if (coordinates.length === 0) return;
@@ -112,45 +115,78 @@ export class ElevationService {
     const bounds = turf.bbox(geom);
     const [minLng, minLat, maxLng, maxLat] = bounds;
 
-    // Remember current view
-    const currentCenter = this.map.getCenter();
-    const currentZoom = this.map.getZoom();
-    const currentBearing = this.map.getBearing();
-    const currentPitch = this.map.getPitch();
+    // Calculate tile coordinates for the bounding box at zoom level 13
+    const zoom = 13;
+    const tileSize = 512;
+    const scale = Math.pow(2, zoom);
 
-    // Adjust the map to load the region
-    this.map.fitBounds(
-      [[minLng, minLat], [maxLng, maxLat]], 
-      { 
-        padding: 50,
-        maxZoom: 13, // Limit zoom to ensure we don't load too detailed tiles
-        duration: 0   // Instant transition
+    // Convert lat/lng to tile coordinates
+    const toTileCoords = (lng: number, lat: number) => {
+      const latRad = (lat * Math.PI) / 180;
+      const tileX = Math.floor(((lng + 180) / 360) * scale);
+      const tileY = Math.floor(
+        ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * scale
+      );
+      return { tileX, tileY };
+    };
+
+    const minTile = toTileCoords(minLng, minLat);
+    const maxTile = toTileCoords(maxLng, maxLat);
+
+    // Generate list of tiles covering the area
+    const tiles: { x: number; y: number; z: number }[] = [];
+    for (let x = Math.min(minTile.tileX, maxTile.tileX); x <= Math.max(minTile.tileX, maxTile.tileX); x++) {
+      for (let y = Math.min(minTile.tileY, maxTile.tileY); y <= Math.max(minTile.tileY, maxTile.tileY); y++) {
+        tiles.push({ x, y, z: zoom });
       }
+    }
+
+    // Load tiles without changing the map view
+    const source = this.map.getSource('mapbox-dem') as mapboxgl.GeoJSONSource;
+    if (!source) {
+      console.warn(`[${new Date().toISOString()}] [ElevationService.ts] mapbox-dem source not found`);
+      return;
+    }
+
+    // Trigger tile loading by querying elevation for a point in each tile
+    await Promise.all(
+      tiles.map(async ({ x, y, z }) => {
+        // Convert tile coordinates back to approximate lng/lat for a point in the tile
+        const lng = (x / scale) * 360 - 180;
+        const n = Math.PI - 2 * Math.PI * y / scale;
+        const lat = (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+        
+        try {
+          // Query elevation to trigger tile loading
+          const elev = this.map.queryTerrainElevation([lng, lat]);
+          if (elev === null) {
+            console.warn(`[${new Date().toISOString()}] [ElevationService.ts] Elevation null for tile ${x}/${y}/${z}`);
+          }
+        } catch (e) {
+          console.warn(`[${new Date().toISOString()}] [ElevationService.ts] Error loading tile ${x}/${y}/${z}:`, e);
+        }
+      })
     );
 
-    // Wait for the map to be idle (all tiles loaded)
+    // Wait for the source to finish loading
     await new Promise<void>((resolve) => {
-      const checkIdle = () => {
-        resolve();
-        this.map.off('idle', checkIdle);
+      const checkSource = () => {
+        if (this.map.isSourceLoaded('mapbox-dem')) {
+          this.map.off('sourcedata', checkSource);
+          resolve();
+        }
       };
       
-      this.map.once('idle', checkIdle);
+      this.map.on('sourcedata', checkSource);
       
       // Safety timeout
       setTimeout(() => {
-        this.map.off('idle', checkIdle);
+        this.map.off('sourcedata', checkSource);
         resolve();
       }, 5000);
     });
 
-    // Restore original view
-    this.map.jumpTo({
-      center: currentCenter,
-      zoom: currentZoom,
-      bearing: currentBearing,
-      pitch: currentPitch
-    });
+    console.log(`[${new Date().toISOString()}] [ElevationService.ts] Terrain tiles preloaded successfully`);
   }
 
   /**
@@ -218,7 +254,7 @@ export class ElevationService {
    * @param points - Array of [longitude, latitude] coordinates
    * @returns Array of elevations corresponding to input points
    */
-  async batchGetElevations(points: [number, number][]): Promise<number[]> {
+  async batchGetElevations(points: [number, number][], skipPreload: boolean = false): Promise<number[]> {
     // First check cache for all points
     const cachedResults: (number | null)[] = points.map(([lon, lat]) => {
       const cacheKey = this.key(lon, lat);
@@ -230,10 +266,10 @@ export class ElevationService {
       return cachedResults as number[];
     }
     
-    // For uncached points, preload their area
+    // For uncached points, preload their area (only if not skipped)
     const uncachedPoints = points.filter((_, i) => cachedResults[i] === null);
     
-    if (uncachedPoints.length > 0) {
+    if (uncachedPoints.length > 0 && !skipPreload) { // <- Add this condition
       // Add a dummy altitude value to match the expected coordinate format
       const coords = uncachedPoints.map(p => [...p, 0] as [number, number, number]);
       await this.preloadArea(coords);
@@ -251,7 +287,7 @@ export class ElevationService {
     
     return results;
   }
-  
+
   /**
    * Clears the elevation cache.
    * Useful when map style changes or after long periods.

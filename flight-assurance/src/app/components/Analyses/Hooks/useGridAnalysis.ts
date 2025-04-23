@@ -180,21 +180,33 @@ export function useGridAnalysis(options: UseGridAnalysisOptions = {}) {
           data: geojson,
         });
 
+        // Define color ramp based on layer type
+        const colorRamp = layerId === MAP_LAYERS.MERGED_VISIBILITY
+          ? [
+              'interpolate',
+              ['linear'],
+              ['get', 'visibility'],
+              0, '#d32f2f',   // Red: No stations
+              50, '#1976d2',  // Blue: One station
+              100, '#7cb342'  // Green: Two or more stations
+            ]
+          : [
+              'interpolate',
+              ['linear'],
+              ['get', 'visibility'],
+              0, '#d32f2f',   // Red
+              25, '#f57c00',  // Orange
+              50, '#fbc02d',  // Yellow
+              75, '#7cb342',  // Green
+              100, '#1976d2'  // Blue
+            ];
+
         map.addLayer({
           id: layerId,
           type: 'fill',
           source: layerId,
           paint: {
-            'fill-color': [
-              'interpolate',
-              ['linear'],
-              ['get', 'visibility'],
-              0, '#d32f2f',
-              25, '#f57c00',
-              50, '#fbc02d',
-              75, '#7cb342',
-              100, '#1976d2',
-            ],
+            'fill-color': colorRamp,
             'fill-opacity': [
               'interpolate',
               ['linear'],
@@ -299,10 +311,10 @@ export function useGridAnalysis(options: UseGridAnalysisOptions = {}) {
 
         // Configure batch elevation query
         const batchElevationQuerier = elevationService 
-          ? async (points: Coordinates2D[]): Promise<number[]> => {
-              return await elevationService.batchGetElevations(points);
-            }
-          : undefined;
+        ? async (points: Coordinates2D[], skip: boolean = false): Promise<number[]> => {
+            return await elevationService.batchGetElevations(points, true);
+          }
+        : undefined;
 
         // Generate grid
         updateProgress(10);
@@ -432,32 +444,45 @@ export function useGridAnalysis(options: UseGridAnalysisOptions = {}) {
       try {
         // Validate location data
         if (!location || typeof location.lng !== 'number' || typeof location.lat !== 'number') {
-          const error = new Error(`${stationType.toUpperCase()} location not set or invalid`);
-          console.error(`[${new Date().toISOString()}] [useGridAnalysis.ts] Invalid location data:`, location);
-          throw error;
+          throw new Error(`${stationType.toUpperCase()} location not set or invalid`);
         }
 
-        // Transform LocationData to Coordinates2D format explicitly
         const locationCoordinates: Coordinates2D = [location.lng, location.lat];
-        console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] Transformed coordinates for grid generation:`, locationCoordinates);
-
         const startTime = performance.now();
 
-        // Generate grid
+        // Only preload once and use a flag to track if we've preloaded
+        const preloadStartTime = performance.now();
+        const centerPoint = turf.point(locationCoordinates);
+        const buffer = turf.buffer(centerPoint, range, { units: 'meters' });
+        const bounds = turf.bbox(buffer);
+        const coordinates = [
+          [bounds[0], bounds[1], 0],
+          [bounds[2], bounds[3], 0],
+          [bounds[0], bounds[3], 0],
+          [bounds[2], bounds[1], 0],
+        ] as [number, number, number][];
+
+        // Single preload for the entire area
+        if (elevationService) {
+          await elevationService.ensureTerrainReady();
+          await elevationService.preloadArea(coordinates);
+          console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] Preloaded elevation for station analysis in ${performance.now() - preloadStartTime}ms`);
+        }
+
+        // Pass a preloadComplete flag to prevent further preloads
         const cells = await generateGrid(
           getTerrainElevation,
           elevationService ? elevationService.batchGetElevations.bind(elevationService) : undefined,
           gridSize,
           {
-            center: locationCoordinates, // FIXED: Explicitly pass as Coordinates2D array
+            center: locationCoordinates,
             range,
+            preloadComplete: true // Add this flag
           }
         );
 
         if (!cells || !cells.length) {
-          const error = new Error('Generated grid is empty');
-          console.error(`[${new Date().toISOString()}] [useGridAnalysis.ts] ${error.message}`);
-          throw error;
+          throw new Error('Generated grid is empty');
         }
 
         console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] Generated ${cells.length} cells for station analysis`);
@@ -466,36 +491,34 @@ export function useGridAnalysis(options: UseGridAnalysisOptions = {}) {
         const observerElevation = location.elevation ?? 
           await getTerrainElevation(locationCoordinates) ?? 0;
 
-        // Calculate observer position
         const observerPosition: Coordinates3D = [
           location.lng,
           location.lat,
           observerElevation + elevationOffset,
         ];
 
-        console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] Observer position with offset:`, 
-          { observerPosition, baseElevation: observerElevation, withOffset: observerElevation + elevationOffset });
-
-        // Run visibility analysis
+        // Run visibility analysis with optimized batching
         let visibleCells = 0;
         let visibilitySum = 0;
+        const chunkSize = 100; // Increase chunk size for better performance
 
-        const chunkSize = 50;
         for (let i = 0; i < cells.length; i += chunkSize) {
           if (abortControllerRef.current?.signal.aborted) {
             throw createError('Analysis aborted', 'VISIBILITY_ANALYSIS');
           }
 
           const chunk = cells.slice(i, i + chunkSize);
+          const cellCenters = chunk.map(cell => turf.centroid(cell.geometry).geometry.coordinates as Coordinates2D);
+
+          // Batch elevation queries for cell centers
+          const cellElevations = await (elevationService?.batchGetElevations(cellCenters, true) ?? 
+            Promise.all(cellCenters.map(coord => getTerrainElevation(coord))));
+
           await Promise.all(
             chunk.map(async (cell, index) => {
               try {
-                const cellCenter = turf.centroid(cell.geometry);
-                const cellCoords = cellCenter.geometry.coordinates as Coordinates2D;
-
-                if (cell.properties.elevation === undefined) {
-                  cell.properties.elevation = await getTerrainElevation(cellCoords);
-                }
+                const cellCoords = cellCenters[index];
+                cell.properties.elevation = cellElevations[index];
 
                 const targetPosition: Coordinates3D = [
                   cellCoords[0],
@@ -507,7 +530,7 @@ export function useGridAnalysis(options: UseGridAnalysisOptions = {}) {
                   getTerrainElevation,
                   observerPosition,
                   targetPosition,
-                  { minimumOffset: 1 }
+                  { minimumOffset: 1, sampleCount: 20 } // Reduce sample count
                 );
 
                 cell.properties.visibility = isVisible ? 100 : 0;
@@ -530,7 +553,7 @@ export function useGridAnalysis(options: UseGridAnalysisOptions = {}) {
         }
 
         const analysisTime = performance.now() - startTime;
-        console.log(`[${new Date().toISOString()}} [useGridAnalysis.ts] Station analysis completed in ${analysisTime}ms`);
+        console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] Station analysis completed in ${analysisTime}ms`);
 
         const layerId = 
           stationType === 'gcs' ? MAP_LAYERS.GCS_GRID :
@@ -568,510 +591,509 @@ export function useGridAnalysis(options: UseGridAnalysisOptions = {}) {
       visualizeGrid,
       updateProgress,
       cleanupAnalysis,
+      setIsAnalyzing,
+      preloadElevationArea
+    ]
+  );
+
+  /**
+   * Runs a merged analysis of multiple stations
+   * Creates a bounding box based on distances between stations (up to 5km)
+   * Visibility is color-coded: red (0%, no stations), blue (50%, one station), green (100%, two or more stations)
+   */
+  const analyzeMerged = useCallback(
+    async ({ stations }: { 
+      stations: Array<{
+        type: "gcs" | "observer" | "repeater";
+        location: LocationData;
+        range: number;
+        elevationOffset: number;
+      }> 
+    }) => {
+      if (!map) {
+        throw createError('Map not initialized', 'MAP_INTERACTION');
+      }
+
+      console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] Analyzing merged stations: ${stations.length}`);
+      setIsAnalyzing(true);
+
+      try {
+        // Validate stations array
+        if (!stations || !Array.isArray(stations) || stations.length < 2) {
+          const error = new Error("At least two stations are required for merged analysis");
+          console.error(`[${new Date().toISOString()}] [useGridAnalysis.ts] ${error.message}`);
+          throw error;
+        }
+
+        // Validate each station's data
+        for (let i = 0; i < stations.length; i++) {
+          const station = stations[i];
+          if (!station.location || 
+              typeof station.location.lng !== 'number' || 
+              typeof station.location.lat !== 'number') {
+            const error = new Error(`Invalid location data for station ${i+1} (${station.type})`);
+            console.error(`[${new Date().toISOString()}] [useGridAnalysis.ts] ${error.message}`, station);
+            throw error;
+          }
+        }
+
+        const startTime = performance.now();
+        
+        // Step 1: Calculate the maximum distance between any two stations
+        let maxInterStationDistance = 0;
+        
+        // Calculate distances between each pair of stations
+        for (let i = 0; i < stations.length; i++) {
+          for (let j = i + 1; j < stations.length; j++) {
+            const station1 = stations[i];
+            const station2 = stations[j];
+            
+            const distance = turf.distance(
+              [station1.location.lng, station1.location.lat],
+              [station2.location.lng, station2.location.lat],
+              { units: 'meters' }
+            );
+            
+            maxInterStationDistance = Math.max(maxInterStationDistance, distance);
+          }
+        }
+        
+        // Cap the distance at 5km (5000m)
+        const analysisRange = Math.min(maxInterStationDistance, 5000);
+        
+        console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] Max inter-station distance: ${maxInterStationDistance}m, using analysis range: ${analysisRange}m`);
+
+        // Update station ranges for analysis to use the calculated distance
+        const analysisStations = stations.map(station => ({
+          ...station,
+          range: analysisRange // Use the same range (inter-station distance) for all stations
+        }));
+        
+        console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] Using ${analysisStations.length} stations with range ${analysisRange}m for merged analysis`);
+
+        // Generate grid using combined bounding box
+        const bbox = generateCombinedBoundingBox(analysisStations);
+        
+        // Create a regular point grid covering the entire bounding box
+        const pointGrid = turf.pointGrid(bbox, gridSize, { units: 'meters' });
+        console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] Generated point grid with ${pointGrid.features.length} points`);
+
+        // Configure batch elevation query if available
+        const batchElevationQuerier = elevationService 
+        ? async (points: Coordinates2D[], skip: boolean = false): Promise<number[]> => {
+            return await elevationService.batchGetElevations(points, true);
+          }
+        : undefined;
+        
+        // Convert points to grid cells
+        updateProgress(10);
+        const cells: GridCell[] = await Promise.all(
+          pointGrid.features.map(async (point, index) => {
+            const cell = turf.circle(point.geometry.coordinates, gridSize / 2, {
+              units: 'meters',
+              steps: 4,
+            });
+
+            const elevation = await getTerrainElevation(point.geometry.coordinates as Coordinates2D)
+              .catch(e => {
+                console.warn(`[${new Date().toISOString()}] [useGridAnalysis.ts] Elevation fetch error for point:`, point.geometry.coordinates, e);
+                return 0;
+              });
+
+            return {
+              id: `merged-cell-${index}`,
+              geometry: cell.geometry as GeoJSON.Polygon,
+              properties: {
+                visibility: 0,
+                fullyVisible: false,
+                elevation,
+                lastAnalyzed: Date.now(),
+              },
+            };
+          })
+        );
+
+        if (!cells || !cells.length) {
+          const error = new Error('Generated grid for merged analysis is empty');
+          console.error(`[${new Date().toISOString()}] [useGridAnalysis.ts] ${error.message}`);
+          throw error;
+        }
+
+        console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] Created ${cells.length} cells for merged analysis`);
+        updateProgress(30);
+
+        // Calculate observer positions
+        const observerPositions = await Promise.all(stations.map(async (station) => {
+          const observerElevation = station.location.elevation ?? 
+            await getTerrainElevation([station.location.lng, station.location.lat]) ?? 0;
+
+          return {
+            station: station.type,
+            position: [
+              station.location.lng,
+              station.location.lat,
+              observerElevation + station.elevationOffset,
+            ] as Coordinates3D
+          };
+        }));
+
+        console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] Calculated observer positions for ${observerPositions.length} stations`);
+
+        // Run visibility analysis on all cells
+        let visibleCells = 0;
+        let visibilitySum = 0;
+
+        const chunkSize = 50;
+        for (let i = 0; i < cells.length; i += chunkSize) {
+          if (abortControllerRef.current?.signal.aborted) {
+            throw createError('Analysis aborted', 'VISIBILITY_ANALYSIS');
+          }
+
+          const chunk = cells.slice(i, i + chunkSize);
+          await Promise.all(
+            chunk.map(async (cell, index) => {
+              try {
+                const cellCenter = turf.centroid(cell.geometry);
+                const cellCoords = cellCenter.geometry.coordinates as Coordinates2D;
+
+                if (cell.properties.elevation === undefined) {
+                  cell.properties.elevation = await getTerrainElevation(cellCoords);
+                }
+
+                const targetPosition: Coordinates3D = [
+                  cellCoords[0],
+                  cellCoords[1],
+                  cell.properties.elevation || 0,
+                ];
+
+                // Count stations that can see this cell
+                let visibleStationCount = 0;
+
+                for (const observer of observerPositions) {
+                  // Calculate distance to station
+                  const distance = turf.distance(
+                    [observer.position[0], observer.position[1]],
+                    cellCoords,
+                    { units: 'meters' }
+                  );
+                  
+                  // Only check visibility if within analysis range
+                  if (distance <= analysisRange) {
+                    const isVisible = await checkLineOfSight(
+                      getTerrainElevation,
+                      observer.position,
+                      targetPosition,
+                      { minimumOffset: 1 }
+                    );
+
+                    if (isVisible) {
+                      visibleStationCount++;
+                    }
+                  }
+                }
+
+                // Calculate visibility based on count:
+                // 0: 0% (red, #d32f2f)
+                // 1: 50% (blue, #1976d2)
+                // 2+: 100% (green, #7cb342)
+                const isVisibleFromAny = visibleStationCount > 0;
+                const isVisibleFromAll = visibleStationCount >= observerPositions.length;
+
+                let visibilityPercentage = 0;
+                if (visibleStationCount === 1) {
+                  visibilityPercentage = 50; // Blue - one station can see it
+                } else if (visibleStationCount >= 2) {
+                  visibilityPercentage = 100; // Green - two or more stations can see it
+                }
+
+                cell.properties.visibility = visibilityPercentage;
+                cell.properties.fullyVisible = isVisibleFromAll;
+                cell.properties.visibleStationCount = visibleStationCount; // Add this for reference
+                cell.properties.lastAnalyzed = Date.now();
+
+                if (isVisibleFromAny) {
+                  visibleCells++;
+                  visibilitySum += visibilityPercentage;
+                }
+              } catch (cellError) {
+                console.warn(`[${new Date().toISOString()}] [useGridAnalysis.ts] Error analyzing merged cell ${i + index}:`, cellError);
+              }
+            })
+          );
+
+          const progressValue = 30 + ((i + chunkSize) / cells.length) * 60;
+          updateProgress(progressValue);
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
+
+        const analysisTime = performance.now() - startTime;
+        console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] Merged analysis completed in ${analysisTime}ms`);
+
+        const analysisResults: AnalysisResults = {
+          cells,
+          stats: {
+            visibleCells,
+            totalCells: cells.length,
+            averageVisibility: cells.length > 0 ? visibilitySum / cells.length : 0,
+            analysisTime,
+          },
+        };
+
+        visualizeGrid(analysisResults, MAP_LAYERS.MERGED_VISIBILITY);
+        updateProgress(100);
+        setLastAnalysisTime(Date.now());
+        return analysisResults;
+      } catch (error) {
+        console.error(`[${new Date().toISOString()}] [useGridAnalysis.ts] Merged analysis error:`, error);
+        throw error;
+      } finally {
+        updateProgress(0);
+        cleanupAnalysis();
+        setIsAnalyzing(false);
+      }
+    },
+    [
+      map,
+      gridSize,
+      getTerrainElevation,
+      elevationService,
+      visualizeGrid,
+      updateProgress,
+      cleanupAnalysis,
+      generateCombinedBoundingBox,
       setIsAnalyzing
     ]
   );
 
-/**
- * Runs a merged analysis of multiple stations
- * Creates a bounding box based on distances between stations (up to 5km)
- * Visibility is color-coded: red (none), blue (one station), green (two+ stations)
- */
-const analyzeMerged = useCallback(
-  async ({ stations }: { 
-    stations: Array<{
-      type: "gcs" | "observer" | "repeater";
-      location: LocationData;
-      range: number;
-      elevationOffset: number;
-    }> 
-  }) => {
-    if (!map) {
-      throw createError('Map not initialized', 'MAP_INTERACTION');
-    }
-
-    console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] Analyzing merged stations: ${stations.length}`);
-    setIsAnalyzing(true);
-
-    try {
-      // Validate stations array
-      if (!stations || !Array.isArray(stations) || stations.length < 2) {
-        const error = new Error("At least two stations are required for merged analysis");
-        console.error(`[${new Date().toISOString()}] [useGridAnalysis.ts] ${error.message}`);
-        throw error;
+  /**
+   * Checks line of sight between two stations
+   */
+  const checkStationToStationLOS = useCallback(
+    async (
+      sourceStation: MarkerType,
+      targetStation: MarkerType
+    ): Promise<{ result: StationLOSResult; profile: LOSProfilePoint[] }> => {
+      if (!map) {
+        throw createError('Map not initialized', 'MAP_INTERACTION');
       }
 
-      // Validate each station's data
-      for (let i = 0; i < stations.length; i++) {
-        const station = stations[i];
-        if (!station.location || 
-            typeof station.location.lng !== 'number' || 
-            typeof station.location.lat !== 'number') {
-          const error = new Error(`Invalid location data for station ${i+1} (${station.type})`);
-          console.error(`[${new Date().toISOString()}] [useGridAnalysis.ts] ${error.message}`, station);
-          throw error;
-        }
-      }
-
-      const startTime = performance.now();
-      
-      // Step 1: Calculate the maximum distance between any two stations
-      let maxInterStationDistance = 0;
-      
-      // Calculate distances between each pair of stations
-      for (let i = 0; i < stations.length; i++) {
-        for (let j = i + 1; j < stations.length; j++) {
-          const station1 = stations[i];
-          const station2 = stations[j];
-          
-          const distance = turf.distance(
-            [station1.location.lng, station1.location.lat],
-            [station2.location.lng, station2.location.lat],
-            { units: 'meters' }
-          );
-          
-          maxInterStationDistance = Math.max(maxInterStationDistance, distance);
-        }
-      }
-      
-      // Cap the distance at 5km (5000m)
-      const analysisRange = Math.min(maxInterStationDistance, 5000);
-      
-      console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] Max inter-station distance: ${maxInterStationDistance}m, using analysis range: ${analysisRange}m`);
-
-      // Update station ranges for analysis to use the calculated distance
-      const analysisStations = stations.map(station => ({
-        ...station,
-        range: analysisRange // Use the same range (inter-station distance) for all stations
-      }));
-      
-      console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] Using ${analysisStations.length} stations with range ${analysisRange}m for merged analysis`);
-
-      // Generate grid using combined bounding box
-      const bbox = generateCombinedBoundingBox(analysisStations);
-      
-      // Create a regular point grid covering the entire bounding box
-      const pointGrid = turf.pointGrid(bbox, gridSize, { units: 'meters' });
-      console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] Generated point grid with ${pointGrid.features.length} points`);
-
-      // Configure batch elevation query if available
-      const batchElevationQuerier = elevationService 
-        ? async (points: Coordinates2D[]): Promise<number[]> => {
-            return await elevationService.batchGetElevations(points);
-          }
-        : undefined;
-      
-      // Convert points to grid cells
-      updateProgress(10);
-      const cells: GridCell[] = await Promise.all(
-        pointGrid.features.map(async (point, index) => {
-          const cell = turf.circle(point.geometry.coordinates, gridSize / 2, {
-            units: 'meters',
-            steps: 4,
-          });
-
-          const elevation = await getTerrainElevation(point.geometry.coordinates as Coordinates2D)
-            .catch(e => {
-              console.warn(`[${new Date().toISOString()}] [useGridAnalysis.ts] Elevation fetch error for point:`, point.geometry.coordinates, e);
-              return 0;
-            });
-
-          return {
-            id: `merged-cell-${index}`,
-            geometry: cell.geometry as GeoJSON.Polygon,
-            properties: {
-              visibility: 0,
-              fullyVisible: false,
-              elevation,
-              lastAnalyzed: Date.now(),
-            },
-          };
-        })
-      );
-
-      if (!cells || !cells.length) {
-        const error = new Error('Generated grid for merged analysis is empty');
-        console.error(`[${new Date().toISOString()}} [useGridAnalysis.ts] ${error.message}`);
-        throw error;
-      }
-
-      console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] Created ${cells.length} cells for merged analysis`);
-      updateProgress(30);
-
-      // Calculate observer positions
-      const observerPositions = await Promise.all(stations.map(async (station) => {
-        const observerElevation = station.location.elevation ?? 
-          await getTerrainElevation([station.location.lng, station.location.lat]) ?? 0;
-
-        return {
-          station: station.type,
-          position: [
-            station.location.lng,
-            station.location.lat,
-            observerElevation + station.elevationOffset,
-          ] as Coordinates3D
-        };
-      }));
-
-      console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] Calculated observer positions for ${observerPositions.length} stations`);
-
-      // Run visibility analysis on all cells
-      let visibleCells = 0;
-      let visibilitySum = 0;
-
-      const chunkSize = 50;
-      for (let i = 0; i < cells.length; i += chunkSize) {
-        if (abortControllerRef.current?.signal.aborted) {
-          throw createError('Analysis aborted', 'VISIBILITY_ANALYSIS');
-        }
-
-        const chunk = cells.slice(i, i + chunkSize);
-        await Promise.all(
-          chunk.map(async (cell, index) => {
-            try {
-              const cellCenter = turf.centroid(cell.geometry);
-              const cellCoords = cellCenter.geometry.coordinates as Coordinates2D;
-
-              if (cell.properties.elevation === undefined) {
-                cell.properties.elevation = await getTerrainElevation(cellCoords);
-              }
-
-              const targetPosition: Coordinates3D = [
-                cellCoords[0],
-                cellCoords[1],
-                cell.properties.elevation || 0,
-              ];
-
-              // Count stations that can see this cell
-              let visibleStationCount = 0;
-
-              for (const observer of observerPositions) {
-                // Calculate distance to station
-                const distance = turf.distance(
-                  [observer.position[0], observer.position[1]],
-                  cellCoords,
-                  { units: 'meters' }
-                );
-                
-                // Only check visibility if within analysis range
-                if (distance <= analysisRange) {
-                  const isVisible = await checkLineOfSight(
-                    getTerrainElevation,
-                    observer.position,
-                    targetPosition,
-                    { minimumOffset: 1 }
-                  );
-
-                  if (isVisible) {
-                    visibleStationCount++;
-                  }
-                }
-              }
-
-              // Calculate visibility based on count:
-              // 0: 0% (red)
-              // 1: 50% (blue)
-              // 2+: 100% (green)
-              const isVisibleFromAny = visibleStationCount > 0;
-              const isVisibleFromAll = visibleStationCount >= observerPositions.length;
-
-              // Set visibility percentage based on the number of stations that can see it
-              // This works with the default color ramp in visualizeGrid:
-              // 0% = red, 50% = blue, 100% = green
-              let visibilityPercentage = 0;
-              if (visibleStationCount === 1) {
-                visibilityPercentage = 50; // Blue - one station can see it
-              } else if (visibleStationCount >= 2) {
-                visibilityPercentage = 100; // Green - two or more stations can see it
-              }
-
-              cell.properties.visibility = visibilityPercentage;
-              cell.properties.fullyVisible = isVisibleFromAll;
-              cell.properties.visibleStationCount = visibleStationCount; // Add this for reference
-              cell.properties.lastAnalyzed = Date.now();
-
-              if (isVisibleFromAny) {
-                visibleCells++;
-                visibilitySum += visibilityPercentage;
-              }
-            } catch (cellError) {
-              console.warn(`[${new Date().toISOString()}] [useGridAnalysis.ts] Error analyzing merged cell ${i + index}:`, cellError);
-            }
-          })
-        );
-
-        const progressValue = 30 + ((i + chunkSize) / cells.length) * 60;
-        updateProgress(progressValue);
-        await new Promise(resolve => setTimeout(resolve, 0));
-      }
-
-      const analysisTime = performance.now() - startTime;
-      console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] Merged analysis completed in ${analysisTime}ms`);
-
-      const analysisResults: AnalysisResults = {
-        cells,
-        stats: {
-          visibleCells,
-          totalCells: cells.length,
-          averageVisibility: cells.length > 0 ? visibilitySum / cells.length : 0,
-          analysisTime,
+      const stations = {
+        gcs: {
+          location: gcsLocation,
+          offset: gcsElevationOffset,
+        },
+        observer: {
+          location: observerLocation,
+          offset: observerElevationOffset,
+        },
+        repeater: {
+          location: repeaterLocation,
+          offset: repeaterElevationOffset,
         },
       };
 
-      visualizeGrid(analysisResults, MAP_LAYERS.MERGED_VISIBILITY);
-      updateProgress(100);
-      setLastAnalysisTime(Date.now());
-      return analysisResults;
-    } catch (error) {
-      console.error(`[${new Date().toISOString()}] [useGridAnalysis.ts] Merged analysis error:`, error);
-      throw error;
-    } finally {
-      updateProgress(0);
-      cleanupAnalysis();
-      setIsAnalyzing(false);
-    }
-  },
-  [
-    map,
-    gridSize,
-    getTerrainElevation,
-    elevationService,
-    visualizeGrid,
-    updateProgress,
-    cleanupAnalysis,
-    generateCombinedBoundingBox,
-    setIsAnalyzing
-  ]
-);
-/**
- * Checks line of sight between two stations (continued)
- */
-const checkStationToStationLOS = useCallback(
-  async (
-    sourceStation: MarkerType,
-    targetStation: MarkerType
-  ): Promise<{ result: StationLOSResult; profile: LOSProfilePoint[] }> => {
-    if (!map) {
-      throw createError('Map not initialized', 'MAP_INTERACTION');
-    }
+      const source = stations[sourceStation];
+      const target = stations[targetStation];
 
-    const stations = {
-      gcs: {
-        location: gcsLocation,
-        offset: gcsElevationOffset,
-      },
-      observer: {
-        location: observerLocation,
-        offset: observerElevationOffset,
-      },
-      repeater: {
-        location: repeaterLocation,
-        offset: repeaterElevationOffset,
-      },
-    };
-
-    const source = stations[sourceStation];
-    const target = stations[targetStation];
-
-    console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] checkStationToStationLOS called:`, { sourceStation, targetStation });
-    setIsAnalyzing(true);
-
-    try {
-      if (!source.location || !target.location || 
-          typeof source.location.lng !== 'number' || typeof source.location.lat !== 'number' ||
-          typeof target.location.lng !== 'number' || typeof target.location.lat !== 'number') {
-        const error = new Error(`Both ${sourceStation.toUpperCase()} and ${targetStation.toUpperCase()} locations must be set and valid`);
-        console.error(`[${new Date().toISOString()}] [useGridAnalysis.ts] ${error.message}`, { source: source.location, target: target.location });
-        throw error;
-      }
-
-      updateProgress(10);
-
-      const sourcePoint: Coordinates3D = [
-        source.location.lng,
-        source.location.lat,
-        (source.location.elevation ?? 0) + source.offset,
-      ];
-
-      const targetPoint: Coordinates3D = [
-        target.location.lng,
-        target.location.lat,
-        (target.location.elevation ?? 0) + target.offset,
-      ];
-
-      console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] Station positions:`, { sourcePoint, targetPoint });
-
-      updateProgress(30);
-
-      const { profile, clear } = await getLOSProfile(
-        getTerrainElevation,
-        sourcePoint,
-        targetPoint,
-        {
-          sampleDistance: 10,
-          minimumOffset: 3,
-        }
-      );
-
-      updateProgress(90);
-
-      let obstructionFraction = null;
-      let obstructionDistance = null;
-
-      if (!clear) {
-        for (let i = 0; i < profile.length; i++) {
-          if (profile[i].terrain > profile[i].los) {
-            obstructionFraction = i / (profile.length - 1);
-            obstructionDistance = profile[i].distance;
-            break;
-          }
-        }
-      }
-
-      const result: StationLOSResult = {
-        clear,
-        obstructionFraction: obstructionFraction ?? undefined,
-        obstructionDistance: obstructionDistance ?? undefined,
-      };
-
-      updateProgress(100);
-      console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] Station-to-station LOS result:`, result);
-      return { result, profile };
-    } catch (error) {
-      console.error(`[${new Date().toISOString()}] [useGridAnalysis.ts] Station-to-station LOS error:`, error);
-      throw error;
-    } finally {
-      updateProgress(0);
-      cleanupAnalysis();
-      setIsAnalyzing(false);
-    }
-  },
-  [
-    map,
-    gcsLocation,
-    observerLocation,
-    repeaterLocation,
-    gcsElevationOffset,
-    observerElevationOffset,
-    repeaterElevationOffset,
-    getTerrainElevation,
-    updateProgress,
-    cleanupAnalysis,
-    setIsAnalyzing
-  ]
-);
-
-/**
- * Main analysis function that handles all analysis types
- */
-const runAnalysis = useCallback(
-  async (type: AnalysisType, options?: any): Promise<AnalysisResults> => {
-    if (isAnalyzing) {
-      console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] Analysis already in progress, type: ${type}`);
-      throw createError('Analysis already in progress', 'INVALID_INPUT');
-    }
-
-    try {
-      console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] Starting analysis, type: ${type}`);
+      console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] checkStationToStationLOS called:`, { sourceStation, targetStation });
       setIsAnalyzing(true);
-      setError(null);
 
-      let result: AnalysisResults;
+      try {
+        if (!source.location || !target.location || 
+            typeof source.location.lng !== 'number' || typeof source.location.lat !== 'number' ||
+            typeof target.location.lng !== 'number' || typeof target.location.lat !== 'number') {
+          const error = new Error(`Both ${sourceStation.toUpperCase()} and ${targetStation.toUpperCase()} locations must be set and valid`);
+          console.error(`[${new Date().toISOString()}] [useGridAnalysis.ts] ${error.message}`, { source: source.location, target: target.location });
+          throw error;
+        }
 
-      switch (type) {
-        case AnalysisType.FLIGHT_PATH:
-          if (!options?.flightPlan) {
-            throw createError('Flight plan is required', 'INVALID_INPUT');
+        updateProgress(10);
+
+        const sourcePoint: Coordinates3D = [
+          source.location.lng,
+          source.location.lat,
+          (source.location.elevation ?? 0) + source.offset,
+        ];
+
+        const targetPoint: Coordinates3D = [
+          target.location.lng,
+          target.location.lat,
+          (target.location.elevation ?? 0) + target.offset,
+        ];
+
+        console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] Station positions:`, { sourcePoint, targetPoint });
+
+        updateProgress(30);
+
+        const { profile, clear } = await getLOSProfile(
+          getTerrainElevation,
+          sourcePoint,
+          targetPoint,
+          {
+            sampleDistance: 10,
+            minimumOffset: 3,
           }
-          result = await analyzeFlightPath(options.flightPlan);
-          break;
+        );
 
-        case AnalysisType.STATION:
-          if (!options?.stationType || !options?.location || !options?.range) {
-            throw createError('Station type, location, and range are required', 'INVALID_INPUT');
+        updateProgress(90);
+
+        let obstructionFraction = null;
+        let obstructionDistance = null;
+
+        if (!clear) {
+          for (let i = 0; i < profile.length; i++) {
+            if (profile[i].terrain > profile[i].los) {
+              obstructionFraction = i / (profile.length - 1);
+              obstructionDistance = profile[i].distance;
+              break;
+            }
           }
-          
-          // Log the location data for debugging
-          console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] STATION options:`, {
-            stationType: options.stationType,
-            location: options.location,
-            range: options.range,
-            elevationOffset: options.elevationOffset || 0
-          });
-          
-          result = await analyzeStation({
-            stationType: options.stationType,
-            location: options.location,
-            range: options.range,
-            elevationOffset: options.elevationOffset || 0
-          });
-          break;
+        }
 
-        case AnalysisType.MERGED:
-          if (!options?.stations || options.stations.length < 2) {
-            throw createError('At least two stations are required', 'INVALID_INPUT');
-          }
-          result = await analyzeMerged({ stations: options.stations });
-          break;
+        const result: StationLOSResult = {
+          clear,
+          obstructionFraction: obstructionFraction ?? undefined,
+          obstructionDistance: obstructionDistance ?? undefined,
+        };
 
-        case AnalysisType.STATION_TO_STATION:
-          if (!options?.sourceStation || !options?.targetStation) {
-            throw createError('Source and target stations are required', 'INVALID_INPUT');
-          }
-          const stationResult = await checkStationToStationLOS(
-            options.sourceStation,
-            options.targetStation
-          );
-          result = {
-            cells: [],
-            stats: {
-              visibleCells: 0,
-              totalCells: 0,
-              averageVisibility: stationResult.result.clear ? 100 : 0,
-              analysisTime: 0,
-            },
-            stationLOSResult: stationResult.result,
-          };
-          break;
+        updateProgress(100);
+        console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] Station-to-station LOS result:`, result);
+        return { result, profile };
+      } catch (error) {
+        console.error(`[${new Date().toISOString()}] [useGridAnalysis.ts] Station-to-station LOS error:`, error);
+        throw error;
+      } finally {
+        updateProgress(0);
+        cleanupAnalysis();
+        setIsAnalyzing(false);
+      }
+    },
+    [
+      map,
+      gcsLocation,
+      observerLocation,
+      repeaterLocation,
+      gcsElevationOffset,
+      observerElevationOffset,
+      repeaterElevationOffset,
+      getTerrainElevation,
+      updateProgress,
+      cleanupAnalysis,
+      setIsAnalyzing
+    ]
+  );
 
-        default:
-          throw createError(`Unsupported analysis type: ${type}`, 'INVALID_INPUT');
+  /**
+   * Main analysis function that handles all analysis types
+   */
+  const runAnalysis = useCallback(
+    async (type: AnalysisType, options?: any): Promise<AnalysisResults> => {
+      if (isAnalyzing) {
+        console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] Analysis already in progress, type: ${type}`);
+        throw createError('Analysis already in progress', 'INVALID_INPUT');
       }
 
-      setResults(result);
-      console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] Analysis completed, type: ${type}`);
-      return result;
-    } catch (error) {
-      console.error(`[${new Date().toISOString()}] [useGridAnalysis.ts] Analysis error, type: ${type}:`, error);
-      setError(error.message || 'Analysis failed');
-      throw error;
-    } finally {
-      setIsAnalyzing(false);
-    }
-  },
-  [
-    isAnalyzing,
-    setIsAnalyzing,
-    setError,
-    setResults,
+      try {
+        console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] Starting analysis, type: ${type}`);
+        setIsAnalyzing(true);
+        setError(null);
+
+        let result: AnalysisResults;
+
+        switch (type) {
+          case AnalysisType.FLIGHT_PATH:
+            if (!options?.flightPlan) {
+              throw createError('Flight plan is required', 'INVALID_INPUT');
+            }
+            result = await analyzeFlightPath(options.flightPlan);
+            break;
+
+          case AnalysisType.STATION:
+            if (!options?.stationType || !options?.location || !options?.range) {
+              throw createError('Station type, location, and range are required', 'INVALID_INPUT');
+            }
+            
+            // Log the location data for debugging
+            console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] STATION options:`, {
+              stationType: options.stationType,
+              location: options.location,
+              range: options.range,
+              elevationOffset: options.elevationOffset || 0
+            });
+            
+            result = await analyzeStation({
+              stationType: options.stationType,
+              location: options.location,
+              range: options.range,
+              elevationOffset: options.elevationOffset || 0
+            });
+            break;
+
+          case AnalysisType.MERGED:
+            if (!options?.stations || options.stations.length < 2) {
+              throw createError('At least two stations are required', 'INVALID_INPUT');
+            }
+            result = await analyzeMerged({ stations: options.stations });
+            break;
+
+          case AnalysisType.STATION_TO_STATION:
+            if (!options?.sourceStation || !options?.targetStation) {
+              throw createError('Source and target stations are required', 'INVALID_INPUT');
+            }
+            const stationResult = await checkStationToStationLOS(
+              options.sourceStation,
+              options.targetStation
+            );
+            result = {
+              cells: [],
+              stats: {
+                visibleCells: 0,
+                totalCells: 0,
+                averageVisibility: stationResult.result.clear ? 100 : 0,
+                analysisTime: 0,
+              },
+              stationLOSResult: stationResult.result,
+            };
+            break;
+
+          default:
+            throw createError(`Unsupported analysis type: ${type}`, 'INVALID_INPUT');
+        }
+
+        setResults(result);
+        console.log(`[${new Date().toISOString()}] [useGridAnalysis.ts] Analysis completed, type: ${type}`);
+        return result;
+      } catch (error) {
+        console.error(`[${new Date().toISOString()}] [useGridAnalysis.ts] Analysis error, type: ${type}:`, error);
+        setError(error.message || 'Analysis failed');
+        throw error;
+      } finally {
+        setIsAnalyzing(false);
+      }
+    },
+    [
+      isAnalyzing,
+      setIsAnalyzing,
+      setError,
+      setResults,
+      analyzeFlightPath,
+      analyzeStation,
+      analyzeMerged,
+      checkStationToStationLOS
+    ]
+  );
+
+  return {
+    isAnalyzing: isAnalyzing || analysisInProgress !== null,
+    currentAnalysisType: analysisInProgress,
+    progress,
+    lastAnalysisTime,
+    runAnalysis,
     analyzeFlightPath,
     analyzeStation,
     analyzeMerged,
-    checkStationToStationLOS
-  ]
-);
-
-return {
-  isAnalyzing: isAnalyzing || analysisInProgress !== null,
-  currentAnalysisType: analysisInProgress,
-  progress,
-  lastAnalysisTime,
-  runAnalysis,
-  analyzeFlightPath,
-  analyzeStation,
-  analyzeMerged,
-  checkStationToStationLOS,
-  abortAnalysis,
-  visualizeGrid,
-};
+    checkStationToStationLOS,
+    abortAnalysis,
+    visualizeGrid,
+  };
 }

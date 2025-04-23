@@ -145,13 +145,14 @@ export async function fetchTerrainElevation(lng: number, lat: number): Promise<n
  */
 export async function generateGrid(
   queryTerrainElevation: (coords: Coordinates2D) => Promise<number>,
-  batchGetElevations?: (points: Coordinates2D[]) => Promise<number[]>,
+  batchGetElevations?: (points: Coordinates2D[], skipPreload?: boolean) => Promise<number[]>,
   gridSize: number,
   options: {
     center?: Coordinates2D;
     range?: number;
     flightPath?: GeoJSON.Feature<GeoJSON.LineString>;
     elosGridRange?: number;
+    preloadComplete?: boolean; // Added parameter
   }
 ): Promise<GridCell[]> {
   try {
@@ -216,8 +217,9 @@ export async function generateGrid(
       
       if (batchGetElevations) {
         // Use batch elevation query when available
+        // Pass the preloadComplete flag to avoid redundant preloading
         const batchPoints = batch.map(point => point.geometry.coordinates as Coordinates2D);
-        const batchElevations = await batchGetElevations(batchPoints);
+        const batchElevations = await batchGetElevations(batchPoints, options.preloadComplete);
         
         // Create cells with batch-queried elevations
         const batchResults = batch.map((point, batchIndex) => {
@@ -291,13 +293,7 @@ export async function generateGrid(
 
 /**
  * Checks line of sight between two 3D points, sampling terrain in between.
- * Enhanced with optimized sampling strategy based on distance.
- * 
- * @param queryTerrainElevation - Function to retrieve terrain elevation
- * @param sourcePoint - Source coordinates [lng, lat, alt]
- * @param targetPoint - Target coordinates [lng, lat, alt]
- * @param options - Configuration options
- * @returns Promise resolving to boolean indicating clear line of sight
+ * Enhanced with optimized sampling strategy and caching.
  */
 export async function checkLineOfSight(
   queryTerrainElevation: (coords: Coordinates2D) => Promise<number>,
@@ -308,45 +304,52 @@ export async function checkLineOfSight(
   const [sourceLng, sourceLat, sourceAlt] = sourcePoint;
   const [targetLng, targetLat, targetAlt] = targetPoint;
   
-  const minimumOffset = options.minimumOffset ?? 1; // Just above terrain
-
+  const minimumOffset = options.minimumOffset ?? 1;
   const distance = turf.distance(
     [sourceLng, sourceLat],
     [targetLng, targetLat],
     { units: 'meters' }
   );
 
-  // Adaptive sampling strategy based on distance
+  // Adaptive sampling: fewer samples for short distances
   const sampleCount = options.sampleCount ?? 
-    Math.min(50, Math.max(10, Math.ceil(distance / 30))); // Cap at 50 samples
-  
-  // Critical point sampling: Check key areas first
-  // Check midpoint first as it's most likely to obstruct LOS
+    Math.min(20, Math.max(5, Math.ceil(distance / 50))); // Cap at 20, min 5
+
+  // Local cache for elevation queries within this LOS check
+  const elevationCache = new Map<string, number>();
+
+  const getCachedElevation = async (coords: Coordinates2D): Promise<number> => {
+    const cacheKey = `${coords[0].toFixed(4)}|${coords[1].toFixed(4)}`;
+    if (elevationCache.has(cacheKey)) {
+      return elevationCache.get(cacheKey)!;
+    }
+    const elevation = await queryTerrainElevation(coords);
+    elevationCache.set(cacheKey, elevation);
+    return elevation;
+  };
+
+  // Check midpoint first
   const midpointFraction = 0.5;
   const midLng = sourceLng + midpointFraction * (targetLng - sourceLng);
   const midLat = sourceLat + midpointFraction * (targetLat - sourceLat);
   const midHeight = sourceAlt - ((sourceAlt - (targetAlt + minimumOffset)) * midpointFraction);
   
-  const midTerrainHeight = await queryTerrainElevation([midLng, midLat]) ?? 0;
+  const midTerrainHeight = await getCachedElevation([midLng, midLat]) ?? 0;
   if (midTerrainHeight > midHeight) {
-    return false; // Quick early rejection
+    return false;
   }
-  
-  // Now check remaining points
+
+  // Check remaining points
   for (let i = 1; i < sampleCount; i++) {
-    // Skip midpoint as we already checked it
     if (i === Math.floor(sampleCount / 2)) continue;
     
     const fraction = i / sampleCount;
-    
     const lng = sourceLng + fraction * (targetLng - sourceLng);
     const lat = sourceLat + fraction * (targetLat - sourceLat);
-    
     const interpolatedHeight = 
       sourceAlt - ((sourceAlt - (targetAlt + minimumOffset)) * fraction);
 
-    const terrainHeight = await queryTerrainElevation([lng, lat]) ?? 0;
-
+    const terrainHeight = await getCachedElevation([lng, lat]) ?? 0;
     if (terrainHeight > interpolatedHeight) {
       return false;
     }
