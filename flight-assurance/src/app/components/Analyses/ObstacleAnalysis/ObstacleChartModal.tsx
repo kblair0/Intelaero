@@ -10,7 +10,7 @@
  * - ObstacleChart.tsx: Chart component used within the modal
  * - ObstacleAnalysisContext.tsx: Provides chart data and analysis methods
  */
-
+'use client';
 import React, { useRef, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useObstacleAnalysis } from "../../../context/ObstacleAnalysisContext";

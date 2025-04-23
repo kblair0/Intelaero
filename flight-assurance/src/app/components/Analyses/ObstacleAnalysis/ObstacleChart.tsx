@@ -15,91 +15,36 @@
  * Avoid CategoryScale unless plotting discrete categories (e.g., names or dates).
  * Always log x-scale details (min, max, ticks) when debugging chart rendering issues.
  */
-
-import React, { useRef, useEffect } from 'react';
-import { Line } from 'react-chartjs-2';
+'use client';
+import React, { useRef, useEffect, useState } from 'react';
 import { useObstacleAnalysis } from '../../../context/ObstacleAnalysisContext';
-import {
-  Chart as ChartJS,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler,
-} from 'chart.js';
-import zoomPlugin from 'chartjs-plugin-zoom';
-import { TerrainChartData } from '../../../context/ObstacleAnalysisContext';
 import { useFlightPlanContext } from '../../../context/FlightPlanContext';
+import dynamic from 'next/dynamic';
+import { TerrainChartData } from '../../../context/ObstacleAnalysisContext';
 
-// Register ChartJS components and plugins
-ChartJS.register(
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler,
-  zoomPlugin
-);
-
-interface PointOfInterestContext {
-  context?: {
-    type: string;
-  };
+// Interface for point of interest
+interface PointOfInterest {
+  distance: number;
+  elevation: number;
+  type: string;
+  clearance?: number;
 }
 
-/**
- * Custom plugin to render waypoint markers and labels
- */
-const waypointLabelsPlugin = {
-  id: 'waypointLabelsPlugin',
-  afterDraw: (chart: any, args: any, options: any) => {
-    if (!options?.waypoints?.length) return;
-    
-    const { ctx, chartArea: { bottom }, scales: { x } } = chart;
-    ctx.save();
-    
-    const markerHeight = options.markerHeight || 10;
-    const labelOffset = options.labelOffset || 5;
-    
-    ctx.font = options.font || "10px sans-serif";
-    ctx.fillStyle = options.textColor || "#000";
-    ctx.textAlign = options.textAlign || "center";
-    ctx.textBaseline = options.textBaseline || "bottom";
-    
-    options.waypoints.forEach((wp: any) => {
-      const xPos = x.getPixelForValue(wp.distance);
-      
-      // Draw marker line
-      ctx.beginPath();
-      ctx.moveTo(xPos, bottom);
-      ctx.lineTo(xPos, bottom - markerHeight);
-      ctx.strokeStyle = options.lineColor || "rgba(0,0,0,0.6)";
-      ctx.lineWidth = options.lineWidth || 1;
-      ctx.stroke();
-      
-      // Draw label
-      ctx.fillText(wp.label, xPos, bottom - markerHeight - labelOffset);
-    });
-    
-    ctx.restore();
-  }
-};
-
-// Register the custom plugin
-ChartJS.register(waypointLabelsPlugin);
-
+// Props interface
 interface ObstacleChartProps {
-  data?: TerrainChartData;     // Optional direct data for the chart
-  height?: number;             // Chart height in pixels (default: 400)
-  showControls?: boolean;      // Whether to show zoom reset button (default: true)
-  title?: string;              // Optional chart title
-  showLegend?: boolean;        // Whether to show chart legend (default: true)
+  data?: TerrainChartData;        // Optional direct data for the chart
+  height?: number;                // Chart height in pixels (default: 400)
+  showControls?: boolean;         // Whether to show zoom reset button (default: true)
+  title?: string;                 // Optional chart title
+  showLegend?: boolean;           // Whether to show chart legend (default: true)
   chartRef?: React.RefObject<any>; // Optional external chart ref
 }
+
+// Dynamically import the chart component to prevent SSR issues
+const LineChart = dynamic(
+  () => import('react-chartjs-2').then(mod => mod.Line),
+  { ssr: false }
+);
 
 /**
  * Renders a terrain profile chart with flight path and waypoints
@@ -117,16 +62,97 @@ const ObstacleChart: React.FC<ObstacleChartProps> = ({
   const { chartData, status } = useObstacleAnalysis();
   const { flightPlan } = useFlightPlanContext();
   const altitudeMode = flightPlan?.features?.[0]?.properties?.waypoints?.[0]?.altitudeMode ?? 'absolute';
-
+  
+  // Track if we're on the client side
+  const [isClient, setIsClient] = useState(false);
+  
   // Use provided data or fall back to context data
   const displayData = data || chartData;
 
+  // Setup Chart.js on client side only
+  useEffect(() => {
+    setIsClient(true);
+    
+    // Dynamic import and registration of Chart.js components
+    const setupChart = async () => {
+      try {
+        const {
+          Chart,
+          LinearScale,
+          PointElement,
+          LineElement,
+          Title,
+          Tooltip,
+          Legend,
+          Filler
+        } = await import('chart.js');
+        
+        const zoomPlugin = (await import('chartjs-plugin-zoom')).default;
+        
+        // Register base components
+        Chart.register(
+          LinearScale,
+          PointElement,
+          LineElement,
+          Title,
+          Tooltip,
+          Legend,
+          Filler,
+          zoomPlugin
+        );
+        
+        // Custom plugin to render waypoint markers and labels
+        const waypointLabelsPlugin = {
+          id: 'waypointLabelsPlugin',
+          afterDraw: (chart: any, args: any, options: any) => {
+            if (!options?.waypoints?.length) return;
+            
+            const { ctx, chartArea: { bottom }, scales: { x } } = chart;
+            ctx.save();
+            
+            const markerHeight = options.markerHeight || 10;
+            const labelOffset = options.labelOffset || 5;
+            
+            ctx.font = options.font || "10px sans-serif";
+            ctx.fillStyle = options.textColor || "#000";
+            ctx.textAlign = options.textAlign || "center";
+            ctx.textBaseline = options.textBaseline || "bottom";
+            
+            options.waypoints.forEach((wp: any) => {
+              const xPos = x.getPixelForValue(wp.distance);
+              
+              // Draw marker line
+              ctx.beginPath();
+              ctx.moveTo(xPos, bottom);
+              ctx.lineTo(xPos, bottom - markerHeight);
+              ctx.strokeStyle = options.lineColor || "rgba(0,0,0,0.6)";
+              ctx.lineWidth = options.lineWidth || 1;
+              ctx.stroke();
+              
+              // Draw label
+              ctx.fillText(wp.label, xPos, bottom - markerHeight - labelOffset);
+            });
+            
+            ctx.restore();
+          }
+        };
+        
+        // Register custom plugin
+        Chart.register(waypointLabelsPlugin);
+      } catch (error) {
+        console.error('[ObstacleChart] Failed to setup Chart.js:', error);
+      }
+    };
+    
+    setupChart();
+  }, []);
+
   // Reset zoom when data changes
   useEffect(() => {
-    if (chartRef.current?.resetZoom && displayData) {
+    if (isClient && chartRef.current?.resetZoom && displayData) {
       chartRef.current.resetZoom();
     }
-  }, [displayData, chartRef]);
+  }, [displayData, chartRef, isClient]);
 
   // Display loading state
   if (!displayData && status === 'loading') {
@@ -160,6 +186,18 @@ const ObstacleChart: React.FC<ObstacleChartProps> = ({
         style={{ height: `${height}px` }}
       >
         <p className="text-gray-500">No terrain analysis data available.</p>
+      </div>
+    );
+  }
+
+  // If we're still on the server or haven't set up Chart.js yet, show a loading placeholder
+  if (!isClient) {
+    return (
+      <div 
+        className="flex items-center justify-center bg-gray-100 rounded-lg"
+        style={{ height: `${height}px` }}
+      >
+        <p className="text-gray-500">Preparing chart components...</p>
       </div>
     );
   }
@@ -211,11 +249,11 @@ const ObstacleChart: React.FC<ObstacleChartProps> = ({
   if (displayData.pointsOfInterest?.length) {
     chartDataset.datasets.push({
       label: "Points of Interest",
-      data: displayData.pointsOfInterest.map(poi => ({
+      data: displayData.pointsOfInterest.map((poi: PointOfInterest) => ({
         x: poi.distance,
         y: poi.elevation
       })),
-      backgroundColor: displayData.pointsOfInterest.map(poi => 
+      backgroundColor: displayData.pointsOfInterest.map((poi: PointOfInterest) => 
         poi.type === 'collision' ? 'rgba(255,0,0,0.8)' :
         poi.type === 'minimumClearance' ? 'rgba(255,165,0,0.8)' :
         poi.type === 'waypoint' ? 'rgba(0,0,255,0.8)' :
@@ -224,7 +262,7 @@ const ObstacleChart: React.FC<ObstacleChartProps> = ({
       borderColor: 'rgba(0,0,0,0.5)',
       borderWidth: 1,
       pointRadius: 6,
-      pointStyle: (poi: PointOfInterestContext) => poi.context?.type === 'waypoint' ? 'triangle' : 'circle',
+      pointStyle: (poi: PointOfInterest) => poi.type === 'waypoint' ? 'triangle' : 'circle',
       showLine: false,
       order: 0,
     });
@@ -354,7 +392,7 @@ const ObstacleChart: React.FC<ObstacleChartProps> = ({
   return (
     <div className="obstacle-chart">
       <div style={{ height: `${height}px` }}>
-        <Line data={chartDataset} options={chartOptions} ref={chartRef} />
+        <LineChart data={chartDataset} options={chartOptions} ref={chartRef} />
       </div>
       
       {showControls && (

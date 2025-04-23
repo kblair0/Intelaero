@@ -1,11 +1,9 @@
-// src/app/components/Map/Analysis/GridAnalysisController.tsx
-
 /**
  * GridAnalysisController.tsx
  * 
- * This component serves as the central controller for grid-based
- * Line of Sight (LOS) analysis. It coordinates between the map, the analysis 
- * hook, and the UI, handling user interactions and visualizing results.
+ * Enhanced controller for grid-based LOS analysis that leverages ElevationService
+ * for improved performance and reliability. Manages analysis operations and coordinates
+ * between map, analysis hook, and UI components.
  * 
  * It provides:
  * - A ref API for triggering analyses programmatically
@@ -17,25 +15,27 @@
 import { forwardRef, useImperativeHandle, useRef, useState, useCallback } from 'react';
 import mapboxgl from 'mapbox-gl';
 import { useGridAnalysis } from '../../hooks/useGridAnalysis';
-import { useLOSAnalysis } from '../../context/LOSAnalysisContext';
+import { AnalysisResults, useLOSAnalysis } from '../../context/LOSAnalysisContext';
 import { useMapContext } from '../../context/mapcontext';
 import { MAP_LAYERS, layerManager } from '../LayerManager';
 import { FlightPlanData } from '../../context/FlightPlanContext';
 import { LocationData, AnalysisType, StationLOSResult, LOSProfilePoint } from '../../types/GridAnalysisTypes';
 
+
 export interface GridAnalysisRef {
-  runFlightPathAnalysis: () => Promise<void>;
+  runFlightPathAnalysis: () => Promise<AnalysisResults>;
   runStationAnalysis: (options: {
     stationType: 'gcs' | 'observer' | 'repeater';
     location: LocationData;
     range: number;
-  }) => Promise<void>;
+    elevationOffset: number;
+  }) => Promise<AnalysisResults>;
   runMergedAnalysis: (stations: Array<{
     type: 'gcs' | 'observer' | 'repeater';
     location: LocationData;
     range: number;
     elevationOffset: number;
-  }>) => Promise<void>;
+  }>) => Promise<AnalysisResults>;
   checkStationToStationLOS: (
     sourceStation: 'gcs' | 'observer' | 'repeater',
     targetStation: 'gcs' | 'observer' | 'repeater'
@@ -55,11 +55,11 @@ interface GridAnalysisControllerProps {
 
 const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControllerProps>(
   ({ flightPlan, onProgress, onError, onComplete }, ref) => {
-    const { map } = useMapContext();
+    const { map, elevationService } = useMapContext();
     const { setResults, setError, setProgress, setIsAnalyzing } = useLOSAnalysis();
     const [internalProgress, setInternalProgress] = useState(0);
     
-    // Use our grid analysis hook
+    
     const {
       runAnalysis,
       analyzeFlightPath,
@@ -75,11 +75,9 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
       },
     });
 
-    // Create layer cleanup function
     const cleanup = useCallback(() => {
       if (!map) return;
       
-      // Clear previous analysis layers
       layerManager.removeLayer(MAP_LAYERS.ELOS_GRID);
       layerManager.removeLayer(MAP_LAYERS.GCS_GRID);
       layerManager.removeLayer(MAP_LAYERS.OBSERVER_GRID);
@@ -87,25 +85,35 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
       layerManager.removeLayer(MAP_LAYERS.MERGED_VISIBILITY);
     }, [map]);
 
-    // Public API exposed via ref
     useImperativeHandle(ref, () => ({
       async runFlightPathAnalysis() {
         if (!flightPlan) {
           throw new Error('No flight plan available');
         }
-        
         try {
+          console.log(`[${new Date().toISOString()}] [GridArunFlightPathAnalysis] Setting isAnalyzing to true`);
           setIsAnalyzing(true);
           cleanup();
-          
+          if (map && elevationService) {
+            try {
+              const coordinates = flightPlan.features[0].geometry.coordinates.map(
+                coord => [coord[0], coord[1], 0] as [number, number, number]
+              );
+              await elevationService.preloadArea(coordinates);
+            } catch (preloadError) {
+              console.warn('Flight path area preload failed:', preloadError);
+            }
+          } else {
+            console.warn('Map or elevationService not available, skipping preload');
+          }
           const results = await runAnalysis(AnalysisType.FLIGHT_PATH, { flightPlan });
           setResults(results);
-          
           if (onComplete) onComplete(results);
           return results;
-        } catch (error) {
-          setError(error.message);
-          if (onError) onError(error);
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : "Unknown error";
+          setError(message);
+          if (onError) onError(error instanceof Error ? error : new Error(message));
           throw error;
         } finally {
           setIsAnalyzing(false);
@@ -114,9 +122,19 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
       
       async runStationAnalysis(options) {
         try {
-          setIsAnalyzing(true);
+          console.log(`[${new Date().toISOString()}] [GridAnalysisController] runStationAnalysis called with:`, options);
           
-          // Remove only the specific station's layer
+          // Validate location data before proceeding
+          if (!options.location || typeof options.location.lng !== 'number' || typeof options.location.lat !== 'number') {
+            const errorMsg = `${options.stationType.toUpperCase()} location not set or invalid`;
+            console.error(`[${new Date().toISOString()}] [GridAnalysisController] ${errorMsg}:`, options.location);
+            setError(errorMsg);
+            throw new Error(errorMsg);
+          }
+          
+          console.log(`[${new Date().toISOString()}] [GridARunStationAnalysis] Setting isAnalyzing to true`);
+          setIsAnalyzing(true);
+            
           const layerId = 
             options.stationType === 'gcs' 
               ? MAP_LAYERS.GCS_GRID 
@@ -126,14 +144,28 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
                 
           layerManager.removeLayer(layerId);
           
-          const results = await runAnalysis(AnalysisType.STATION, options);
+          // Ensure we're using the valid location data for analysis
+          const analysisOptions = {
+            ...options,
+            location: {
+              lng: options.location.lng,
+              lat: options.location.lat,
+              elevation: options.location.elevation || 0
+            }
+          };
+          
+          console.log(`[${new Date().toISOString()}] [GridAnalysisController] Running analysis with:`, analysisOptions);
+          
+          const results = await runAnalysis(AnalysisType.STATION, analysisOptions);
           setResults(results);
           
           if (onComplete) onComplete(results);
           return results;
-        } catch (error) {
-          setError(error.message);
-          if (onError) onError(error);
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : "Unknown error";
+          console.error(`[${new Date().toISOString()}] [GridAnalysisController] Station analysis error:`, error);
+          setError(message);
+          if (onError) onError(error instanceof Error ? error : new Error(message));
           throw error;
         } finally {
           setIsAnalyzing(false);
@@ -142,6 +174,7 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
       
       async runMergedAnalysis(stations) {
         try {
+          console.log(`[${new Date().toISOString()}] [GridArunMergedAnalysis] Setting isAnalyzing to true`);
           setIsAnalyzing(true);
           layerManager.removeLayer(MAP_LAYERS.MERGED_VISIBILITY);
           
@@ -150,9 +183,10 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
           
           if (onComplete) onComplete(results);
           return results;
-        } catch (error) {
-          setError(error.message);
-          if (onError) onError(error);
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : "Unknown error";
+          setError(message);
+          if (onError) onError(error instanceof Error ? error : new Error(message));
           throw error;
         } finally {
           setIsAnalyzing(false);
@@ -161,6 +195,7 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
       
       async checkStationToStationLOS(sourceStation, targetStation) {
         try {
+          console.log(`[${new Date().toISOString()}] [GridAcheckStationToStationLOS] Setting isAnalyzing to true`);
           setIsAnalyzing(true);
           
           const losData = await checkStationToStationLOS(
@@ -168,7 +203,6 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
             targetStation
           );
           
-          // Create minimal results format to keep consistent
           const results = {
             cells: [],
             stats: {
@@ -184,9 +218,10 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
           
           if (onComplete) onComplete(results);
           return losData;
-        } catch (error) {
-          setError(error.message);
-          if (onError) onError(error);
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : "Unknown error";
+          setError(message);
+          if (onError) onError(error instanceof Error ? error : new Error(message));
           throw error;
         } finally {
           setIsAnalyzing(false);
@@ -208,9 +243,9 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
       setIsAnalyzing,
       onComplete,
       onError,
+      elevationService,
     ]);
 
-    // The component itself doesn't render anything visible
     return null;
   }
 );

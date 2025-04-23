@@ -2,14 +2,24 @@
 
 import { useState, useEffect } from "react";
 import { layerManager, MAP_LAYERS } from "../../../../services/LayerManager";
-import distance from "@turf/distance"; // Import Turf's distance function
+import distance from "@turf/distance";
 import { useMarkersContext } from "../../../../context/MarkerContext";
 import { useLOSAnalysis } from "../../../../context/LOSAnalysisContext";
+import { useMapContext } from "../../../../context/mapcontext";
 import type { GridAnalysisRef } from "../../../../services/GridAnalysis/GridAnalysisController";
 import { trackEventWithForm as trackEvent } from "../../../tracking/tracking";
+import { LocationData } from "../../../../types/LocationData";
+import { AnalysisResults } from "../../../../context/LOSAnalysisContext";
 
 interface MergedAnalysisCardProps {
   gridAnalysisRef: React.RefObject<GridAnalysisRef>;
+}
+
+interface Station {
+  type: "gcs" | "observer" | "repeater";
+  location: LocationData;
+  range: number;
+  elevationOffset: number;
 }
 
 const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef }) => {
@@ -21,15 +31,13 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
     observerElevationOffset,
     repeaterElevationOffset,
   } = useMarkersContext();
-
   const { markerConfigs, isAnalyzing, setError, setIsAnalyzing, results, setResults } = useLOSAnalysis();
+  const { elevationService } = useMapContext();
 
-  // Build the initial list based on context values.
-  const availableStations = [
+  const availableStations: Station[] = [
     {
       type: "gcs",
       location: gcsLocation,
-      // Initially using context gridRange as placeholder (will be overridden)
       range: markerConfigs.gcs.gridRange,
       elevationOffset: gcsElevationOffset,
     },
@@ -45,18 +53,14 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
       range: markerConfigs.repeater.gridRange,
       elevationOffset: repeaterElevationOffset,
     },
-  ].filter((station) => station.location !== null);
+  ].filter((station): station is Station => station.location !== null);
 
-  // Compute a per-station analysis range based on distances between each station.
-  // For each station, calculate the maximum distance to any other station.
-  const computedStations =
+  const computedStations: Station[] =
     availableStations.length >= 2
       ? availableStations.map((station) => {
           let maxDistance = 0;
           availableStations.forEach((otherStation) => {
             if (station.type !== otherStation.type) {
-              // Use Turf to compute the geodesic distance in meters.
-              // Turf expects coordinates in [lng, lat] order.
               const d = distance(
                 [station.location.lng, station.location.lat],
                 [otherStation.location.lng, otherStation.location.lat],
@@ -85,8 +89,17 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
       return;
     }
     try {
-      setIsAnalyzing(true);
+      
       setError(null);
+      setLocalError(null);
+
+      if (elevationService) {
+        try {
+          await elevationService.ensureTerrainReady();
+        } catch (e) {
+          console.warn("Failed to ensure terrain readiness, continuing anyway:", e);
+        }
+      }
 
       trackEvent("merged_analysis_start", {
         stations: computedStations.map((s) => ({
@@ -96,8 +109,7 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
         })),
       });
 
-      // Run the analysis using the computed gridRange (distance based) for each station.
-      const mergedResults = await gridAnalysisRef.current.runMergedAnalysis(computedStations);
+      const mergedResults: AnalysisResults = await gridAnalysisRef.current.runMergedAnalysis(computedStations);
       setResults(mergedResults);
       trackEvent("merged_analysis_success", {
         stations: computedStations.map((s) => ({
@@ -114,7 +126,6 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
     }
   };
 
-  // Utility to get a friendly display name for the station.
   const getStationDisplayName = (type: string) => {
     switch (type) {
       case "gcs":
@@ -134,26 +145,27 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
         layerId === MAP_LAYERS.MERGED_VISIBILITY &&
         (event === "visibilityChange" || event === "layerAdded")
       ) {
+        // No additional action needed here
       }
     });
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   return (
     <div className="bg-white rounded shadow p-3 mb-4">
       <div className="flex items-center gap-2 mt-2">
-  <span className="text-xs text-gray-600">Show/Hide</span>
-  <label className="toggle-switch">
-    <input
-      type="checkbox"
-      checked={layerManager.isLayerVisible(MAP_LAYERS.MERGED_VISIBILITY)}
-      onChange={() => layerManager.toggleLayerVisibility(MAP_LAYERS.MERGED_VISIBILITY)}
-    />
-    <span className="toggle-slider"></span>
-  </label>
-</div>
-
-
+        <span className="text-xs text-gray-600">Show/Hide</span>
+        <label className="toggle-switch">
+          <input
+            type="checkbox"
+            checked={layerManager.isLayerVisible(MAP_LAYERS.MERGED_VISIBILITY)}
+            onChange={() => layerManager.toggleLayerVisibility(MAP_LAYERS.MERGED_VISIBILITY)}
+          />
+          <span className="toggle-slider"></span>
+        </label>
+      </div>
       <p className="text-xs mb-2">
         This analysis combines visibility from all available stations.
       </p>
@@ -175,7 +187,7 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
             {computedStations.map((station) => (
               <p key={station.type} className="ml-2">
                 - {getStationDisplayName(station.type)}: (
-                {station.location.lat.toFixed(3)}, {station.location.lng.toFixed(3)}, {station.location.elevation.toFixed(1)}m)
+                {station.location.lat.toFixed(3)}, {station.location.lng.toFixed(3)}, {(station.location.elevation ?? 0).toFixed(1)}m)
                 , Range: {station.range}m, Elevation Offset: {station.elevationOffset}m
               </p>
             ))}

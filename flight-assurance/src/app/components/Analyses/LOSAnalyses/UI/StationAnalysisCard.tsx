@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useMarkersContext } from "../../../../context/MarkerContext";
 import { useLOSAnalysis } from "../../../../context/LOSAnalysisContext";
+import { useMapContext } from "../../../../context/mapcontext";
 import type { GridAnalysisRef } from "../../../../services/GridAnalysis/GridAnalysisController";
 import { trackEventWithForm as trackEvent } from "../../../tracking/tracking";
 import { layerManager, MAP_LAYERS } from "../../../../services/LayerManager";
@@ -26,9 +27,10 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
   } = useMarkersContext();
   const { markerConfigs, setMarkerConfig, isAnalyzing, setError, setIsAnalyzing, results, gridSize, setGridSize } =
     useLOSAnalysis();
-
-
-  const stations = {
+  const { elevationService } = useMapContext();
+  
+  // Use useMemo to create a stable stations object that only updates when the underlying data changes
+  const stations = useMemo(() => ({
     gcs: {
       location: gcsLocation,
       config: markerConfigs.gcs,
@@ -50,29 +52,26 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
       setElevationOffset: setRepeaterElevationOffset,
       layerId: MAP_LAYERS.REPEATER_GRID,
     },
-  };
+  }), [
+    gcsLocation, observerLocation, repeaterLocation,
+    gcsElevationOffset, observerElevationOffset, repeaterElevationOffset,
+    markerConfigs,
+    setGcsElevationOffset, setObserverElevationOffset, setRepeaterElevationOffset
+  ]);
+  
   const station = stations[stationType];
   const [localError, setLocalError] = useState<string | null>(null);
-
-  const toggleLayerVisibility = () => {
-    layerManager.toggleLayerVisibility(station.layerId);
-    setLayerVisibility((prev) => !prev);
-  };
-
-  const [, forceUpdate] = React.useReducer((x) => x + 1, 0);
-
-  useEffect(() => {
-    const unsubscribe = layerManager.addEventListener((event, layerId) => {
-      if (
-        layerId === station.layerId &&
-        (event === "visibilityChange" || event === "layerAdded")
-      ) {
-        forceUpdate();
-      }
-    });
-    return unsubscribe;
-  }, [station.layerId]);
   
+  //logging the context values
+  useEffect(() => {
+    console.log(`[${new Date().toISOString()}] [StationAnalysisCard.tsx] MarkersContext:`, { 
+      gcsLocation, 
+      observerLocation, 
+      repeaterLocation 
+    });
+    console.log(`[${new Date().toISOString()}] [StationAnalysisCard.tsx] Running station analysis, stationType:`, stationType);
+    console.log(`[${new Date().toISOString()}] [StationAnalysisCard.tsx] Station data:`, station);
+  }, [gcsLocation, observerLocation, repeaterLocation, station, stationType]);
 
   const handleRunStationAnalysis = async () => {
     if (!gridAnalysisRef.current) {
@@ -80,23 +79,56 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
       setLocalError("Analysis controller not initialized");
       return;
     }
-    if (!station.location) {
-      setError(`${stationType.toUpperCase()} location not set`);
-      setLocalError(`${stationType.toUpperCase()} location not set`);
+    
+    // Directly access the location for the specific station type to avoid race conditions
+    let stationLocation;
+    if (stationType === "gcs") {
+      stationLocation = gcsLocation;
+    } else if (stationType === "observer") {
+      stationLocation = observerLocation;
+    } else if (stationType === "repeater") {
+      stationLocation = repeaterLocation;
+    }
+    
+    if (!stationLocation || typeof stationLocation.lng !== 'number' || typeof stationLocation.lat !== 'number') {
+      const errorMsg = `${stationType.toUpperCase()} location not set or invalid`;
+      setError(errorMsg);
+      setLocalError(errorMsg);
+      console.log(`[${new Date().toISOString()}] [StationAnalysisCard.tsx] Invalid location for ${stationType}:`, stationLocation);
       return;
     }
+    
     try {
-      setIsAnalyzing(true);
       setError(null);
+      setLocalError(null);
+
+      if (elevationService) {
+        try {
+          await elevationService.ensureTerrainReady();
+        } catch (e) {
+          console.warn("Failed to ensure terrain readiness, continuing anyway:", e);
+        }
+      }
+
       trackEvent("station_analysis_start", { station: stationType });
+      
+      console.log(`[${new Date().toISOString()}] [StationAnalysisCard.tsx] Running analysis with:`, {
+        stationType,
+        location: stationLocation, 
+        range: station.config.gridRange,
+        elevationOffset: station.elevationOffset
+      });
+
       await gridAnalysisRef.current.runStationAnalysis({
         stationType,
-        location: station.location,
+        location: stationLocation,
         range: station.config.gridRange,
         elevationOffset: station.elevationOffset,
       });
+
       trackEvent("station_analysis_success", { station: stationType });
     } catch (err: any) {
+      console.error("Station analysis error:", err);
       setError(err.message || "Station analysis failed");
       setLocalError(err.message || "Station analysis failed");
     } finally {
@@ -112,21 +144,40 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
         return "Observer";
       case "repeater":
         return "Repeater";
-      default:
-        return stationType.toUpperCase();
     }
   };
+
+  const [, forceUpdate] = React.useReducer((x) => x + 1, 0);
+
+  useEffect(() => {
+    const unsubscribe = layerManager.addEventListener((event, layerId) => {
+      if (
+        layerId === station.layerId &&
+        (event === "visibilityChange" || event === "layerAdded")
+      ) {
+        forceUpdate();
+      }
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [station.layerId]);
+  
+  // Determine the current station location for the specific type
+  const currentLocation = 
+    stationType === "gcs" ? gcsLocation :
+    stationType === "observer" ? observerLocation :
+    repeaterLocation;
 
   return (
     <div className="bg-white rounded shadow p-3 mb-4">
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-sm font-semibold">{getStationDisplayName()} Analysis</h2>
-        {station.location && layerManager.isLayerVisible(station.layerId) !== undefined && (
-
+        {currentLocation && layerManager.isLayerVisible(station.layerId) !== undefined && (
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-600">Show/Hide</span>
             <label className="toggle-switch">
-            <input
+              <input
                 type="checkbox"
                 checked={layerManager.isLayerVisible(station.layerId)}
                 onChange={() => layerManager.toggleLayerVisibility(station.layerId)}
@@ -137,7 +188,7 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
           </div>
         )}
       </div>
-      {!station.location ? (
+      {!currentLocation ? (
         <div className="p-3 bg-yellow-100 border border-yellow-400 text-xs text-yellow-700 rounded">
           ⚠️ Please place a {getStationDisplayName()} marker on the map to enable analysis.
         </div>
@@ -146,8 +197,8 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
           <div className="mb-2 text-xs">
             <p>
               <strong>Location:</strong>{" "}
-              {station.location
-                ? `${station.location.lat.toFixed(3)}, ${station.location.lng.toFixed(3)}`
+              {currentLocation
+                ? `${currentLocation.lat.toFixed(3)}, ${currentLocation.lng.toFixed(3)}`
                 : "Not set"}
             </p>
           </div>
@@ -216,9 +267,9 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
           </div>
           <button
             onClick={handleRunStationAnalysis}
-            disabled={isAnalyzing || !station.location}
+            disabled={isAnalyzing || !currentLocation}
             className={`w-full py-1 rounded mt-3 ${
-              isAnalyzing || !station.location
+              isAnalyzing || !currentLocation
                 ? "bg-gray-300 cursor-not-allowed"
                 : "bg-blue-500 hover:bg-blue-600 text-sm text-white"
             }`}
@@ -227,7 +278,7 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
           </button>
         </>
       )}
-      {results && results.stats && station.location && (
+      {results && results.stats && currentLocation && (
         <div className="mt-4">
           <p className="text-xs">
             <strong>Visible Cells:</strong> {results.stats.visibleCells} /{" "}

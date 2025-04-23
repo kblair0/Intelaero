@@ -1,9 +1,9 @@
-// src/app/components/Analyses/LOSAnalyses/UI/StationLOSAnalysisCard.tsx
 "use client";
 
 import React, { useState, useEffect } from "react";
 import { useMarkersContext } from "../../../../context/MarkerContext";
 import { useLOSAnalysis } from "../../../../context/LOSAnalysisContext";
+import { useMapContext } from "../../../../context/mapcontext";
 import type { GridAnalysisRef } from "../../../../services/GridAnalysis/GridAnalysisController";
 import { StationLOSResult, LOSProfilePoint } from "../../../StationLOSAnalysis";
 import { trackEventWithForm as trackEvent } from "../../../tracking/tracking";
@@ -25,7 +25,7 @@ const StationLOSAnalysisCard: React.FC<StationLOSAnalysisCardProps> = ({ gridAna
     repeaterElevationOffset
   } = useMarkersContext();
   const { isAnalyzing, setError, setIsAnalyzing } = useLOSAnalysis();
-
+  const { elevationService } = useMapContext();
   const [sourceStation, setSourceStation] = useState<"gcs" | "observer" | "repeater">("gcs");
   const [targetStation, setTargetStation] = useState<"gcs" | "observer" | "repeater">("observer");
   const [stationLOSResult, setStationLOSResult] = useState<StationLOSResult | null>(null);
@@ -69,20 +69,28 @@ const StationLOSAnalysisCard: React.FC<StationLOSAnalysisCardProps> = ({ gridAna
     }
   
     try {
-      setIsAnalyzing(true);
+      
       setError(null);
+      setLocalError(null);
+
+      if (elevationService) {
+        try {
+          await elevationService.ensureTerrainReady();
+        } catch (e) {
+          console.warn("Failed to ensure terrain readiness, continuing anyway:", e);
+        }
+      }
+
       trackEvent("station_to_station_los_start", { source: sourceStation, target: targetStation });
-  
+
       const losData = await gridAnalysisRef.current.checkStationToStationLOS(sourceStation, targetStation);
-  
+
       setStationLOSResult(losData.result);
       setLosProfileData(losData.profile);
-  
-      // ✅ Show graph automatically if obstructed and profile exists
+
       if (!losData.result.clear && losData.profile?.length) {
         setIsGraphEnlarged(true);
       }
-  
     } catch (err: any) {
       const msg = err.message || "Station LOS analysis failed";
       setError(msg);
@@ -93,7 +101,6 @@ const StationLOSAnalysisCard: React.FC<StationLOSAnalysisCardProps> = ({ gridAna
       setIsAnalyzing(false);
     }
   };
-  
 
   const getStationDisplay = (station: "gcs" | "observer" | "repeater") => {
     const emojis = { gcs: "📡", observer: "🔭", repeater: "⚡️" };
@@ -148,7 +155,6 @@ const StationLOSAnalysisCard: React.FC<StationLOSAnalysisCardProps> = ({ gridAna
 
   return (
     <div className="bg-white rounded shadow p-3 mb-4">
-
       <p className="text-xs mb-2">Check the direct line of sight between any two stations.</p>
       <div className="mb-2">
         <div className="flex flex-row gap-4">
@@ -199,7 +205,6 @@ const StationLOSAnalysisCard: React.FC<StationLOSAnalysisCardProps> = ({ gridAna
             ? "bg-gray-300 cursor-not-allowed"
             : "bg-blue-500 hover:bg-blue-600 text-white text-sm"
         }`}
-        
       >
         {isAnalyzing ? "Analysing..." : "Check LOS"}
       </button>
@@ -208,18 +213,18 @@ const StationLOSAnalysisCard: React.FC<StationLOSAnalysisCardProps> = ({ gridAna
           {stationLOSResult.clear ? (
             <p className="text-green-600 text-xs">✅ Clear line of sight between stations.</p>
           ) : (
-          <div className="p-2 bg-yellow-100 border border-yellow-400 text-xs text-yellow-700 rounded">
-            ⚠️ LOS obstructed. Obstruction at <strong>{stationLOSResult.obstructionDistance?.toFixed(1)} m</strong> (
-            {(stationLOSResult.obstructionFraction! * 100).toFixed(1)}% along path)
-            <div className="mt-2">
-              <button
-                onClick={() => setIsGraphEnlarged(true)}
-                className="py-1 px-2 bg-indigo-500 text-white rounded text-xs"
-              >
-                Show LOS Graph
-              </button>
+            <div className="p-2 bg-yellow-100 border border-yellow-400 text-xs text-yellow-700 rounded">
+              ⚠️ LOS obstructed. Obstruction at <strong>{stationLOSResult.obstructionDistance?.toFixed(1)} m</strong> (
+              {(stationLOSResult.obstructionFraction! * 100).toFixed(1)}% along path)
+              <div className="mt-2">
+                <button
+                  onClick={() => setIsGraphEnlarged(true)}
+                  className="py-1 px-2 bg-indigo-500 text-white rounded text-xs"
+                >
+                  Show LOS Graph
+                </button>
+              </div>
             </div>
-          </div>
           )}
         </div>
       )}

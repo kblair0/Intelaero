@@ -1,9 +1,8 @@
-//src/app/components/Analyses/LOSAnalyses/UI/FlightPathAnalysisCard.tsx
-
 "use client";
 
 import React, { useState, useEffect } from "react";
 import { useLOSAnalysis } from "../../../../context/LOSAnalysisContext";
+import { useMapContext } from "../../../../context/mapcontext";
 import type { GridAnalysisRef } from "../../../../services/GridAnalysis/GridAnalysisController";
 import { trackEventWithForm as trackEvent } from "../../../tracking/tracking";
 import { layerManager, MAP_LAYERS } from "../../../../services/LayerManager";
@@ -23,6 +22,7 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
     setGridSize,
     setElosGridRange
   } = useLOSAnalysis();
+  const { elevationService } = useMapContext();
   const [localError, setLocalError] = useState<string | null>(null);
 
   const handleRunAnalysis = async () => {
@@ -32,29 +32,61 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
       return;
     }
     try {
-      setIsAnalyzing(true);
+      console.log(`[${new Date().toISOString()}] [flightpathanalysis] Setting isAnalyzing to true`);
+      
       setError(null);
-      trackEvent("flight_path_analysis_start", {});
+      setLocalError(null);
+
+      // Ensure terrain is ready before analysis using ElevationService
+      if (elevationService) {
+        try {
+          await elevationService.ensureTerrainReady();
+        } catch (e) {
+          console.warn("Failed to ensure terrain readiness, continuing anyway:", e);
+        }
+      }
+
+      trackEvent("flight_path_analysis_start", {
+        gridSize,
+        analysisRange: elosGridRange,
+        usingElevationService: !!elevationService
+      });
+
       await gridAnalysisRef.current.runFlightPathAnalysis();
-      trackEvent("flight_path_analysis_success", {});
+
+      trackEvent("flight_path_analysis_success", {
+        gridSize,
+        analysisRange: elosGridRange,
+        usingElevationService: !!elevationService
+      });
     } catch (err: any) {
       setError(err.message || "Flight path analysis failed");
       setLocalError(err.message || "Flight path analysis failed");
+
+      trackEvent("flight_path_analysis_error", {
+        error: err.message,
+        gridSize,
+        analysisRange: elosGridRange,
+        usingElevationService: !!elevationService
+      });
     } finally {
       setIsAnalyzing(false);
     }
   };
-  
-  
+
   useEffect(() => {
     const unsubscribe = layerManager.addEventListener((event, layerId) => {
       if (
         layerId === MAP_LAYERS.ELOS_GRID &&
         (event === "visibilityChange" || event === "layerAdded")
       ) {
+        // No action needed here as per original code
       }
     });
-    return unsubscribe;
+
+    return () => {
+      unsubscribe(); // Call unsubscribe, discard boolean return value
+    };
   }, []);
 
   return (
@@ -71,7 +103,6 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
         </label>
       </div>
       <p className="text-xs mb-2">This analysis shows the ground features visible along the flight path within the specific analysis range.</p>
-      {/* Slider for Analysis Range (Grid Range) */}
       <div className="mb-2">
         <div className="flex justify-between items-center">
           <label className="text-xs text-gray-600">Analysis Range:</label>
@@ -88,8 +119,6 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
           disabled={isAnalyzing}
         />
       </div>
-      
-      {/* Slider for Grid Size */}
       <div className="mb-2">
         <div className="flex justify-between items-center">
           <label className="text-xs text-gray-600">Grid Size:</label>
@@ -109,7 +138,6 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
         />
         <p className="text-xs text-gray-500">The lower the number, the higher the fidelity</p>
       </div>
-
       <button
         onClick={handleRunAnalysis}
         disabled={isAnalyzing}
@@ -119,7 +147,6 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
       >
         {isAnalyzing ? "Analysing..." : "Run Flight Path Analysis"}
       </button>
-
       {results && results.stats && (
         <div className="mt-4">
           <p className="text-xs">

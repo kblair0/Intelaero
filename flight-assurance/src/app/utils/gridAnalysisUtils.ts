@@ -1,11 +1,8 @@
-// src/app/utils/gridAnalysisUtils.ts
-
 /**
  * gridAnalysisUtils.ts
  * 
- * This file contains utility functions used by the grid analysis system.
- * These functions handle common operations like terrain queries, LOS checks,
- * and grid generation that are needed across multiple analysis types.
+ * Contains utility functions for grid analysis with enhanced elevation handling.
+ * These utilities now support both ElevationService and direct DEM queries.
  * 
  * These utilities are used by:
  * - Analysis modules
@@ -138,10 +135,17 @@ export async function fetchTerrainElevation(lng: number, lat: number): Promise<n
 }
 
 /**
- * Generates a grid of cells around a point or flight path
+ * Generates a grid of cells around a point or flight path.
+ * Enhanced to preload elevation data for improved performance.
+ * 
+ * @param queryTerrainElevation - Function to retrieve terrain elevation
+ * @param gridSize - Size of each grid cell in meters
+ * @param options - Configuration options including center, range, flight path
+ * @returns Promise resolving to array of grid cells
  */
 export async function generateGrid(
   queryTerrainElevation: (coords: Coordinates2D) => Promise<number>,
+  batchGetElevations?: (points: Coordinates2D[]) => Promise<number[]>,
   gridSize: number,
   options: {
     center?: Coordinates2D;
@@ -151,56 +155,25 @@ export async function generateGrid(
   }
 ): Promise<GridCell[]> {
   try {
+    let grid;
+
     // Marker-based grid generation
     if (options.center && options.range) {
       const point = turf.point(options.center);
       const buffer = turf.buffer(point, options.range, { units: 'meters' });
       const bounds = turf.bbox(buffer);
+      console.log(`[${new Date().toISOString()}] [gridAnalysisUtils.ts] generateGrid called with options:`, options);
 
       if (!isValidBounds(bounds)) {
         throw createError('Invalid bounds for marker grid', 'GRID_GENERATION');
       }
 
-      const grid = turf.pointGrid(bounds, gridSize, {
+      grid = turf.pointGrid(bounds, gridSize, {
         units: 'meters',
         mask: buffer
       });
       
       console.log('Generated marker grid features:', grid.features.length);
-
-      // Process grid cells for marker
-      const cells = await Promise.all(
-        grid.features.map(async (point, index) => {
-          try {
-            const cell = turf.circle(point.geometry.coordinates, gridSize / 2, {
-              units: 'meters',
-              steps: 4,
-            });
-
-            const elevation = await queryTerrainElevation(point.geometry.coordinates as Coordinates2D)
-              .catch((e) => {
-                console.error('Elevation fetch error for point:', point.geometry.coordinates, e);
-                return 0; // Fallback elevation
-              });
-
-            return {
-              id: `cell-${index}`,
-              geometry: cell.geometry as GeoJSON.Polygon,
-              properties: {
-                visibility: 0,
-                fullyVisible: false,
-                elevation,
-                lastAnalyzed: Date.now(),
-              },
-            };
-          } catch (e) {
-            console.error('Error processing marker grid cell:', index, e);
-            throw e;
-          }
-        })
-      );
-
-      return cells;
     } 
     // Flight path grid generation
     else if (options.flightPath && options.elosGridRange) {
@@ -226,45 +199,86 @@ export async function generateGrid(
         mask: turf.buffer(lineString, options.elosGridRange, { units: 'meters' }),
       };
 
-      const grid = turf.pointGrid(extendedBounds, gridSize, maskOptions);
+      grid = turf.pointGrid(extendedBounds, gridSize, maskOptions);
       console.log('Generated grid features:', grid.features.length);
+    } 
+    else {
+      throw createError('Invalid grid generation parameters', 'GRID_GENERATION');
+    }
 
-      // Process grid cells
-      const cells = await Promise.all(
-        grid.features.map(async (point, index) => {
-          try {
-            const cell = turf.circle(point.geometry.coordinates, gridSize / 2, {
-              units: 'meters',
-              steps: 4,
-            });
+    // Process grid cells with more efficient batching
+    const batchSize = 100; // Larger batch size for parallel processing
+    const cells: GridCell[] = [];
+    
+    // Process grid cells in batches for better performance
+    for (let i = 0; i < grid.features.length; i += batchSize) {
+      const batch = grid.features.slice(i, i + batchSize);
+      
+      if (batchGetElevations) {
+        // Use batch elevation query when available
+        const batchPoints = batch.map(point => point.geometry.coordinates as Coordinates2D);
+        const batchElevations = await batchGetElevations(batchPoints);
+        
+        // Create cells with batch-queried elevations
+        const batchResults = batch.map((point, batchIndex) => {
+          const index = i + batchIndex;
+          const cell = turf.circle(point.geometry.coordinates, gridSize / 2, {
+            units: 'meters',
+            steps: 4,
+          });
 
-            const elevation = await queryTerrainElevation(point.geometry.coordinates as Coordinates2D)
-              .catch((e) => {
-                console.error('Elevation fetch error for point:', point.geometry.coordinates, e);
-                return 0; // Fallback elevation
+          return {
+            id: `cell-${index}`,
+            geometry: cell.geometry as GeoJSON.Polygon,
+            properties: {
+              visibility: 0,
+              fullyVisible: false,
+              elevation: batchElevations[batchIndex],
+              lastAnalyzed: Date.now(),
+            },
+          };
+        });
+        
+        cells.push(...batchResults);
+      } else {
+        // Fall back to individual queries
+        const batchResults = await Promise.all(
+          batch.map(async (point, batchIndex) => {
+            try {
+              const index = i + batchIndex;
+              const cell = turf.circle(point.geometry.coordinates, gridSize / 2, {
+                units: 'meters',
+                steps: 4,
               });
 
-            return {
-              id: `cell-${index}`,
-              geometry: cell.geometry as GeoJSON.Polygon,
-              properties: {
-                visibility: 0,
-                fullyVisible: false,
-                elevation,
-                lastAnalyzed: Date.now(),
-              },
-            };
-          } catch (e) {
-            console.error('Error processing grid cell:', index, e);
-            throw e;
-          }
-        })
-      );
+              const elevation = await queryTerrainElevation(point.geometry.coordinates as Coordinates2D)
+                .catch((e) => {
+                  console.warn('Elevation fetch error for point:', point.geometry.coordinates, e);
+                  return 0; // Fallback elevation
+                });
 
-      return cells;
-    } 
-    
-    throw createError('Invalid grid generation parameters', 'GRID_GENERATION');
+              return {
+                id: `cell-${index}`,
+                geometry: cell.geometry as GeoJSON.Polygon,
+                properties: {
+                  visibility: 0,
+                  fullyVisible: false,
+                  elevation,
+                  lastAnalyzed: Date.now(),
+                },
+              };
+            } catch (e) {
+              console.error('Error processing grid cell in batch:', batchIndex, e);
+              throw e;
+            }
+          })
+        );
+        
+        cells.push(...batchResults);
+      }
+    }
+
+    return cells;
   } catch (error) {
     console.error('Error in generateGrid:', error);
     throw createError(
@@ -276,7 +290,14 @@ export async function generateGrid(
 }
 
 /**
- * Checks line of sight between two 3D points, sampling terrain in between
+ * Checks line of sight between two 3D points, sampling terrain in between.
+ * Enhanced with optimized sampling strategy based on distance.
+ * 
+ * @param queryTerrainElevation - Function to retrieve terrain elevation
+ * @param sourcePoint - Source coordinates [lng, lat, alt]
+ * @param targetPoint - Target coordinates [lng, lat, alt]
+ * @param options - Configuration options
+ * @returns Promise resolving to boolean indicating clear line of sight
  */
 export async function checkLineOfSight(
   queryTerrainElevation: (coords: Coordinates2D) => Promise<number>,
@@ -295,15 +316,32 @@ export async function checkLineOfSight(
     { units: 'meters' }
   );
 
-  const sampleCount = options.sampleCount ?? Math.max(10, Math.ceil(distance / 50));
-
-  for (let i = 0; i <= sampleCount; i++) {
+  // Adaptive sampling strategy based on distance
+  const sampleCount = options.sampleCount ?? 
+    Math.min(50, Math.max(10, Math.ceil(distance / 30))); // Cap at 50 samples
+  
+  // Critical point sampling: Check key areas first
+  // Check midpoint first as it's most likely to obstruct LOS
+  const midpointFraction = 0.5;
+  const midLng = sourceLng + midpointFraction * (targetLng - sourceLng);
+  const midLat = sourceLat + midpointFraction * (targetLat - sourceLat);
+  const midHeight = sourceAlt - ((sourceAlt - (targetAlt + minimumOffset)) * midpointFraction);
+  
+  const midTerrainHeight = await queryTerrainElevation([midLng, midLat]) ?? 0;
+  if (midTerrainHeight > midHeight) {
+    return false; // Quick early rejection
+  }
+  
+  // Now check remaining points
+  for (let i = 1; i < sampleCount; i++) {
+    // Skip midpoint as we already checked it
+    if (i === Math.floor(sampleCount / 2)) continue;
+    
     const fraction = i / sampleCount;
     
     const lng = sourceLng + fraction * (targetLng - sourceLng);
     const lat = sourceLat + fraction * (targetLat - sourceLat);
     
-    // Modified interpolation with minimal offset
     const interpolatedHeight = 
       sourceAlt - ((sourceAlt - (targetAlt + minimumOffset)) * fraction);
 

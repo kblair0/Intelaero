@@ -16,7 +16,7 @@ import { MarkerProvider } from "./context/MarkerContext";
 import { LOSAnalysisProvider } from "./context/LOSAnalysisContext";
 import { FlightConfigurationProvider } from "./context/FlightConfigurationContext";
 import { AreaOfOpsProvider } from "./context/AreaOfOpsContext";
-import PlanVerification from "./components/Plan Verification/PlanVerification";
+import PlanVerificationDashboard from "./components/PlanVerification/PlanVerificationDashboard";
 import Card from "./components/UI/Card";
 import { ObstacleAnalysisProvider } from "./context/ObstacleAnalysisContext";
 import MapSidePanel from "./components/UI/MapSidePanel";
@@ -126,7 +126,7 @@ const HomeContent = () => {
                       Plan Verification
                     </h3>
                     <div className="flex-1 overflow-y-auto">
-                      <PlanVerification onTogglePanel={togglePanel} />
+                      <PlanVerificationDashboard onTogglePanel={togglePanel} />
                       <div className="mt-4">
                         <WelcomePitch />
                       </div>

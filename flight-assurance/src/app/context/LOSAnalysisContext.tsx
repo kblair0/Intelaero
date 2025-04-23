@@ -1,10 +1,10 @@
 // src/context/LOSAnalysisContext.tsx
 "use client";
 import React, { createContext, useContext, useState, ReactNode } from 'react';
+import { StationLOSResult } from '../types/GridAnalysisTypes';
 
 // ======== Type Definitions ========
 
-// GridCell, AnalysisStats, and AnalysisResults remain unchanged
 export interface GridCell {
   id: string;
   geometry: GeoJSON.Polygon;
@@ -60,8 +60,7 @@ interface LOSAnalysisContextType {
   isAnalyzing: boolean;
   results: AnalysisResults | null;
   error: string | null;
-  autoAnalysisRunning: boolean;
-  setAutoAnalysisRunning: (running: boolean) => void;
+  progress: number; // Added
   
   // Configuration Actions
   setGridSize: (size: number) => void;
@@ -75,6 +74,7 @@ interface LOSAnalysisContextType {
   setResults: (results: AnalysisResults | null) => void;
   setIsAnalyzing: (analyzing: boolean) => void;
   setError: (error: string | null) => void;
+  setProgress: (progress: number) => void; // Added
   resetAnalysis: () => void;
 }
 
@@ -103,7 +103,6 @@ export function LOSAnalysisProvider({ children }: { children: ReactNode }) {
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [results, setResults] = useState<AnalysisResults | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [autoAnalysisRunning, setAutoAnalysisRunning] = useState<boolean>(false);
   const [progress, setProgress] = useState<number>(0);
 
   // Marker Configuration Handler (now only updates gridRange)
@@ -138,8 +137,6 @@ export function LOSAnalysisProvider({ children }: { children: ReactNode }) {
     isAnalyzing,
     results,
     error,
-    autoAnalysisRunning,
-    setAutoAnalysisRunning,
     progress,
     setProgress,
     
