@@ -1,12 +1,12 @@
 "use client";
 import React, { useEffect, useRef, FC } from 'react';
-import { useMap } from '../../hooks/useMap';
+import { useMap } from './Hooks/useMap';
 import { useMapContext } from '../../context/mapcontext';
 import { useFlightPlanContext } from '../../context/FlightPlanContext';
 import { useLOSAnalysis } from '../../context/LOSAnalysisContext';
 import { useAreaOfOpsContext } from '../../context/AreaOfOpsContext';
-import { useFlightPlanProcessor } from '../../hooks/useFlightPlanProcessor';
-import { useMarkers } from '../../hooks/useMarkers';
+import { useFlightPlanProcessor } from '../Map/Hooks/useFlightPlanProcessor';
+import { useMarkers } from './Hooks/useMarkers';
 import { useLayers } from '../../hooks/useLayers';
 import mapboxgl from 'mapbox-gl';
 
@@ -21,7 +21,7 @@ import AODisplay from '../AO/AODisplay';
 
 import MapboxLayerHandler from './MapboxLayerHandler';
 import BYDALayerHandler from './BYDALayerHandler';
-import GridAnalysisController, { GridAnalysisRef } from '../../services/GridAnalysis/GridAnalysisController';
+import GridAnalysisController, { GridAnalysisRef } from '../Analyses/Services/GridAnalysis/GridAnalysisController';
 import { useAnalysisController } from "../../context/AnalysisControllerContext";
 import { trackEventWithForm as trackEvent } from '../tracking/tracking';
 

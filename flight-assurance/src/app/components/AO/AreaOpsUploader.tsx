@@ -1,7 +1,7 @@
 "use client";
 import React, { useState } from "react";
 import { useDropzone } from "react-dropzone";
-import { useAreaOpsProcessor } from "../../hooks/useAreaOpsProcessor";
+import { useAreaOpsProcessor } from "../AO/Hooks/useAreaOpsProcessor";
 import { trackEventWithForm as trackEvent } from "../tracking/tracking";
 
 interface AreaOpsUploaderProps {

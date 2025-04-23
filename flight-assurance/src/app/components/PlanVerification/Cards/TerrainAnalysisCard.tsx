@@ -32,6 +32,7 @@ import { useMapContext } from "../../../context/mapcontext";
 import { useAreaOfOpsContext } from "../../../context/AreaOfOpsContext";
 import { VerificationCardProps, VerificationStatus } from "../Utils/types";
 import { formatDistance, getTerrainAnalysisStatus } from "../Utils/terrainAnalysis";
+import { useAreaOpsProcessor } from "../../AO/Hooks/useAreaOpsProcessor";
 import { trackEventWithForm as trackEvent } from "../../tracking/tracking";
 import { useLayers } from "../../../hooks/useLayers";
 import dynamic from 'next/dynamic';
@@ -54,17 +55,20 @@ const TerrainAnalysisCard: React.FC<VerificationCardProps> = ({
     results, 
     status: analysisStatus, 
     error: analysisError, 
-    runAnalysis, 
+    runAnalysis,
+    runAOAnalysis,
     clearResults
   } = useObstacleAnalysis();
   const { map, elevationService } = useMapContext();
-  const { aoGeometry } = useAreaOfOpsContext();
+  const { aoGeometry, aoTerrainGrid } = useAreaOfOpsContext();
   const { togglePowerlines } = useLayers();
   
   // Local state
   const [showTerrainPopup, setShowTerrainPopup] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const { generateTerrainGrid, processAreaOfOperations } = useAreaOpsProcessor();
+
   
   // Update analyzing state based on context status
   useEffect(() => {
@@ -166,17 +170,30 @@ const TerrainAnalysisCard: React.FC<VerificationCardProps> = ({
             Area of Operations defined. Run analysis to check terrain in this area.
           </p>
           <button
-            onClick={() => {
+            onClick={async () => {
               trackEvent("run_ao_terrain_analysis", { panel: "terrainanalysis.tsx" });
               setIsAnalyzing(true);
+              setLocalError(null);
               
-              // Implementation of AO processing would go here
-              // This would typically call a function from useAreaOpsProcessor
-              
-              setTimeout(() => {
+              try {
+                // First ensure the terrain grid exists
+                if (!aoTerrainGrid || aoTerrainGrid.length === 0) {
+                  console.log("Generating AO terrain grid before analysis");
+                  await generateTerrainGrid();
+                }
+                
+                // Pass the grid cells to runAOAnalysis
+                if (aoTerrainGrid) {
+                  await runAOAnalysis(aoTerrainGrid);
+                } else {
+                  throw new Error("No terrain grid available for analysis");
+                }
+              } catch (error) {
+                console.error("AO terrain analysis error:", error);
+                setLocalError(error instanceof Error ? error.message : "Unknown error");
+              } finally {
                 setIsAnalyzing(false);
-                console.log("AO terrain analysis complete");
-              }, 1000);
+              }
             }}
             className="flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={isAnalyzing || !map || !elevationService || !hasAOGeometry}
@@ -199,10 +216,10 @@ const TerrainAnalysisCard: React.FC<VerificationCardProps> = ({
             <button 
               onClick={handleRunAnalysis} 
               className="flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={analysisStatus === 'loading' || !map || !elevationService || !flightPlan || !flightPlan.properties?.processed}
+              disabled={isAnalyzing || !map || !elevationService || !flightPlan || !flightPlan.properties?.processed}
             >
               <Mountain className="w-4 h-4" />
-              {analysisStatus === 'loading' ? 'Analyzing...' : 'Analyse Terrain Obstacles'}
+              {isAnalyzing ? 'Analyzing...' : 'Analyse Terrain Obstacles'}
             </button>
             <button 
               onClick={handleTogglePowerlines}
@@ -250,6 +267,7 @@ const TerrainAnalysisCard: React.FC<VerificationCardProps> = ({
     // Analysis complete with results
     if (analysisStatus === 'success' && results) {
       const isSafe = results.minimumClearance >= 0;
+      const isAoOnly = !flightPlan && aoGeometry;
       
       return (
         <div>
@@ -260,31 +278,51 @@ const TerrainAnalysisCard: React.FC<VerificationCardProps> = ({
                 {results.minimumClearance.toFixed(1)}m
               </div>
               
-              <div>Critical Point:</div>
-              <div>
-                {results.criticalPointDistance !== null 
-                  ? formatDistance(results.criticalPointDistance)
-                  : 'N/A'}
-              </div>
+              {!isAoOnly && (
+                <>
+                  <div>Critical Point:</div>
+                  <div>
+                    {results.criticalPointDistance !== null 
+                      ? formatDistance(results.criticalPointDistance)
+                      : 'N/A'}
+                  </div>
+                </>
+              )}
               
               <div>Highest Obstacle:</div>
               <div>{results.highestObstacle.toFixed(1)}m</div>
               
               <div>Status:</div>
               <div className={isSafe ? "text-green-600" : "text-red-600"}>
-                {isSafe ? "✓ Safe flight path" : "✗ Terrain collision detected"}
+                {isSafe 
+                  ? isAoOnly 
+                    ? "✓ Safe operational area" 
+                    : "✓ Safe flight path"
+                  : isAoOnly 
+                    ? "✗ Terrain obstacle detected in AO" 
+                    : "✗ Terrain collision detected"
+                }
               </div>
+              
+              {isAoOnly && (
+                <>
+                  <div>Reference Altitude:</div>
+                  <div>{results.flightAltitudes[0].toFixed(1)}m</div>
+                </>
+              )}
             </div>
           </div>
           
           <div className="flex flex-col gap-2">
-            <button
-              onClick={openDetailedAnalysis}
-              className="flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors"
-            >
-              <Mountain className="w-4 h-4" />
-              View Detailed Analysis
-            </button>
+            {!isAoOnly && (
+              <button
+                onClick={openDetailedAnalysis}
+                className="flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors"
+              >
+                <Mountain className="w-4 h-4" />
+                View Detailed Analysis
+              </button>
+            )}
             
             <button 
               onClick={handleTogglePowerlines}
@@ -296,7 +334,7 @@ const TerrainAnalysisCard: React.FC<VerificationCardProps> = ({
         </div>
       );
     }
-    
+
     // Default fallback
     return (
       <div>

@@ -6,7 +6,7 @@ import distance from "@turf/distance";
 import { useMarkersContext } from "../../../../context/MarkerContext";
 import { useLOSAnalysis } from "../../../../context/LOSAnalysisContext";
 import { useMapContext } from "../../../../context/mapcontext";
-import type { GridAnalysisRef } from "../../../../services/GridAnalysis/GridAnalysisController";
+import type { GridAnalysisRef } from "../../Services/GridAnalysis/GridAnalysisController";
 import { trackEventWithForm as trackEvent } from "../../../tracking/tracking";
 import { LocationData } from "../../../../types/LocationData";
 import { AnalysisResults } from "../../../../context/LOSAnalysisContext";

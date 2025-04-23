@@ -280,7 +280,7 @@ const LOSAnalysisCard: React.FC<VerificationCardProps> = ({
                 <span className="text-xs text-red-600 hover:text-red-700 transition-colors">Guide</span>
               </a>
             </div>
-            <p className="text-sm text-gray-500">Verify communication coverage</p>
+            <p className="text-sm text-gray-500">Verify visibility and communication coverage</p>
           </div>
         </div>
       </button>

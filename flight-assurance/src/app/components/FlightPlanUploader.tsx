@@ -13,7 +13,7 @@ import React, { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 import { useFlightPlanContext } from "../context/FlightPlanContext";
 import { useMapContext } from "../context/mapcontext";
-import { useFlightPlanProcessor } from "../hooks/useFlightPlanProcessor";
+import { useFlightPlanProcessor } from "../components/Map/Hooks/useFlightPlanProcessor";
 import toGeoJSON from "@mapbox/togeojson";
 import JSZip from "jszip";
 import { trackEventWithForm as trackEvent } from "./tracking/tracking";

@@ -1,7 +1,7 @@
 // src/context/LOSAnalysisContext.tsx
 "use client";
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { StationLOSResult } from '../types/GridAnalysisTypes';
+import { StationLOSResult } from '../components/Analyses/Types/GridAnalysisTypes';
 
 // ======== Type Definitions ========
 

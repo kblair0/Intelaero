@@ -1,10 +1,10 @@
 // src/hooks/useAreaOpsProcessor.ts
 import { useCallback } from 'react';
 import * as turf from '@turf/turf';
-import { useAreaOfOpsContext } from '../context/AreaOfOpsContext';
-import { useMapContext } from '../context/mapcontext';
-import { layerManager } from '../services/LayerManager';
-import type { GridCell } from '../context/AreaOfOpsContext';
+import { useAreaOfOpsContext } from '../../../context/AreaOfOpsContext';
+import { useMapContext } from '../../../context/mapcontext';
+import { layerManager } from '../../../services/LayerManager';
+import type { GridCell } from '../../../context/AreaOfOpsContext';
 
 /**
  * A hook for processing Area of Operations data

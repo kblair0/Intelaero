@@ -14,7 +14,7 @@
  */
 
 import React, { useRef, useContext } from 'react';
-import { useMarkers } from '../../hooks/useMarkers';
+import { useMarkers } from './Hooks/useMarkers';
 import { useMapContext } from '../../context/mapcontext';
 import { useLOSAnalysis } from '../../context/LOSAnalysisContext';
 import { GridAnalysisRef } from '../Analysis/GridAnalysisController';

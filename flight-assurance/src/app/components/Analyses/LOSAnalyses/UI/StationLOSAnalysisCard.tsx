@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useMarkersContext } from "../../../../context/MarkerContext";
 import { useLOSAnalysis } from "../../../../context/LOSAnalysisContext";
 import { useMapContext } from "../../../../context/mapcontext";
-import type { GridAnalysisRef } from "../../../../services/GridAnalysis/GridAnalysisController";
+import type { GridAnalysisRef } from "../../Services/GridAnalysis/GridAnalysisController";
 import { StationLOSResult, LOSProfilePoint } from "../../../StationLOSAnalysis";
 import { trackEventWithForm as trackEvent } from "../../../tracking/tracking";
 import { Line } from "react-chartjs-2";

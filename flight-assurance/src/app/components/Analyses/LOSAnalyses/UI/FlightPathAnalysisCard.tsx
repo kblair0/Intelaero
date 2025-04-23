@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useLOSAnalysis } from "../../../../context/LOSAnalysisContext";
 import { useMapContext } from "../../../../context/mapcontext";
-import type { GridAnalysisRef } from "../../../../services/GridAnalysis/GridAnalysisController";
+import type { GridAnalysisRef } from "../../Services/GridAnalysis/GridAnalysisController";
 import { trackEventWithForm as trackEvent } from "../../../tracking/tracking";
 import { layerManager, MAP_LAYERS } from "../../../../services/LayerManager";
 

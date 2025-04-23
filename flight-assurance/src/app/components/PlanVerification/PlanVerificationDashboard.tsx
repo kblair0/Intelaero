@@ -211,6 +211,19 @@ const PlanVerificationDashboard: React.FC<PlanVerificationDashboardProps> = ({
         onToggleExpanded={() => setExpandedSection(expandedSection === 'basic' ? null : 'basic')}
         flightPlan={flightPlan}
       />
+
+      <LOSAnalysisCard
+        isExpanded={expandedSection === 'los'}
+        onToggleExpanded={() => setExpandedSection(expandedSection === 'los' ? null : 'los')}
+        flightPlan={flightPlan}
+        onTogglePanel={onTogglePanel}
+      />
+            
+      <TerrainAnalysisCard
+        isExpanded={expandedSection === 'terrain'}
+        onToggleExpanded={() => setExpandedSection(expandedSection === 'terrain' ? null : 'terrain')}
+        flightPlan={flightPlan}
+      />
       
       <EnergyAnalysisCard 
         isExpanded={expandedSection === 'energy'}
@@ -218,19 +231,7 @@ const PlanVerificationDashboard: React.FC<PlanVerificationDashboardProps> = ({
         flightPlan={flightPlan}
         onTogglePanel={onTogglePanel}
       />
-      
-      <TerrainAnalysisCard
-        isExpanded={expandedSection === 'terrain'}
-        onToggleExpanded={() => setExpandedSection(expandedSection === 'terrain' ? null : 'terrain')}
-        flightPlan={flightPlan}
-      />
-      
-      <LOSAnalysisCard
-        isExpanded={expandedSection === 'los'}
-        onToggleExpanded={() => setExpandedSection(expandedSection === 'los' ? null : 'los')}
-        flightPlan={flightPlan}
-        onTogglePanel={onTogglePanel}
-      />
+
     </div>
   );
 };

@@ -3,7 +3,7 @@
 // and displays measurement results
 
 import React from 'react';
-import { useMeasurement } from '../../hooks/useMeasurement';
+import { useMeasurement } from '../Map/Hooks/useMeasurement';
 import { Ruler, X, Trash2 } from 'lucide-react';
 import { trackEventWithForm as trackEvent } from '../../components/tracking/tracking';
 

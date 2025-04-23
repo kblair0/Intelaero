@@ -10,17 +10,17 @@
 import { useCallback, useState, useRef } from 'react';
 import mapboxgl from 'mapbox-gl';
 import * as turf from '@turf/turf';
-import { useMapContext } from '../context/mapcontext';
-import { useMarkersContext } from '../context/MarkerContext';
-import { useLOSAnalysis } from '../context/LOSAnalysisContext';
-import { layerManager, MAP_LAYERS } from '../services/LayerManager';
+import { useMapContext } from '../../../context/mapcontext';
+import { useMarkersContext } from '../../../context/MarkerContext';
+import { useLOSAnalysis } from '../../../context/LOSAnalysisContext';
+import { layerManager, MAP_LAYERS } from '../../../services/LayerManager';
 import { 
   generateGrid,
   checkLineOfSight,
   getLOSProfile,
   generateCombinedBoundingBox,
   createError
-} from '../utils/gridAnalysisUtils';
+} from '../Utils/gridAnalysisUtils';
 import {
   AnalysisResults,
   GridCell,
@@ -32,8 +32,8 @@ import {
   AnalysisType,
   Coordinates2D,
   Coordinates3D
-} from '../types/GridAnalysisTypes';
-import { FlightPlanData } from '../context/FlightPlanContext';
+} from '../Types/GridAnalysisTypes';
+import { FlightPlanData } from '../../../context/FlightPlanContext';
 
 interface UseGridAnalysisOptions {
   onProgress?: (progress: number) => void;

@@ -36,7 +36,7 @@ const HomeContent = () => {
   const { flightPlan, setFlightPlan } = useFlightPlanContext();
   const { aoGeometry } = useAreaOfOpsContext();
 
-  const togglePanel = (panel: "energy" | "los") => {
+  const togglePanel = (panel: "energy" | "los" | null) => {
     setActivePanel((prev) => (prev === panel ? null : panel));
   };
 
@@ -163,24 +163,22 @@ const HomeContent = () => {
 }
 export default function Home() {
   return (
-    <MapProvider>  {/* Move this to the outermost level */}
-      <FlightPlanProvider>
-        <FlightConfigurationProvider>
-          <MarkerProvider>
-            <LOSAnalysisProvider>
-              <ObstacleAnalysisProvider>
-                <AreaOfOpsProvider>
-                  <AnalysisControllerProvider>  {/* Move this here */}
-
-                      <HomeContent />
-
+    <MapProvider>
+      <AreaOfOpsProvider>
+        <FlightPlanProvider>
+          <FlightConfigurationProvider>
+            <MarkerProvider>
+              <LOSAnalysisProvider>
+                <ObstacleAnalysisProvider>
+                  <AnalysisControllerProvider>
+                    <HomeContent />
                   </AnalysisControllerProvider>
-                </AreaOfOpsProvider>
-              </ObstacleAnalysisProvider>
-            </LOSAnalysisProvider>
-          </MarkerProvider>
-        </FlightConfigurationProvider>
-      </FlightPlanProvider>
+                </ObstacleAnalysisProvider>
+              </LOSAnalysisProvider>
+            </MarkerProvider>
+          </FlightConfigurationProvider>
+        </FlightPlanProvider>
+      </AreaOfOpsProvider>
     </MapProvider>
   );
 }

@@ -2,10 +2,10 @@
 "use client";
 import { useRef, useCallback } from 'react';
 import mapboxgl from 'mapbox-gl';
-import { useMarkersContext } from '../context/MarkerContext';
-import { LocationData } from '../types/LocationData';
-import { createMarkerPopup } from '../utils/markerPopup';
-import { layerManager, MAP_LAYERS } from '../services/LayerManager';
+import { useMarkersContext } from '../../../context/MarkerContext';
+import { LocationData } from '../../../types/LocationData';
+import { createMarkerPopup } from '../Utils/markerPopup';
+import { layerManager, MAP_LAYERS } from '../../../services/LayerManager';
 
 type MarkerType = 'gcs' | 'observer' | 'repeater';
 

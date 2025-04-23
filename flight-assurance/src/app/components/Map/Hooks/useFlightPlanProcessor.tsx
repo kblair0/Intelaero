@@ -1,8 +1,8 @@
 "use client";
 import { useCallback, useState } from 'react';
 import * as turf from '@turf/turf';
-import { FlightPlanData, WaypointData } from '../context/FlightPlanContext';
-import { useMapContext } from '../context/mapcontext';
+import { FlightPlanData, WaypointData } from '../../../context/FlightPlanContext';
+import { useMapContext } from '../../../context/mapcontext';
 
 /**
  * Hook to process flight plans, integrating elevation data using ElevationService.
