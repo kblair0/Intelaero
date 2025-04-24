@@ -19,6 +19,10 @@ import {
   LOSProfilePoint, 
   LocationData 
 } from '../Types/GridAnalysisTypes';
+
+// Define BBox type locally to avoid import issues
+type BBox = [number, number, number, number] | [number, number, number, number, number, number];
+
 /**
  * Creates a normalized error object for grid analysis
  */
@@ -226,47 +230,53 @@ export async function fetchTerrainElevation(lng: number, lat: number): Promise<n
  */
 export async function generateGrid(
   queryTerrainElevation: (coords: Coordinates2D) => Promise<number>,
-  batchGetElevations?: (points: Coordinates2D[], skipPreload?: boolean) => Promise<number[]>,
   gridSize: number,
+  batchGetElevations?: (points: Coordinates2D[], skipPreload?: boolean) => Promise<number[]>,
   options: {
     center?: Coordinates2D;
     range?: number;
     flightPath?: GeoJSON.Feature<GeoJSON.LineString>;
     elosGridRange?: number;
     preloadComplete?: boolean;
-  }
+  } = {}
 ): Promise<GridCell[]> {
   try {
     let grid;
 
     // Marker-based grid generation
     if (options.center && options.range) {
+      if (typeof options.range !== 'number' || options.range <= 0 || isNaN(options.range)) {
+        throw createError('Invalid range for marker grid', 'INVALID_INPUT', { range: options.range });
+      }
       const point = turf.point(options.center);
       const buffer = turf.buffer(point, options.range, { units: 'meters' });
-      const bounds = turf.bbox(buffer);
+      if (!buffer) {
+        throw createError('Failed to create buffer for marker grid', 'GRID_GENERATION', { center: options.center, range: options.range });
+      }
+      const bounds = turf.bbox(buffer) as [number, number, number, number];
 
       if (!isValidBounds(bounds)) {
-        throw createError('Invalid bounds for marker grid', 'GRID_GENERATION');
+        throw createError('Invalid bounds for marker grid', 'GRID_GENERATION', bounds);
       }
 
       grid = turf.pointGrid(bounds, gridSize, {
         units: 'meters',
         mask: buffer
       });
-      
     } 
     // Flight path grid generation
     else if (options.flightPath && options.elosGridRange) {
+      if (typeof options.elosGridRange !== 'number' || options.elosGridRange <= 0 || isNaN(options.elosGridRange)) {
+        throw createError('Invalid elosGridRange for flight path grid', 'INVALID_INPUT', { elosGridRange: options.elosGridRange });
+      }
       const lineString = options.flightPath;
-
-      // Generate bounds and grid
-      const bounds = turf.bbox(lineString);
+      const bounds = turf.bbox(lineString) as [number, number, number, number];
       const margin = turf.lengthToDegrees(options.elosGridRange, 'meters');
-      const extendedBounds = [
+      const extendedBounds: BBox = [
         bounds[0] - margin,
         bounds[1] - margin,
         bounds[2] + margin,
-        bounds[3] + margin,
+        bounds[3] + margin
       ];
 
       if (!isValidBounds(extendedBounds)) {
@@ -281,7 +291,7 @@ export async function generateGrid(
       grid = turf.pointGrid(extendedBounds, gridSize, maskOptions);
     } 
     else {
-      throw createError('Invalid grid generation parameters', 'GRID_GENERATION');
+      throw createError('Invalid grid generation parameters', 'INVALID_INPUT');
     }
 
     // Process grid cells with more efficient batching
@@ -294,11 +304,9 @@ export async function generateGrid(
       
       if (batchGetElevations) {
         // Use batch elevation query when available
-        // Pass the preloadComplete flag to avoid redundant preloading
         const batchPoints = batch.map(point => point.geometry.coordinates as Coordinates2D);
         const batchElevations = await batchGetElevations(batchPoints, options.preloadComplete);
         
-        // Create cells with batch-queried elevations
         const batchResults = batch.map((point, batchIndex) => {
           const index = i + batchIndex;
           const cell = turf.circle(point.geometry.coordinates, gridSize / 2, {
@@ -333,7 +341,7 @@ export async function generateGrid(
               const elevation = await queryTerrainElevation(point.geometry.coordinates as Coordinates2D)
                 .catch((e) => {
                   console.warn('Elevation fetch error for point:', point.geometry.coordinates, e);
-                  return 0; // Fallback elevation
+                  return 0;
                 });
 
               return {
@@ -380,23 +388,23 @@ export async function checkFlightPathLOS(
     sampleCount?: number; 
     minimumOffset?: number;
     altitudeMode?: "terrain" | "relative" | "absolute";
-  } = {}
-    ): Promise<number> {
+  }
+): Promise<number> {
+  const { sampleCount = 20, minimumOffset = 1, altitudeMode = "absolute" } = options;
 
-      if (!Array.isArray(sourcePoint) || sourcePoint.length !== 3 || 
+  if (!Array.isArray(sourcePoint) || sourcePoint.length !== 3 || 
       sourcePoint.some(v => typeof v !== 'number' || isNaN(v))) {
     throw createError('Source point must be a valid [lon, lat, alt] array', 'INVALID_INPUT');
-    }
+  }
 
-    if (!Array.isArray(targetPoints) || !targetPoints.every(point => 
+  if (!Array.isArray(targetPoints) || !targetPoints.every(point => 
       Array.isArray(point) && point.length === 3 && point.every(v => typeof v === 'number' && !isNaN(v)))) {
     throw createError('Target points must be an array of [lon, lat, alt] arrays', 'INVALID_INPUT');
-    }
+  }
 
-    const altitudeMode = options.altitudeMode || "absolute";
-    console.log(`[Debug] Flight LOS check with altitudeMode: ${altitudeMode}, points: ${targetPoints.length}`);
+  console.log(`[Debug] Flight LOS check with altitudeMode: ${altitudeMode}, points: ${targetPoints.length}`);
 
-    let visibleCount = 0;
+  let visibleCount = 0;
 
   for (const targetPoint of targetPoints) {
     try {
@@ -406,32 +414,29 @@ export async function checkFlightPathLOS(
           const terrainElevation = await queryTerrainElevation([point[0], point[1]]);
           console.log(`[Debug] Point [${point[0].toFixed(5)}, ${point[1].toFixed(5)}]: terrain=${terrainElevation.toFixed(1)}m, point_alt=${point[2]}m, adjusted=${(terrainElevation + point[2]).toFixed(1)}m`);
           
-          // Create adjusted target point with correct absolute altitude
           const adjustedTargetPoint: Coordinates3D = [
             targetPoint[0],
             targetPoint[1],
-            terrainElevation + targetPoint[2] // Add AGL height to terrain elevation
+            terrainElevation + targetPoint[2]
           ];
           
           const isVisible = await checkSingleLOS(
             queryTerrainElevation,
             sourcePoint,
             adjustedTargetPoint,
-            options
+            { sampleCount, minimumOffset }
           );
           if (isVisible) visibleCount++;
         } else {
-          // For absolute mode, use the coordinates as is
           const isVisible = await checkSingleLOS(
             queryTerrainElevation,
             sourcePoint,
             targetPoint,
-            options
+            { sampleCount, minimumOffset }
           );
           if (isVisible) visibleCount++;
         }
       } else {
-        // For points after the first few we're logging
         if (altitudeMode === "terrain" || altitudeMode === "relative") {
           const terrainElevation = await queryTerrainElevation([targetPoint[0], targetPoint[1]]);
           const adjustedTargetPoint: Coordinates3D = [
@@ -444,7 +449,7 @@ export async function checkFlightPathLOS(
             queryTerrainElevation,
             sourcePoint,
             adjustedTargetPoint,
-            options
+            { sampleCount, minimumOffset }
           );
           if (isVisible) visibleCount++;
         } else {
@@ -452,13 +457,14 @@ export async function checkFlightPathLOS(
             queryTerrainElevation,
             sourcePoint,
             targetPoint,
-            options
+            { sampleCount, minimumOffset }
           );
           if (isVisible) visibleCount++;
         }
       }
     } catch (e) {
-      // Error handling
+      console.warn('Error checking LOS for point:', targetPoint, e);
+      // Continue to next point
     }
   }
 
@@ -517,7 +523,7 @@ export async function getLOSProfile(
  */
 export function generateCombinedBoundingBox(
   stations: Array<{ location: LocationData; range: number }>
-): turf.BBox {
+): BBox {
   if (!stations.length) {
     throw new Error('No stations provided for analysis');
   }
@@ -525,10 +531,13 @@ export function generateCombinedBoundingBox(
   const bboxes = stations.map((station) => {
     const point = turf.point([station.location.lng, station.location.lat]);
     const buffer = turf.buffer(point, station.range, { units: 'meters' });
-    return turf.bbox(buffer);
+    if (!buffer) {
+      throw createError('Failed to create buffer for station', 'GRID_GENERATION', { location: station.location, range: station.range });
+    }
+    return turf.bbox(buffer) as [number, number, number, number];
   });
 
-  const combinedBbox: turf.BBox = [180, 90, -180, -90];
+  const combinedBbox: BBox = [180, 90, -180, -90];
   bboxes.forEach((bbox) => {
     combinedBbox[0] = Math.min(combinedBbox[0], bbox[0]);
     combinedBbox[1] = Math.min(combinedBbox[1], bbox[1]);

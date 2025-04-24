@@ -34,6 +34,11 @@ export interface FlightPathVisibilityResults {
   visibleLength: number;
   totalLength: number;
   coveragePercentage: number;
+  stationStats?: Array<{
+    stationType: 'gcs' | 'observer' | 'repeater';
+    visibleLength: number;
+    coveragePercentage: number;
+  }>;
 }
 
 // Marker Configuration Types

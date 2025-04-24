@@ -5,7 +5,7 @@ import { useMarkersContext } from "../../../../context/MarkerContext";
 import { useLOSAnalysis } from "../../../../context/LOSAnalysisContext";
 import { useMapContext } from "../../../../context/mapcontext";
 import type { GridAnalysisRef } from "../../Services/GridAnalysis/GridAnalysisController";
-import { StationLOSResult, LOSProfilePoint } from "../../../StationLOSAnalysis";
+import { StationLOSResult, LOSProfilePoint } from "../../Types/GridAnalysisTypes";
 import { trackEventWithForm as trackEvent } from "../../../tracking/tracking";
 import { Line } from "react-chartjs-2";
 import { Chart, registerables } from "chart.js";

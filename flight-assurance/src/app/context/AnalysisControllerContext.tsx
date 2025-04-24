@@ -1,6 +1,6 @@
 "use client";
 import React, { createContext, useContext, ReactNode, useRef } from "react";
-import type { GridAnalysisRef } from "../services/GridAnalysis/GridAnalysisController";
+import type { GridAnalysisRef } from "../components/Analyses/Services/GridAnalysis/GridAnalysisController";
 
 interface AnalysisControllerContextType {
   gridAnalysisRef: React.RefObject<GridAnalysisRef>;

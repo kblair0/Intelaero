@@ -103,6 +103,10 @@ export const useAreaOpsProcessor = () => {
         
         const buffered = turf.buffer(cleanedLine, bufferDistance / 1000, { units: 'kilometers' });
         
+        if (!buffered) {
+          throw new Error("Buffering resulted in undefined geometry");
+        }
+        
         const featureCollection = turf.featureCollection([buffered]);
         
         console.log(`Generated AO from flight plan with ${coordinates.length} points and ${bufferDistance}m buffer`);
@@ -173,7 +177,7 @@ export const useAreaOpsProcessor = () => {
       const bbox = turf.bbox(sourceGeometry);
       const grid = turf.pointGrid(bbox, gridSize, {
         units: "meters",
-        mask: sourceGeometry,
+        mask: sourceGeometry as GeoJSON.Feature<GeoJSON.Polygon>,
       });
       
       const cells: GridCell[] = [];
