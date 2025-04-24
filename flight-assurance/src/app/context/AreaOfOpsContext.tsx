@@ -16,6 +16,8 @@ interface AreaOfOpsContextType {
   setAoGeometry: (geometry: GeoJSON.FeatureCollection | null) => void;
   aoTerrainGrid: GridCell[] | null;
   setAoTerrainGrid: (grid: GridCell[] | null) => void;
+  bufferDistance: number; // Add bufferDistance
+  setBufferDistance: (distance: number) => void; // Add setter
 }
 
 const AreaOfOpsContext = createContext<AreaOfOpsContextType | undefined>(undefined);
@@ -23,6 +25,7 @@ const AreaOfOpsContext = createContext<AreaOfOpsContextType | undefined>(undefin
 export const AreaOfOpsProvider = ({ children }: { children: ReactNode }) => {
   const [aoGeometry, setAoGeometry] = useState<GeoJSON.FeatureCollection | null>(null);
   const [aoTerrainGrid, setAoTerrainGrid] = useState<GridCell[] | null>(null);
+  const [bufferDistance, setBufferDistance] = useState<number>(500);  // Default buffer distance
 
   return (
     <AreaOfOpsContext.Provider
@@ -30,7 +33,9 @@ export const AreaOfOpsProvider = ({ children }: { children: ReactNode }) => {
         aoGeometry,
         setAoGeometry,
         aoTerrainGrid,
-        setAoTerrainGrid
+        setAoTerrainGrid,
+        bufferDistance,
+        setBufferDistance,  // Provide setter for buffer distance
       }}
     >
       {children}

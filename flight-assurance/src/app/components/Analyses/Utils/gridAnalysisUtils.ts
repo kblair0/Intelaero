@@ -18,8 +18,7 @@ import {
   GridCell, 
   LOSProfilePoint, 
   LocationData 
-} from '../types/GridAnalysisTypes';
-
+} from '../Types/GridAnalysisTypes';
 /**
  * Creates a normalized error object for grid analysis
  */
@@ -37,6 +36,93 @@ export function createError(
   error.code = code;
   error.details = details;
   return error;
+}
+
+/**
+ * Checks LOS between a source point and a single target point.
+ * @param queryTerrainElevation Function to query terrain elevation
+ * @param sourcePoint Source coordinates [lon, lat, alt]
+ * @param targetPoint Target coordinates [lon, lat, alt]
+ * @param options Sampling options
+ * @returns True if LOS is clear
+ */
+async function checkSingleLOS(
+  queryTerrainElevation: (coords: Coordinates2D) => Promise<number>,
+  sourcePoint: Coordinates3D,
+  targetPoint: Coordinates3D,
+  options: { sampleCount?: number; minimumOffset?: number } = {}
+): Promise<boolean> {
+  const [sourceLng, sourceLat, sourceAlt] = sourcePoint;
+  const [targetLng, targetLat, targetAlt] = targetPoint;
+
+  // Validate inputs
+  if (sourcePoint.some(v => typeof v !== 'number' || isNaN(v)) ||
+      targetPoint.some(v => typeof v !== 'number' || isNaN(v))) {
+    console.error(`[${new Date().toISOString()}] [gridAnalysisUtils.ts] Invalid coordinates:`, { sourcePoint, targetPoint });
+    throw createError('Invalid source or target coordinates', 'INVALID_INPUT');
+  }
+
+  const minimumOffset = options.minimumOffset ?? 1;
+  const distance = turf.distance([sourceLng, sourceLat], [targetLng, targetLat], { units: 'meters' });
+  const sampleCount = options.sampleCount ?? Math.min(20, Math.max(5, Math.ceil(distance / 50)));
+
+  // Cache elevations for better performance
+  const elevationCache = new Map<string, number>();
+  const getCachedElevation = async (coords: Coordinates2D): Promise<number> => {
+    const cacheKey = `${coords[0].toFixed(4)}|${coords[1].toFixed(4)}`;
+    if (elevationCache.has(cacheKey)) return elevationCache.get(cacheKey)!;
+    const elevation = await queryTerrainElevation(coords);
+    elevationCache.set(cacheKey, elevation);
+    return elevation;
+  };
+
+  // Add the minimum offset to target altitude
+  const adjustedTargetAlt = targetAlt + minimumOffset;
+
+  // Check each sample point along the line
+  for (let i = 1; i < sampleCount; i++) {
+    const fraction = i / sampleCount;
+    
+    // Interpolate position
+    const lng = sourceLng + fraction * (targetLng - sourceLng);
+    const lat = sourceLat + fraction * (targetLat - sourceLat);
+    
+    // Calculate height along the line of sight at this point
+    const losHeight = sourceAlt + fraction * (adjustedTargetAlt - sourceAlt);
+    
+    // Get terrain height at this point
+    const terrainHeight = await getCachedElevation([lng, lat]) ?? 0;
+    
+    // Debug logging for troubleshooting (can be removed in production)
+    if (i === Math.floor(sampleCount / 2)) {
+      console.log(`[Debug] LOS midpoint check: fraction=${fraction.toFixed(2)}, terrain=${terrainHeight.toFixed(1)}m, los=${losHeight.toFixed(1)}m, clear=${terrainHeight <= losHeight}`);
+    }
+    
+    // If terrain is higher than LOS, the line is blocked
+    if (terrainHeight > losHeight) {
+      return false;
+    }
+  }
+  
+  // If we've checked all sample points and none block the line, we have LOS
+  return true;
+}
+
+/**
+ * Checks LOS for Station Analysis from a station to a single grid cell.
+ * @param queryTerrainElevation Function to query terrain elevation
+ * @param sourcePoint Station coordinates [lon, lat, alt]
+ * @param targetPoint Grid cell center [lon, lat, alt]
+ * @param options Sampling options
+ * @returns True if LOS is clear
+ */
+export async function checkStationLOS(
+  queryTerrainElevation: (coords: Coordinates2D) => Promise<number>,
+  sourcePoint: Coordinates3D,
+  targetPoint: Coordinates3D,
+  options: { sampleCount?: number; minimumOffset?: number } = {}
+): Promise<boolean> {
+  return await checkSingleLOS(queryTerrainElevation, sourcePoint, targetPoint, options);
 }
 
 /**
@@ -137,11 +223,6 @@ export async function fetchTerrainElevation(lng: number, lat: number): Promise<n
 /**
  * Generates a grid of cells around a point or flight path.
  * Enhanced to preload elevation data for improved performance.
- * 
- * @param queryTerrainElevation - Function to retrieve terrain elevation
- * @param gridSize - Size of each grid cell in meters
- * @param options - Configuration options including center, range, flight path
- * @returns Promise resolving to array of grid cells
  */
 export async function generateGrid(
   queryTerrainElevation: (coords: Coordinates2D) => Promise<number>,
@@ -152,7 +233,7 @@ export async function generateGrid(
     range?: number;
     flightPath?: GeoJSON.Feature<GeoJSON.LineString>;
     elosGridRange?: number;
-    preloadComplete?: boolean; // Added parameter
+    preloadComplete?: boolean;
   }
 ): Promise<GridCell[]> {
   try {
@@ -163,7 +244,6 @@ export async function generateGrid(
       const point = turf.point(options.center);
       const buffer = turf.buffer(point, options.range, { units: 'meters' });
       const bounds = turf.bbox(buffer);
-      console.log(`[${new Date().toISOString()}] [gridAnalysisUtils.ts] generateGrid called with options:`, options);
 
       if (!isValidBounds(bounds)) {
         throw createError('Invalid bounds for marker grid', 'GRID_GENERATION');
@@ -174,12 +254,10 @@ export async function generateGrid(
         mask: buffer
       });
       
-      console.log('Generated marker grid features:', grid.features.length);
     } 
     // Flight path grid generation
     else if (options.flightPath && options.elosGridRange) {
       const lineString = options.flightPath;
-      console.log('Generated LineString:', lineString);
 
       // Generate bounds and grid
       const bounds = turf.bbox(lineString);
@@ -201,14 +279,13 @@ export async function generateGrid(
       };
 
       grid = turf.pointGrid(extendedBounds, gridSize, maskOptions);
-      console.log('Generated grid features:', grid.features.length);
     } 
     else {
       throw createError('Invalid grid generation parameters', 'GRID_GENERATION');
     }
 
     // Process grid cells with more efficient batching
-    const batchSize = 100; // Larger batch size for parallel processing
+    const batchSize = 100;
     const cells: GridCell[] = [];
     
     // Process grid cells in batches for better performance
@@ -292,70 +369,103 @@ export async function generateGrid(
 }
 
 /**
- * Checks line of sight between two 3D points, sampling terrain in between.
- * Enhanced with optimized sampling strategy and caching.
+ * Checks LOS for Flight Path Analysis from a source to multiple target points.
+ * Returns the percentage of visible points.
  */
-export async function checkLineOfSight(
+export async function checkFlightPathLOS(
   queryTerrainElevation: (coords: Coordinates2D) => Promise<number>,
   sourcePoint: Coordinates3D,
-  targetPoint: Coordinates3D,
-  options: { sampleCount?: number; minimumOffset?: number } = {}
-): Promise<boolean> {
-  const [sourceLng, sourceLat, sourceAlt] = sourcePoint;
-  const [targetLng, targetLat, targetAlt] = targetPoint;
-  
-  const minimumOffset = options.minimumOffset ?? 1;
-  const distance = turf.distance(
-    [sourceLng, sourceLat],
-    [targetLng, targetLat],
-    { units: 'meters' }
-  );
+  targetPoints: Coordinates3D[],
+  options: { 
+    sampleCount?: number; 
+    minimumOffset?: number;
+    altitudeMode?: "terrain" | "relative" | "absolute";
+  } = {}
+    ): Promise<number> {
 
-  // Adaptive sampling: fewer samples for short distances
-  const sampleCount = options.sampleCount ?? 
-    Math.min(20, Math.max(5, Math.ceil(distance / 50))); // Cap at 20, min 5
-
-  // Local cache for elevation queries within this LOS check
-  const elevationCache = new Map<string, number>();
-
-  const getCachedElevation = async (coords: Coordinates2D): Promise<number> => {
-    const cacheKey = `${coords[0].toFixed(4)}|${coords[1].toFixed(4)}`;
-    if (elevationCache.has(cacheKey)) {
-      return elevationCache.get(cacheKey)!;
+      if (!Array.isArray(sourcePoint) || sourcePoint.length !== 3 || 
+      sourcePoint.some(v => typeof v !== 'number' || isNaN(v))) {
+    throw createError('Source point must be a valid [lon, lat, alt] array', 'INVALID_INPUT');
     }
-    const elevation = await queryTerrainElevation(coords);
-    elevationCache.set(cacheKey, elevation);
-    return elevation;
-  };
 
-  // Check midpoint first
-  const midpointFraction = 0.5;
-  const midLng = sourceLng + midpointFraction * (targetLng - sourceLng);
-  const midLat = sourceLat + midpointFraction * (targetLat - sourceLat);
-  const midHeight = sourceAlt - ((sourceAlt - (targetAlt + minimumOffset)) * midpointFraction);
-  
-  const midTerrainHeight = await getCachedElevation([midLng, midLat]) ?? 0;
-  if (midTerrainHeight > midHeight) {
-    return false;
+    if (!Array.isArray(targetPoints) || !targetPoints.every(point => 
+      Array.isArray(point) && point.length === 3 && point.every(v => typeof v === 'number' && !isNaN(v)))) {
+    throw createError('Target points must be an array of [lon, lat, alt] arrays', 'INVALID_INPUT');
+    }
+
+    const altitudeMode = options.altitudeMode || "absolute";
+    console.log(`[Debug] Flight LOS check with altitudeMode: ${altitudeMode}, points: ${targetPoints.length}`);
+
+    let visibleCount = 0;
+
+  for (const targetPoint of targetPoints) {
+    try {
+      if (targetPoints.length > 0 && visibleCount < 3) {
+        const point = targetPoint;
+        if (altitudeMode === "terrain" || altitudeMode === "relative") {
+          const terrainElevation = await queryTerrainElevation([point[0], point[1]]);
+          console.log(`[Debug] Point [${point[0].toFixed(5)}, ${point[1].toFixed(5)}]: terrain=${terrainElevation.toFixed(1)}m, point_alt=${point[2]}m, adjusted=${(terrainElevation + point[2]).toFixed(1)}m`);
+          
+          // Create adjusted target point with correct absolute altitude
+          const adjustedTargetPoint: Coordinates3D = [
+            targetPoint[0],
+            targetPoint[1],
+            terrainElevation + targetPoint[2] // Add AGL height to terrain elevation
+          ];
+          
+          const isVisible = await checkSingleLOS(
+            queryTerrainElevation,
+            sourcePoint,
+            adjustedTargetPoint,
+            options
+          );
+          if (isVisible) visibleCount++;
+        } else {
+          // For absolute mode, use the coordinates as is
+          const isVisible = await checkSingleLOS(
+            queryTerrainElevation,
+            sourcePoint,
+            targetPoint,
+            options
+          );
+          if (isVisible) visibleCount++;
+        }
+      } else {
+        // For points after the first few we're logging
+        if (altitudeMode === "terrain" || altitudeMode === "relative") {
+          const terrainElevation = await queryTerrainElevation([targetPoint[0], targetPoint[1]]);
+          const adjustedTargetPoint: Coordinates3D = [
+            targetPoint[0],
+            targetPoint[1],
+            terrainElevation + targetPoint[2]
+          ];
+          
+          const isVisible = await checkSingleLOS(
+            queryTerrainElevation,
+            sourcePoint,
+            adjustedTargetPoint,
+            options
+          );
+          if (isVisible) visibleCount++;
+        } else {
+          const isVisible = await checkSingleLOS(
+            queryTerrainElevation,
+            sourcePoint,
+            targetPoint,
+            options
+          );
+          if (isVisible) visibleCount++;
+        }
+      }
+    } catch (e) {
+      // Error handling
+    }
   }
 
-  // Check remaining points
-  for (let i = 1; i < sampleCount; i++) {
-    if (i === Math.floor(sampleCount / 2)) continue;
-    
-    const fraction = i / sampleCount;
-    const lng = sourceLng + fraction * (targetLng - sourceLng);
-    const lat = sourceLat + fraction * (targetLat - sourceLat);
-    const interpolatedHeight = 
-      sourceAlt - ((sourceAlt - (targetAlt + minimumOffset)) * fraction);
+  const visibilityPercentage = targetPoints.length > 0 ? (visibleCount / targetPoints.length) * 100 : 0;
+  console.log(`[Debug] Visibility result: ${visibleCount}/${targetPoints.length} = ${visibilityPercentage.toFixed(1)}%`);
 
-    const terrainHeight = await getCachedElevation([lng, lat]) ?? 0;
-    if (terrainHeight > interpolatedHeight) {
-      return false;
-    }
-  }
-
-  return true;
+  return visibilityPercentage;
 }
 
 /**
@@ -370,12 +480,12 @@ export async function getLOSProfile(
   const [sourceLng, sourceLat, sourceAlt] = sourcePoint;
   const [targetLng, targetLat, targetAlt] = targetPoint;
   
-  const minimumOffset = options.minimumOffset ?? 3; // Default minimum offset
+  const minimumOffset = options.minimumOffset ?? 3;
   const point1 = turf.point([sourceLng, sourceLat]);
   const point2 = turf.point([targetLng, targetLat]);
   const totalDistance = turf.distance(point1, point2, { units: 'meters' });
   
-  const sampleDistance = options.sampleDistance ?? 10; // Default 10m between samples
+  const sampleDistance = options.sampleDistance ?? 10;
   const sampleCount = Math.ceil(totalDistance / sampleDistance);
   
   const profile: LOSProfilePoint[] = [];
@@ -412,14 +522,12 @@ export function generateCombinedBoundingBox(
     throw new Error('No stations provided for analysis');
   }
 
-  // For each station, create a buffer (circle) and extract its bbox
   const bboxes = stations.map((station) => {
     const point = turf.point([station.location.lng, station.location.lat]);
     const buffer = turf.buffer(point, station.range, { units: 'meters' });
-    return turf.bbox(buffer); // returns [minLng, minLat, maxLng, maxLat]
+    return turf.bbox(buffer);
   });
 
-  // Combine the individual bboxes
   const combinedBbox: turf.BBox = [180, 90, -180, -90];
   bboxes.forEach((bbox) => {
     combinedBbox[0] = Math.min(combinedBbox[0], bbox[0]);
@@ -428,7 +536,6 @@ export function generateCombinedBoundingBox(
     combinedBbox[3] = Math.max(combinedBbox[3], bbox[3]);
   });
 
-  // Calculate horizontal and vertical distances
   const horizontalDistance = turf.distance(
     [combinedBbox[0], combinedBbox[1]],
     [combinedBbox[2], combinedBbox[1]],
@@ -440,12 +547,10 @@ export function generateCombinedBoundingBox(
     { units: 'meters' }
   );
 
-  // Compute the center
   const centerLng = (combinedBbox[0] + combinedBbox[2]) / 2;
   const centerLat = (combinedBbox[1] + combinedBbox[3]) / 2;
   const center = [centerLng, centerLat];
 
-  // Clamp if too large (>5000m)
   if (horizontalDistance > 5000) {
     const westPoint = turf.destination(center, 2500, 270, { units: 'meters' });
     const eastPoint = turf.destination(center, 2500, 90, { units: 'meters' });

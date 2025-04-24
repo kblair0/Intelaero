@@ -200,7 +200,13 @@ export class ElevationService {
    */
   async getElevation(lon: number, lat: number, maxRetries = 3, retryDelay = 200): Promise<number> {
     const cacheKey = this.key(lon, lat);
-    if (this.cache.has(cacheKey)) return this.cache.get(cacheKey)!;
+    if (this.cache.has(cacheKey)) {
+      const cachedValue = this.cache.get(cacheKey)!;
+      if (cachedValue === 0) {
+        console.warn(`[Debug] Cache returned 0 for [${lon}, ${lat}]`);
+      }
+      return cachedValue;
+    }
 
     // Skip if this query is already in progress (prevents duplicative queries)
     if (this.pendingLoads.has(cacheKey)) {

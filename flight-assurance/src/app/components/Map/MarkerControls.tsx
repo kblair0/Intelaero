@@ -17,7 +17,7 @@ import React, { useRef, useContext } from 'react';
 import { useMarkers } from './Hooks/useMarkers';
 import { useMapContext } from '../../context/mapcontext';
 import { useLOSAnalysis } from '../../context/LOSAnalysisContext';
-import { GridAnalysisRef } from '../Analysis/GridAnalysisController';
+import { GridAnalysisRef } from '../Analyses/Services/GridAnalysis/GridAnalysisController';
 import { trackEventWithForm as trackEvent } from '../tracking/tracking';
 
 const MarkerControls: React.FC = () => {

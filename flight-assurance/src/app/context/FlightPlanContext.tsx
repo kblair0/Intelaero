@@ -96,6 +96,15 @@ export const FlightPlanProvider: React.FC<{ children: ReactNode }> = ({ children
     console.groupCollapsed(`[FlightPlanContext] setFlightPlan (${planId})`);
     console.time('[FlightPlanContext] ⏱ setFlightPlan');
 
+
+    // Add debug log for flight plan data
+    console.log(`[${new Date().toISOString()}] [FlightPlanContext] Flight plan data:`, {
+      featureCount: data.features?.length,
+      geometryType: data.features[0]?.geometry?.type,
+      coordinates: data.features[0]?.geometry?.coordinates,
+      coordinateCount: data.features[0]?.geometry?.coordinates?.length
+    });
+
     // Critical summary of incoming data
     console.log('▶ Incoming summary', {
       features: data.features.length,

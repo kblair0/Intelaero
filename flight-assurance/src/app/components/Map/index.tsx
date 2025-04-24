@@ -168,6 +168,11 @@ useEffect(() => {
       trackEvent('elos_analysis_started', {});
 
       resetLayers();
+      // Import useAreaOpsProcessor here as a local import if used only in this function
+      const { showAreaOfOperations } = require('../AO/Hooks/useAreaOpsProcessor').useAreaOpsProcessor();
+      
+      // Show Area of Operations for the analysis
+      showAreaOfOperations();
 
       await gridAnalysisRef.current.runFlightPathAnalysis();
 

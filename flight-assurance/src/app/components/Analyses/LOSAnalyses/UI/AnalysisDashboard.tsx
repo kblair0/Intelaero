@@ -122,7 +122,7 @@ const AnalysisDashboard: React.FC = () => {
           Verify communication coverage and visibility for your flight plan
         </p>
       </div>
-
+{/* Plan Flightpath Analysis Card removed for now. It's broken and not that useful TBH
       <AnalysisSection
         title="Flight Path Analysis"
         description={descriptions.flight}
@@ -130,8 +130,8 @@ const AnalysisDashboard: React.FC = () => {
         isExpanded={expandedSections.flight}
         onToggle={() => toggleSection("flight")}
       >
-        <FlightPathAnalysisCard gridAnalysisRef={gridAnalysisRef} />
-      </AnalysisSection>
+      <FlightPathAnalysisCard gridAnalysisRef={gridAnalysisRef} />
+      </AnalysisSection>  */}
       
       <AnalysisSection
         title="Station Analysis"

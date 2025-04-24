@@ -108,6 +108,21 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
           console.log(`[${new Date().toISOString()}] [GridArunFlightPathAnalysis] Setting isAnalyzing to true`);
           setIsAnalyzing(true);
           cleanup();
+          // Get the altitude mode from the flight plan
+          const altitudeMode = flightPlan.features[0]?.properties?.waypoints?.[0]?.altitudeMode || "absolute";
+          console.log(`[${new Date().toISOString()}] [GridAnalysisController] Flight plan altitude mode: ${altitudeMode}`);
+          // After getting altitude mode:
+          const waypoints = flightPlan.features[0]?.properties?.waypoints || [];
+          console.log(`[Debug] Flight plan waypoints:`, waypoints);
+          console.log(`[Debug] First coordinate:`, flightPlan.features[0].geometry.coordinates[0]);
+
+          // ADD THIS CODE HERE - DEM source check
+          if (map && map.getSource('mapbox-dem')) {
+            console.log(`[Debug] Mapbox DEM source exists and is loaded: ${map.isSourceLoaded('mapbox-dem')}`);
+          } else {
+            console.error(`[Debug] Mapbox DEM source is missing or not properly configured`);
+          }
+        
           if (map && elevationService) {
             try {
               const coordinates = flightPlan.features[0].geometry.coordinates.map(
@@ -120,7 +135,8 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
           } else {
             console.warn('Map or elevationService not available, skipping preload');
           }
-          const results = await runAnalysis(AnalysisType.FLIGHT_PATH, { flightPlan });
+          const results = await runAnalysis(AnalysisType.FLIGHT_PATH, { flightPlan, altitudeMode });
+
           setResults(results);
           if (onComplete) onComplete(results);
           return results;
@@ -375,7 +391,7 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
           setProgress(0);
         }
       },
-      
+
       abortAnalysis() {
         abortAnalysis();
       },

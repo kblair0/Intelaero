@@ -3,6 +3,7 @@ import { useMapContext } from '../../context/mapcontext';
 import { MAP_LAYERS } from '../../services/LayerManager';
 import { trackEventWithForm as trackEvent } from '../tracking/tracking';
 import { Battery, Radio, GripVertical } from 'lucide-react';
+import { useAreaOpsProcessor } from '../AO/Hooks/useAreaOpsProcessor';
 
 interface LayerControlsProps {
   onToggleDBYD?: () => void;
@@ -20,18 +21,28 @@ const LayerControls: React.FC<LayerControlsProps> = ({
   setShowUploader,
 }) => {
   const { map, toggleLayer } = useMapContext();
+  const { showAreaOfOperations, generateTerrainGrid } = useAreaOpsProcessor();
   const [isTerrainGridVisible, setIsTerrainGridVisible] = useState(false);
   const bydLayerHandlerRef = useRef<{ fetchLayers: () => void } | null>(null);
 
   if (!map) return null;
 
-  const handleToggleTerrainGrid = () => {
+  const handleToggleTerrainGrid = async () => {
+    // Make AO visible and generate terrain grid if not already visible
+    if (!isTerrainGridVisible) {
+      showAreaOfOperations();
+      await generateTerrainGrid();
+    }
+    
     toggleLayer(MAP_LAYERS.AOTERRAIN_GRID);
     setIsTerrainGridVisible(!isTerrainGridVisible);
     trackEvent('toggle_terrain_grid_click', { panel: 'layer-controls' });
   };
 
   const handleDBYDPowerlines = () => {
+    // Show Area of Operations when DBYD is requested
+    showAreaOfOperations();
+    
     if (onToggleDBYD) {
       onToggleDBYD();
     }
@@ -67,7 +78,7 @@ const LayerControls: React.FC<LayerControlsProps> = ({
           Toggle Airspace Overlay ✈️
         </button>
         <button onClick={handleToggleTerrainGrid} className="map-button">
-          {isTerrainGridVisible ? 'Show AO Terrain Grid 🌍' : 'Hide AO Terrain Grid 🌍'}
+          {isTerrainGridVisible ? 'Hide AO Terrain Grid 🌍' : 'Show AO Terrain Grid 🌍'}
         </button>
       </div>
   

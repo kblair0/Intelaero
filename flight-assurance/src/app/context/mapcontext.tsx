@@ -8,7 +8,6 @@ import { ElevationService } from '../services/ElevationService';
  *  Critical debug logging
  *  (No functional behaviour altered)
  * ────────────────────────────*/
-const log = (...args: unknown[]) => console.log('[MapContext]', ...args);
 
 /**
  * Defines the properties available in the MapContext.
@@ -50,7 +49,6 @@ export const MapProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
    * @param newTerrainLoaded - Indicates if the terrain source is loaded.
    */
   const setMap = (mapInstance: mapboxgl.Map | null, newTerrainLoaded: boolean) => {
-    log('setMap called', { hasMap: !!mapInstance, newTerrainLoaded });
 
     if (mapInstance === map && newTerrainLoaded === terrainLoaded) return;
 
@@ -61,31 +59,20 @@ export const MapProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setLayerVisibility(layerState);
       const elevService = new ElevationService(mapInstance);
       setElevationService(elevService);
-      log('ElevationService initialised');
     } else {
       setElevationService(null);
-      log('ElevationService cleared');
+
     }
 
     setMapInstance(mapInstance);
     setTerrainLoaded(newTerrainLoaded);
-    log('map & terrainLoaded updated', { mapSet: !!mapInstance, terrainLoaded: newTerrainLoaded });
   };
-
-  useEffect(() => {
-    log('terrainLoaded state changed', terrainLoaded);
-  }, [terrainLoaded]);
-
-  useEffect(() => {
-    log('elevationService state changed', elevationService ? 'available' : 'null');
-  }, [elevationService]);
 
   useEffect(() => {
     if (!map) return undefined; // Explicitly return undefined for cleanup
 
     const cleanup = layerManager.addEventListener(
       (event: LayerEventType, layerId: string, visible?: boolean) => {
-        log('LayerManager event', { event, layerId, visible });
         if (event === 'visibilityChange' && visible !== undefined) {
           setLayerVisibility((prev) => ({ ...prev, [layerId]: visible }));
         } else if (event === 'layerRemoved') {
@@ -99,21 +86,18 @@ export const MapProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const toggleLayer = (layerId: string) => {
     if (map) {
-      log('toggleLayer', layerId);
       layerManager.toggleLayerVisibility(layerId);
     }
   };
 
   const setLayerVisibilityValue = (layerId: string, visible: boolean) => {
     if (map) {
-      log('setLayerVisibility', { layerId, visible });
       layerManager.setLayerVisibility(layerId, visible);
     }
   };
 
   const resetLayers = () => {
     if (map) {
-      log('resetLayers');
       layerManager.resetLayers();
     }
   };

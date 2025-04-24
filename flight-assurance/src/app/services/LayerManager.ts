@@ -40,6 +40,7 @@ class LayerManager {
   private map: mapboxgl.Map | null = null;
   private layers: Map<string, boolean> = new Map();
   private listeners: Set<LayerEventListener> = new Set();
+  public readonly MAP_LAYERS = MAP_LAYERS;
 
   /**
    * Set the map instance

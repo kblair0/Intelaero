@@ -1,10 +1,12 @@
 "use client";
 
-import { forwardRef, useImperativeHandle, useCallback, useEffect } from "react";
+import { forwardRef, useImperativeHandle, useCallback, useState, useEffect } from "react";
 import type mapboxgl from "mapbox-gl";
 import { useMapContext } from "../../context/mapcontext";
 import { useAreaOfOpsContext } from "../../context/AreaOfOpsContext";
 import * as turf from "@turf/turf";
+import { useAreaOpsProcessor } from "../AO/Hooks/useAreaOpsProcessor";
+
 
 interface BYDALayerHandlerProps {
   map: mapboxgl.Map | null;
@@ -75,16 +77,19 @@ const serviceQueryParams: Record<string, { where: string; outFields: string }> =
   },
 };
 
-const geometryType = "esriGeometryEnvelope";
-const inSR = "4326";
-const spatialRel = "esriSpatialRelIntersects";
-const f = "geojson";
+
 
 const BYDALayerHandler = forwardRef(
   ({ map }: BYDALayerHandlerProps, ref) => {
+    const geometryType = "esriGeometryEnvelope";
+    const inSR = "4326";
+    const spatialRel = "esriSpatialRelIntersects";
+    const f = "geojson";
     // Instead of destructuring "layerManager", extract the functions provided by the context.
     const { setLayerVisibility } = useMapContext();
     const { aoGeometry } = useAreaOfOpsContext();
+    const { showAreaOfOperations } = useAreaOpsProcessor();
+    const [error, setError] = useState<string | null>(null);
 
     // Initialize layers on mount
     useEffect(() => {
@@ -136,8 +141,9 @@ const BYDALayerHandler = forwardRef(
     }, [map]);
 
     const fetchLayers = useCallback(() => {
-      console.log("[BYDALayerHandler] fetchLayers() called.");
-
+      const log = process.env.NODE_ENV === 'development' ? console.log : () => {};
+      log("[BYDALayerHandler] fetchLayers() called.");
+    
       if (!map) {
         console.warn("[BYDALayerHandler] No map instance. Aborting fetch.");
         return;
@@ -146,11 +152,19 @@ const BYDALayerHandler = forwardRef(
         console.warn("[BYDALayerHandler] No AO geometry. Aborting fetch.");
         return;
       }
-
+    
+      // Show Area of Operations when BYDA layers are fetched
+      try {
+        showAreaOfOperations();
+        log("[BYDALayerHandler] Area of Operations shown.");
+      } catch (error) {
+        console.warn("[BYDALayerHandler] Failed to show Area of Operations:", error);
+      }
+    
       const boundingBox = turf.bbox(aoGeometry) as [number, number, number, number];
-      console.log("[BYDALayerHandler] Calculated AO bounding box:", boundingBox);
+      log("[BYDALayerHandler] Calculated AO bounding box:", boundingBox);
       const geometry = boundingBox.join(",");
-
+    
       services.forEach((service) => {
         const params = serviceQueryParams[service];
         const queryParams = new URLSearchParams({
@@ -164,53 +178,38 @@ const BYDALayerHandler = forwardRef(
           f,
         });
         const queryUrl = `${baseUrl}/${service}/FeatureServer/0/query?${queryParams.toString()}`;
-        console.log(`[BYDALayerHandler] Querying ${service} with URL:`, queryUrl);
-
+        log(`[BYDALayerHandler] Querying ${service} with URL:`, queryUrl);
+    
         fetch(queryUrl)
           .then((res) => {
-            console.log(`[BYDALayerHandler] Response received for ${service}`);
+            log(`[BYDALayerHandler] Response received for ${service}`);
             return res.json();
           })
           .then((data) => {
             const mapping = serviceLayerMapping[service];
             if (!mapping) return;
             const { sourceId, layerId } = mapping;
-
-            // Ensure source exists before updating
+    
             if (!map.getSource(sourceId)) {
               map.addSource(sourceId, {
                 type: "geojson",
                 data: { type: "FeatureCollection", features: [] },
               });
-              console.log(`[BYDALayerHandler] Re-added source "${sourceId}" during fetch.`);
+              log(`[BYDALayerHandler] Re-added source "${sourceId}" during fetch.`);
             }
-
+    
             if (data.features && data.features.length > 0) {
-              console.log(
-                `[BYDALayerHandler] Updating ${service} with ${data.features.length} features`
-              );
-
-              const existingSource = map.getSource(sourceId);
-              console.log(
-                `[BYDALayerHandler] Debug: Retrieved source for "${sourceId}":`,
-                existingSource
-              );
-
+              log(`[BYDALayerHandler] Updating ${service} with ${data.features.length} features`);
+              const existingSource = map.getSource(sourceId) as mapboxgl.GeoJSONSource;
               if (existingSource) {
-                (existingSource as mapboxgl.GeoJSONSource).setData(data);
-                console.log(
-                  `[BYDALayerHandler] Source "${sourceId}" updated successfully.`
-                );
-                // Set the layer to visible using the context-provided function
+                existingSource.setData(data);
+                log(`[BYDALayerHandler] Source "${sourceId}" updated successfully.`);
                 setLayerVisibility(layerId, true);
               } else {
-                console.warn(
-                  `[BYDALayerHandler] Warning: Source "${sourceId}" not found after re-adding.`
-                );
+                console.warn(`[BYDALayerHandler] Source "${sourceId}" not found after re-adding.`);
               }
             } else {
-              console.log(`[BYDALayerHandler] No features found for ${service}`);
-              // Clear source data if no features are found
+              log(`[BYDALayerHandler] No features found for ${service}`);
               const existingSource = map.getSource(sourceId) as mapboxgl.GeoJSONSource;
               if (existingSource) {
                 existingSource.setData({ type: "FeatureCollection", features: [] });
@@ -219,9 +218,10 @@ const BYDALayerHandler = forwardRef(
           })
           .catch((error) => {
             console.error(`[BYDALayerHandler] Error with ${service}:`, error);
+            setError(`Failed to fetch ${service}: ${error.message}`);
           });
       });
-    }, [map, aoGeometry, setLayerVisibility]);
+    }, [map, aoGeometry, setLayerVisibility, showAreaOfOperations]);
 
     // Expose fetchLayers to parent via ref
     useImperativeHandle(
