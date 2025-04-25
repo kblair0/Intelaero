@@ -65,28 +65,62 @@ const HomeContent = () => {
                   {/* Uploader Overlay */}
                   {(!showUploader && !showAreaOpsUploader && !flightPlan && !aoGeometry) && (
                     <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20 p-4">
-                      <div className="bg-white p-4 rounded-lg shadow-lg w-full max-w-sm">
-                        <h3 className="text-xl font-semibold text-center mb-4">
-                          Choose Your Starting Point
-                        </h3>
-                        <div className="flex flex-col gap-4">
+                      <div className="bg-white rounded-lg shadow-sm overflow-hidden w-full max-w-2xl">
+                        <div className="px-6 py-4 border-b">
+                          <h3 className="text-lg font-medium text-gray-900">Choose Your Starting Point</h3>
+                          <p className="text-sm text-gray-500">Select an option to begin your flight planning</p>
+                        </div>
+                        <div className="flex flex-row p-6 gap-4">
                           <button
                             onClick={() => setShowUploader(true)}
-                            className="w-full border border-blue-500 text-blue-500 rounded-lg py-2 hover:bg-blue-50 transition"
+                            className="flex-1 border rounded-lg p-4 text-center hover:bg-gray-50 transition-colors flex flex-col items-center gap-2"
                           >
-                            Start With Flight Plan
+                            <div className="p-2 bg-blue-100 rounded-full">
+                              <svg
+                                className="w-6 h-6 text-blue-500"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                                strokeWidth="2"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="M5 13l4 4L19 7"
+                                />
+                              </svg>
+                            </div>
+                            <h4 className="font-medium text-gray-900">Start With Flight Plan</h4>
+                            <p className="text-sm text-gray-500">Upload a flight plan to verify its in integrity and analyse hazards and terrain</p>
+                            <p className="text-sm text-blue-500">Great for EVLOS and BVLOS Planning</p>
                           </button>
                           <button
                             onClick={handleAreaOps}
-                            className="w-full border border-green-500 text-green-500 rounded-lg py-2 hover:bg-green-50 transition"
+                            className="flex-1 border rounded-lg p-4 text-center hover:bg-gray-50 transition-colors flex flex-col items-center gap-2"
                           >
-                            Start With Area of Operations
+                            <div className="p-2 bg-green-100 rounded-full">
+                              <svg
+                                className="w-6 h-6 text-green-500"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                                strokeWidth="2"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447-2.724A1 1 0 0021 13.382V2.618a1 1 0 00-1.447-.894L15 4m0 13l-6-3"
+                                />
+                              </svg>
+                            </div>
+                            <h4 className="font-medium text-gray-900">Start With Area of Operations</h4>
+                            <p className="text-sm text-gray-500">Define an area to analyse terrain and hazards</p>
+                            <p className="text-sm text-green-500">Great for VLOS, EVLOS and BVLOS Planning</p>
                           </button>
                         </div>
                       </div>
                     </div>
                   )}
-  
                   {showUploader && (
                     <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20 p-4">
                       <div className="bg-white p-4 rounded-lg shadow-lg w-full max-w-sm">

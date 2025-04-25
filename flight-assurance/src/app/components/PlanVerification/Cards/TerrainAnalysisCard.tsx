@@ -30,6 +30,7 @@ const TerrainAnalysisCard: React.FC<VerificationCardProps> = ({
   onToggleExpanded,
   flightPlan
 }) => {
+  // Move Hooks to the top level
   const { 
     results, 
     status: analysisStatus, 
@@ -40,22 +41,16 @@ const TerrainAnalysisCard: React.FC<VerificationCardProps> = ({
   } = useObstacleAnalysis();
   const { map, elevationService } = useMapContext();
   const context = useAreaOfOpsContext();
-  if (!context) {
-    console.error("AreaOfOpsContext is not available");
-    return <div>Error: Area of Operations context not initialized</div>;
-  }
-  const { aoGeometry, aoTerrainGrid, bufferDistance, setBufferDistance, setAoTerrainGrid } = context;
   const { togglePowerlines } = useLayers();
   const { generateTerrainGrid, processAreaOfOperations, generateAOFromFlightPlan } = useAreaOpsProcessor();
-  
   const [showTerrainPopup, setShowTerrainPopup] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [localBufferDistance, setLocalBufferDistance] = useState<number>(bufferDistance ?? 500);
+  const [localBufferDistance, setLocalBufferDistance] = useState<number>(context?.bufferDistance ?? 500);
 
   useEffect(() => {
-    setLocalBufferDistance(bufferDistance ?? 500);
-  }, [bufferDistance]);
+    setLocalBufferDistance(context?.bufferDistance ?? 500);
+  }, [context?.bufferDistance]);
 
   useEffect(() => {
     setIsAnalyzing(analysisStatus === 'loading');
@@ -65,6 +60,15 @@ const TerrainAnalysisCard: React.FC<VerificationCardProps> = ({
       setLocalError(null);
     }
   }, [analysisStatus, analysisError]);
+
+  // Early return after Hooks
+  if (!context) {
+    console.error("AreaOfOpsContext is not available");
+    return <div>Error: Area of Operations context not initialized</div>;
+  }
+
+  const { aoGeometry, aoTerrainGrid, bufferDistance, setBufferDistance, setAoTerrainGrid } = context;
+  // ... rest of the component remains unchanged (same as provided previously)
 
   const handleRunAnalysis = () => {
     console.log("Attempting obstacle analysis with:", {

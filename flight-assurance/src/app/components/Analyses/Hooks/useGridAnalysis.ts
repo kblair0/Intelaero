@@ -149,6 +149,33 @@ export function useGridAnalysis(options: UseGridAnalysisOptions = {}) {
       try {
         await elevationService.ensureTerrainReady();
         await elevationService.preloadArea(coords);
+
+        // Validate key waypoints
+        const validationPoints = [
+          coords[0], // Start
+          coords[Math.floor(coords.length / 2)], // Middle
+          coords[coords.length - 1] // End
+        ];
+
+        console.log("Validating terrain data at key waypoints...");
+        let allValid = true;
+
+        for (const [idx, point] of validationPoints.entries()) {
+          const [lon, lat] = point;
+          const elev = await elevationService.getElevation(lon, lat);
+
+          console.log(`Waypoint ${idx === 0 ? "Start" : idx === validationPoints.length - 1 ? "End" : "Middle"}: ${elev.toFixed(1)}m at [${lon.toFixed(5)}, ${lat.toFixed(5)}]`);
+
+          if (elev === 0) {
+            console.warn(`⚠️ Zero elevation at waypoint ${idx} - terrain data may be incomplete!`);
+            allValid = false;
+          }
+        }
+
+        if (!allValid) {
+          console.warn("Some terrain data appears invalid - results may be inaccurate");
+        }
+
       } catch (error) {
         console.warn('Elevation preloading failed:', error);
       }
@@ -484,182 +511,198 @@ export function useGridAnalysis(options: UseGridAnalysisOptions = {}) {
       updateProgress,
       cleanupAnalysis,
       setIsAnalyzing,
+      elevationService
     ]
   );
 
-  /**
+/**
    * Analyzes visibility from a single station with optimized preloading and target point validation.
+   * @param stationType - Type of station (gcs, observer, repeater)
+   * @param location - Station location data
+   * @param range - Analysis range in meters
+   * @param elevationOffset - Elevation offset in meters
+   * @returns Analysis results
+   * @throws Error with detailed message if analysis fails
    */
-  const analyzeStation = useCallback(
-    async ({
-      stationType,
-      location,
-      range,
-      elevationOffset,
-    }: {
-      stationType: "gcs" | "observer" | "repeater";
-      location: LocationData;
-      range: number;
-      elevationOffset: number;
-    }) => {
-      if (!map) {
-        throw createError('Map not initialized', 'MAP_INTERACTION');
+const analyzeStation = useCallback(
+  async ({
+    stationType,
+    location,
+    range,
+    elevationOffset,
+  }: {
+    stationType: "gcs" | "observer" | "repeater";
+    location: LocationData;
+    range: number;
+    elevationOffset: number;
+  }) => {
+    if (!map) {
+      throw createError('Map not initialized', 'MAP_INTERACTION');
+    }
+
+    setIsAnalyzing(true);
+    const startTime = performance.now();
+
+    try {
+      // Validate location data
+      if (!location || typeof location.lng !== 'number' || typeof location.lat !== 'number') {
+        throw createError(`${stationType.toUpperCase()} location not set or invalid`, 'INVALID_INPUT', { location });
       }
 
-      setIsAnalyzing(true);
-      const startTime = performance.now();
+      const locationCoordinates: Coordinates2D = [location.lng, location.lat];
 
-      try {
-        // Validate location data
-        if (!location || typeof location.lng !== 'number' || typeof location.lat !== 'number') {
-          throw new Error(`${stationType.toUpperCase()} location not set or invalid`);
+      // Preload elevation data with timing
+      console.time('StationPreload');
+      await preloadElevationArea({ center: locationCoordinates, range });
+      console.timeEnd('StationPreload');
+
+      // Generate grid with timing
+      console.time('StationGridGeneration');
+      const cells = await generateGrid(
+        getTerrainElevation,
+        gridSize,
+        elevationService ? elevationService.batchGetElevations.bind(elevationService) : undefined,
+        {
+          center: locationCoordinates,
+          range,
+          preloadComplete: true,
+        }
+      );
+      console.timeEnd('StationGridGeneration');
+
+      if (!cells || !cells.length) {
+        throw createError('Failed to generate grid: no cells produced', 'GRID_GENERATION', {
+          stationType,
+          location,
+          range,
+          gridSize
+        });
+      }
+
+      // Get observer elevation
+      const observerElevation = location.elevation ?? 
+        await getTerrainElevation(locationCoordinates) ?? 0;
+
+      const observerPosition: Coordinates3D = [
+        location.lng,
+        location.lat,
+        observerElevation + elevationOffset,
+      ];
+
+      // Run visibility analysis with optimized batching and validation
+      console.time('StationLOSChecks');
+      let visibleCells = 0;
+      let visibilitySum = 0;
+      const chunkSize = 100;
+      const updatedCells: GridCell[] = [];
+
+      for (let i = 0; i < cells.length; i += chunkSize) {
+        if (abortControllerRef.current?.signal.aborted) {
+          throw createError('Analysis aborted', 'VISIBILITY_ANALYSIS');
         }
 
-        const locationCoordinates: Coordinates2D = [location.lng, location.lat];
+        const chunk = cells.slice(i, i + chunkSize);
+        const cellCenters = chunk.map(cell => turf.centroid(cell.geometry).geometry.coordinates as Coordinates2D);
 
-        // Preload elevation data with timing
-        console.time('StationPreload');
-        await preloadElevationArea({ center: locationCoordinates, range });
-        console.timeEnd('StationPreload');
+        const cellElevations = await (elevationService?.batchGetElevations(cellCenters, true) ?? 
+          Promise.all(cellCenters.map(coord => getTerrainElevation(coord))));
 
-        // Generate grid with timing
-        console.time('StationGridGeneration');
-        const cells = await generateGrid(
-          getTerrainElevation,
-          elevationService ? elevationService.batchGetElevations.bind(elevationService) : undefined,
-          gridSize,
-          {
-            center: locationCoordinates,
-            range,
-            preloadComplete: true, // Skip redundant preloading in generateGrid
-          }
-        );
-        console.timeEnd('StationGridGeneration');
+        const chunkResults = await Promise.all(
+          chunk.map(async (cell, index) => {
+            try {
+              const cellCoords = cellCenters[index];
+              const cellElevation = cellElevations[index];
 
-        if (!cells || !cells.length) {
-          throw new Error('Generated grid is empty');
-        }
+              // Ensure targetPosition is a valid Coordinates3D
+              const targetPosition: Coordinates3D = [
+                cellCoords[0],
+                cellCoords[1],
+                cellElevation || 0,
+              ];
 
-        // Get observer elevation
-        const observerElevation = location.elevation ?? 
-          await getTerrainElevation(locationCoordinates) ?? 0;
+              const isVisible = await checkStationLOS(
+                getTerrainElevation,
+                observerPosition,
+                targetPosition,
+                { minimumOffset: 1, sampleCount: 20 }
+              );
 
-        const observerPosition: Coordinates3D = [
-          location.lng,
-          location.lat,
-          observerElevation + elevationOffset,
-        ];
-
-        // Run visibility analysis with optimized batching and validation
-        console.time('StationLOSChecks');
-        let visibleCells = 0;
-        let visibilitySum = 0;
-        const chunkSize = 100;
-        const updatedCells: GridCell[] = [];
-
-        for (let i = 0; i < cells.length; i += chunkSize) {
-          if (abortControllerRef.current?.signal.aborted) {
-            throw createError('Analysis aborted', 'VISIBILITY_ANALYSIS');
-          }
-
-          const chunk = cells.slice(i, i + chunkSize);
-          const cellCenters = chunk.map(cell => turf.centroid(cell.geometry).geometry.coordinates as Coordinates2D);
-
-          const cellElevations = await (elevationService?.batchGetElevations(cellCenters, true) ?? 
-            Promise.all(cellCenters.map(coord => getTerrainElevation(coord))));
-
-          const chunkResults = await Promise.all(
-            chunk.map(async (cell, index) => {
-              try {
-                const cellCoords = cellCenters[index];
-                const cellElevation = cellElevations[index];
-
-                // Ensure targetPosition is a valid Coordinates3D
-                const targetPosition: Coordinates3D = [
-                  cellCoords[0],
-                  cellCoords[1],
-                  cellElevation || 0,
-                ];
-
-                const isVisible = await checkStationLOS(
-                  getTerrainElevation,
-                  observerPosition,
-                  targetPosition,
-                  { minimumOffset: 1, sampleCount: 20 }
-                );
-
-                const visibility = isVisible ? 100 : 0;
-                if (isVisible) {
-                  visibleCells++;
-                  visibilitySum += 100;
-                }
-
-                return {
-                  ...cell,
-                  properties: {
-                    ...cell.properties,
-                    elevation: cellElevation,
-                    visibility,
-                    fullyVisible: isVisible,
-                    lastAnalyzed: Date.now(),
-                  },
-                };
-              } catch (cellError) {
-                console.warn(`[${new Date().toISOString()}] [useGridAnalysis.ts] Error analyzing cell ${i + index}:`, cellError);
-                return cell; // Return unmodified cell on error
+              const visibility = isVisible ? 100 : 0;
+              if (isVisible) {
+                visibleCells++;
+                visibilitySum += 100;
               }
-            })
-          );
 
-          updatedCells.push(...chunkResults);
-          const progressValue = 20 + ((i + chunkSize) / cells.length) * 70;
-          updateProgress(progressValue);
-          await new Promise(resolve => setTimeout(resolve, 0));
-        }
-        console.timeEnd('StationLOSChecks');
+              return {
+                ...cell,
+                properties: {
+                  ...cell.properties,
+                  elevation: cellElevation,
+                  visibility,
+                  fullyVisible: isVisible,
+                  lastAnalyzed: Date.now(),
+                },
+              };
+            } catch (cellError) {
+              console.warn(`[${new Date().toISOString()}] [useGridAnalysis.ts] Error analyzing cell ${i + index}:`, cellError);
+              return cell; // Return unmodified cell on error
+            }
+          })
+        );
 
-        const analysisTime = performance.now() - startTime;
-
-        const layerId = 
-          stationType === 'gcs' ? MAP_LAYERS.GCS_GRID :
-          stationType === 'observer' ? MAP_LAYERS.OBSERVER_GRID :
-          MAP_LAYERS.REPEATER_GRID;
-
-        const analysisResults: AnalysisResults = {
-          cells: updatedCells,
-          stats: {
-            visibleCells,
-            totalCells: cells.length,
-            averageVisibility: cells.length > 0 ? visibilitySum / cells.length : 0,
-            analysisTime,
-          },
-        };
-
-        visualizeGrid(analysisResults, layerId);
-        updateProgress(100);
-        setLastAnalysisTime(Date.now());
-        return analysisResults;
-      } catch (error) {
-        console.error(`[${new Date().toISOString()}] [useGridAnalysis.ts] Station analysis error:`, error);
-        throw error;
-      } finally {
-        updateProgress(0);
-        cleanupAnalysis();
-        setIsAnalyzing(false);
+        updatedCells.push(...chunkResults);
+        const progressValue = 20 + ((i + chunkSize) / cells.length) * 70;
+        updateProgress(progressValue);
+        await new Promise(resolve => setTimeout(resolve, 0));
       }
-    },
-    [
-      map,
-      gridSize,
-      getTerrainElevation,
-      elevationService,
-      preloadElevationArea,
-      visualizeGrid,
-      updateProgress,
-      cleanupAnalysis,
-      setIsAnalyzing,
-    ]
-  );
+      console.timeEnd('StationLOSChecks');
+
+      const analysisTime = performance.now() - startTime;
+
+      const layerId = 
+        stationType === 'gcs' ? MAP_LAYERS.GCS_GRID :
+        stationType === 'observer' ? MAP_LAYERS.OBSERVER_GRID :
+        MAP_LAYERS.REPEATER_GRID;
+
+      const analysisResults: AnalysisResults = {
+        cells: updatedCells,
+        stats: {
+          visibleCells,
+          totalCells: cells.length,
+          averageVisibility: cells.length > 0 ? visibilitySum / cells.length : 0,
+          analysisTime,
+        },
+      };
+
+      visualizeGrid(analysisResults, layerId);
+      updateProgress(100);
+      setLastAnalysisTime(Date.now());
+      return analysisResults;
+    } catch (error) {
+      console.error(`[${new Date().toISOString()}] [useGridAnalysis.ts] Station analysis error:`, error);
+      throw createError(
+        error.message || 'Station analysis failed',
+        'VISIBILITY_ANALYSIS',
+        { stationType, location, range, gridSize, originalError: error }
+      );
+    } finally {
+      updateProgress(0);
+      cleanupAnalysis();
+      setIsAnalyzing(false);
+    }
+  },
+  [
+    map,
+    gridSize,
+    getTerrainElevation,
+    elevationService,
+    preloadElevationArea,
+    visualizeGrid,
+    updateProgress,
+    cleanupAnalysis,
+    setIsAnalyzing,
+  ]
+);
 
   /**
    * Runs a merged analysis of multiple stations with optimized preloading and target point validation.
@@ -821,7 +864,7 @@ export function useGridAnalysis(options: UseGridAnalysisOptions = {}) {
                   );
                   
                   if (distance <= analysisRange) {
-                    const isVisible = await checkLineOfSight(
+                    const isVisible = await checkStationLOS(
                       getTerrainElevation,
                       observer.position,
                       targetPosition,
@@ -898,7 +941,6 @@ export function useGridAnalysis(options: UseGridAnalysisOptions = {}) {
       visualizeGrid,
       updateProgress,
       cleanupAnalysis,
-      generateCombinedBoundingBox,
       setIsAnalyzing,
     ]
   );

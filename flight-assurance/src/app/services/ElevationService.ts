@@ -16,32 +16,17 @@ export class ElevationService {
   private pendingLoads: Set<string> = new Set();
   private terrainReady: boolean = false;
 
-  /**
-   * Initializes the service with a Mapbox map instance.
-   * @param map - The Mapbox map instance to query elevations from.
-   */
   constructor(map: mapboxgl.Map) {
     this.map = map;
   }
 
-  /**
-   * Generates a unique cache key for a coordinate pair.
-   * @param lon - Longitude of the coordinate.
-   * @param lat - Latitude of the coordinate.
-   * @returns A string key for caching elevation data.
-   */
   private key(lon: number, lat: number): string {
     return `${lon.toFixed(4)}|${lat.toFixed(4)}`;
   }
 
-  /**
-   * Ensures the terrain source ("mapbox-dem") is added and ready.
-   * Adds the source and terrain layer if not present, and waits for initial loading.
-   * @returns A promise that resolves when the terrain source is ready.
-   */
   async ensureTerrainReady(): Promise<void> {
     if (this.terrainReady) return;
-
+  
     if (!this.map.getSource("mapbox-dem")) {
       this.map.addSource("mapbox-dem", {
         type: "raster-dem",
@@ -51,7 +36,10 @@ export class ElevationService {
       });
       this.map.setTerrain({ source: "mapbox-dem", exaggeration: 1.0 });
     }
-
+  
+    console.log(`[${new Date().toISOString()}] [ElevationService.ts] Waiting for DEM source to load...`);
+    
+    // Wait for source to be loaded
     if (!this.map.isSourceLoaded("mapbox-dem")) {
       await new Promise<void>((resolve) => {
         const checkDEM = () => {
@@ -63,225 +51,195 @@ export class ElevationService {
         this.map!.on("sourcedata", checkDEM);
         setTimeout(() => {
           this.map!.off("sourcedata", checkDEM);
+          console.warn(`[${new Date().toISOString()}] [ElevationService.ts] Initial source load timed out after 15 seconds`);
           resolve();
-        }, 5000);
+        }, 15000);
       });
     }
-
+    
+    // Now validate with test points to ensure data is actually available
+    console.log(`[${new Date().toISOString()}] [ElevationService.ts] Source loaded, validating DEM data availability...`);
+    
+    // Pick a few test points across the map
+    const testPoints = [
+      [151.275, -33.888], // example from your logs
+      [151.2696, -33.8845], // another from your logs
+      [151.27, -33.885] // additional test point
+    ];
+    
+    let attempt = 0;
+    const maxAttempts = 5;
+    let validElevations = false;
+    
+    while (!validElevations && attempt < maxAttempts) {
+      attempt++;
+      console.log(`[${new Date().toISOString()}] [ElevationService.ts] DEM validation attempt ${attempt}/${maxAttempts}`);
+      
+      // Try to get elevations for test points
+      const elevations = await Promise.all(
+        testPoints.map(([lon, lat]) => {
+          const elev = this.map!.queryTerrainElevation([lon, lat]);
+          return { lon, lat, elev };
+        })
+      );
+      
+      // Check if we got valid non-zero elevations
+      const invalidPoints = elevations.filter(e => e.elev === null || e.elev === 0);
+      if (invalidPoints.length === 0) {
+        validElevations = true;
+        console.log(`[${new Date().toISOString()}] [ElevationService.ts] ✅ DEM source loaded successfully`);
+        break;
+      }
+      
+      console.warn(`[${new Date().toISOString()}] [ElevationService.ts] ${invalidPoints.length}/${testPoints.length} test points returned invalid elevations`);
+      
+      // Wait before next attempt
+      await new Promise(r => setTimeout(r, 500 * attempt));
+    }
+    
     this.terrainReady = true;
   }
 
-  /**
-   * Preloads DEM tiles for a given set of coordinates without altering the map view.
-   * Optimized for LOS analysis by ensuring all necessary tiles are loaded.
-   * @param coordinates - Array of [lon, lat, alt] coordinates defining the area.
-   * @returns A promise that resolves when the tiles are loaded.
-   */
   async preloadArea(coordinates: [number, number, number][]): Promise<void> {
     if (coordinates.length === 0) return;
+    const preloadStart = Date.now();
+    console.log(`[${new Date().toISOString()}] [ElevationService.ts] Starting preloadArea for ${coordinates.length} coordinates`);
     
-    // Create a feature from the coordinates
-    const points = coordinates.map(c => [c[0], c[1]]);
-    let geom: GeoJSON.FeatureCollection;
+    await this.ensureTerrainReady();
     
-    // Handle different coordinate patterns
-    if (points.length === 1) {
-      // Single point - create a small buffer around it
-      const point = turf.point(points[0]);
-      const buffered = turf.buffer(point, 200, { units: 'meters' });
-      geom = turf.featureCollection([buffered]);
-    } else if (points.length === 2) {
-      // Two points - create a corridor with buffer
-      const line = turf.lineString(points);
-      const buffered = turf.buffer(line, 100, { units: 'meters' });
-      geom = turf.featureCollection([buffered]);
-    } else {
-      // Multiple points - create a convex hull with buffer
-      const pointFeatures = points.map(p => turf.point(p));
-      const collection = turf.featureCollection(pointFeatures);
-      const hull = turf.convex(collection);
+    // Setup validation points - pick a subset of coordinates for validation
+    const validationCount = Math.min(coordinates.length, 5);
+    const validationPoints = Array.from({ length: validationCount }, (_, i) => 
+      Math.floor(i * coordinates.length / validationCount)
+    ).map(idx => [coordinates[idx][0], coordinates[idx][1]]);
+    
+    console.log(`[${new Date().toISOString()}] [ElevationService.ts] Will validate terrain using ${validationPoints.length} points`);
+    
+    // Ensure tiles are loaded by requesting them in smaller batches
+    const BATCH_SIZE = 10;
+    for (let i = 0; i < coordinates.length; i += BATCH_SIZE) {
+      const batch = coordinates.slice(i, i + BATCH_SIZE);
       
-      if (hull) {
-        const buffered = turf.buffer(hull, 100, { units: 'meters' });
-        geom = turf.featureCollection([buffered]);
-      } else {
-        // Fallback if hull creation fails
-        const line = turf.lineString(points);
-        const buffered = turf.buffer(line, 100, { units: 'meters' });
-        geom = turf.featureCollection([buffered]);
-      }
+      // Just trigger queries to load tiles
+      await Promise.all(batch.map(([lon, lat]) => 
+        this.map.queryTerrainElevation([lon, lat])
+      ));
+      
+      // Small delay between batches
+      await new Promise(r => setTimeout(r, 50));
     }
     
-    const bounds = turf.bbox(geom);
-    const [minLng, minLat, maxLng, maxLat] = bounds;
-
-    // Calculate tile coordinates for the bounding box at zoom level 13
-    const zoom = 13;
-    const tileSize = 512;
-    const scale = Math.pow(2, zoom);
-
-    // Convert lat/lng to tile coordinates
-    const toTileCoords = (lng: number, lat: number) => {
-      const latRad = (lat * Math.PI) / 180;
-      const tileX = Math.floor(((lng + 180) / 360) * scale);
-      const tileY = Math.floor(
-        ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * scale
+    // Now verify we can get actual elevations
+    let attempt = 0;
+    const maxAttempts = 5;
+    let success = false;
+    
+    while (!success && attempt < maxAttempts) {
+      attempt++;
+      
+      const elevations = await Promise.all(
+        validationPoints.map(([lon, lat]) => {
+          const elev = this.map.queryTerrainElevation([lon, lat]);
+          return { lon, lat, elev };
+        })
       );
-      return { tileX, tileY };
-    };
-
-    const minTile = toTileCoords(minLng, minLat);
-    const maxTile = toTileCoords(maxLng, maxLat);
-
-    // Generate list of tiles covering the area
-    const tiles: { x: number; y: number; z: number }[] = [];
-    for (let x = Math.min(minTile.tileX, maxTile.tileX); x <= Math.max(minTile.tileX, maxTile.tileX); x++) {
-      for (let y = Math.min(minTile.tileY, maxTile.tileY); y <= Math.max(minTile.tileY, maxTile.tileY); y++) {
-        tiles.push({ x, y, z: zoom });
+      
+      const invalidCount = elevations.filter(e => e.elev === null || e.elev === 0).length;
+      const validRate = 1 - (invalidCount / validationPoints.length);
+      
+      console.log(`[${new Date().toISOString()}] [ElevationService.ts] Validation attempt ${attempt}: ${(validRate*100).toFixed(1)}% valid`);
+      
+      if (validRate > 0.8) { // Accept if > 80% of points have valid elevations
+        success = true;
+        break;
       }
-    }
-
-    // Load tiles without changing the map view
-    const source = this.map.getSource('mapbox-dem') as mapboxgl.GeoJSONSource;
-    if (!source) {
-      console.warn(`[${new Date().toISOString()}] [ElevationService.ts] mapbox-dem source not found`);
-      return;
-    }
-
-    // Trigger tile loading by querying elevation for a point in each tile
-    await Promise.all(
-      tiles.map(async ({ x, y, z }) => {
-        // Convert tile coordinates back to approximate lng/lat for a point in the tile
-        const lng = (x / scale) * 360 - 180;
-        const n = Math.PI - 2 * Math.PI * y / scale;
-        const lat = (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
-        
-        try {
-          // Query elevation to trigger tile loading
-          const elev = this.map.queryTerrainElevation([lng, lat]);
-          if (elev === null) {
-            console.warn(`[${new Date().toISOString()}] [ElevationService.ts] Elevation null for tile ${x}/${y}/${z}`);
-          }
-        } catch (e) {
-          console.warn(`[${new Date().toISOString()}] [ElevationService.ts] Error loading tile ${x}/${y}/${z}:`, e);
-        }
-      })
-    );
-
-    // Wait for the source to finish loading
-    await new Promise<void>((resolve) => {
-      const checkSource = () => {
-        if (this.map.isSourceLoaded('mapbox-dem')) {
-          this.map.off('sourcedata', checkSource);
-          resolve();
-        }
-      };
       
-      this.map.on('sourcedata', checkSource);
-      
-      // Safety timeout
-      setTimeout(() => {
-        this.map.off('sourcedata', checkSource);
-        resolve();
-      }, 5000);
-    });
-
-    console.log(`[${new Date().toISOString()}] [ElevationService.ts] Terrain tiles preloaded successfully`);
+      // Wait progressively longer between attempts
+      await new Promise(r => setTimeout(r, 500 * attempt));
+    }
+    
+    if (!success) {
+      console.warn(`[${new Date().toISOString()}] [ElevationService.ts] Terrain preload validation failed after ${maxAttempts} attempts`);
+    }
+    
+    this.clearFailedElevations();
+    console.log(`[${new Date().toISOString()}] [ElevationService.ts] Terrain tiles preloaded in ${Date.now() - preloadStart}ms`);
   }
 
-  /**
-   * Retrieves elevation at a specific coordinate with caching and retries.
-   * Optimized for high-volume queries during LOS analysis.
-   * @param lon - Longitude of the point.
-   * @param lat - Latitude of the point.
-   * @param maxRetries - Maximum number of retry attempts if elevation is null.
-   * @param retryDelay - Delay between retries in milliseconds.
-   * @returns The elevation in meters, or 0 if data is unavailable after retries.
-   */
   async getElevation(lon: number, lat: number, maxRetries = 3, retryDelay = 200): Promise<number> {
     const cacheKey = this.key(lon, lat);
     if (this.cache.has(cacheKey)) {
       const cachedValue = this.cache.get(cacheKey)!;
       if (cachedValue === 0) {
-        console.warn(`[Debug] Cache returned 0 for [${lon}, ${lat}]`);
+        console.warn(`[${new Date().toISOString()}] [ElevationService.ts] Cache returned 0 for [${lon}, ${lat}], retrying`);
+        // Do not return the cached zero - proceed to query again
+      } else {
+        console.log(`[${new Date().toISOString()}] [ElevationService.ts] Cache hit for [${lon}, ${lat}]: ${cachedValue}`);
+        return cachedValue;
       }
-      return cachedValue;
     }
-
-    // Skip if this query is already in progress (prevents duplicative queries)
+  
+    console.log(`[${new Date().toISOString()}] [ElevationService.ts] Cache miss for [${lon}, ${lat}]`);
     if (this.pendingLoads.has(cacheKey)) {
-      // Wait briefly and check cache again
       await new Promise(resolve => setTimeout(resolve, 50));
-      if (this.cache.has(cacheKey)) return this.cache.get(cacheKey)!;
+      if (this.cache.has(cacheKey) && this.cache.get(cacheKey)! !== 0) return this.cache.get(cacheKey)!;
     }
-    
     this.pendingLoads.add(cacheKey);
-
+  
     try {
       for (let attempt = 0; attempt < maxRetries; attempt++) {
+        console.log(`[${new Date().toISOString()}] [ElevationService.ts] Query attempt ${attempt + 1} for [${lon}, ${lat}]`);
         const elev = this.map.queryTerrainElevation([lon, lat]);
-        if (elev !== null) {
+        if (elev !== null && elev !== 0) {
           const normalized = normaliseElevation(elev);
+          console.log(`[${new Date().toISOString()}] [ElevationService.ts] Query success for [${lon}, ${lat}]: ${normalized}`);
           this.cache.set(cacheKey, normalized);
           return normalized;
         }
+        console.warn(`[${new Date().toISOString()}] [ElevationService.ts] Query returned null or 0 for [${lon}, ${lat}] on attempt ${attempt + 1}`);
         
+        // Add a delay between retries to allow DEM tiles to load
         if (attempt < maxRetries - 1) {
-          await new Promise(resolve => setTimeout(resolve, retryDelay));
+          await new Promise(resolve => setTimeout(resolve, retryDelay * (attempt + 1)));
         }
       }
-
-      // All retries failed, use fallback method
-      try {
-        // Try to get elevation from a slightly offset point
-        for (const offset of [[0.0001, 0], [0, 0.0001], [-0.0001, 0], [0, -0.0001]]) {
-          const elev = this.map.queryTerrainElevation([lon + offset[0], lat + offset[1]]);
-          if (elev !== null) {
-            const normalized = normaliseElevation(elev);
-            this.cache.set(cacheKey, normalized);
-            return normalized;
-          }
+  
+      // Only check offset points if all direct queries failed
+      console.warn(`[${new Date().toISOString()}] [ElevationService.ts] All retries failed for [${lon}, ${lat}], trying offsets`);
+      for (const offset of [[0.0001, 0], [0, 0.0001], [-0.0001, 0], [0, -0.0001]]) {
+        const elev = this.map.queryTerrainElevation([lon + offset[0], lat + offset[1]]);
+        if (elev !== null && elev !== 0) {
+          const normalized = normaliseElevation(elev);
+          console.log(`[${new Date().toISOString()}] [ElevationService.ts] Offset query success for [${lon + offset[0]}, ${lat + offset[1]}]: ${normalized}`);
+          this.cache.set(cacheKey, normalized);
+          return normalized;
         }
-      } catch (e) {
-        console.warn('Offset fallback elevation query failed:', e);
       }
-
-      console.warn(`Elevation data not loaded for [${lon}, ${lat}] after all attempts`);
-      this.cache.set(cacheKey, 0);
+  
+      // Return 0 but DON'T cache it
+      console.warn(`[${new Date().toISOString()}] [ElevationService.ts] Returning 0 for [${lon}, ${lat}] without caching`);
       return 0;
     } finally {
       this.pendingLoads.delete(cacheKey);
     }
   }
 
-  /**
-   * Batch queries elevations for multiple points.
-   * Optimized for LOS analysis where many elevations are needed at once.
-   * @param points - Array of [longitude, latitude] coordinates
-   * @returns Array of elevations corresponding to input points
-   */
   async batchGetElevations(points: [number, number][], skipPreload: boolean = false): Promise<number[]> {
-    // First check cache for all points
     const cachedResults: (number | null)[] = points.map(([lon, lat]) => {
       const cacheKey = this.key(lon, lat);
       return this.cache.has(cacheKey) ? this.cache.get(cacheKey)! : null;
     });
-    
-    // If all points are cached, return immediately
+
     if (!cachedResults.includes(null)) {
       return cachedResults as number[];
     }
-    
-    // For uncached points, preload their area (only if not skipped)
+
     const uncachedPoints = points.filter((_, i) => cachedResults[i] === null);
-    
-    if (uncachedPoints.length > 0 && !skipPreload) { // <- Add this condition
-      // Add a dummy altitude value to match the expected coordinate format
+    if (uncachedPoints.length > 0 && !skipPreload) {
       const coords = uncachedPoints.map(p => [...p, 0] as [number, number, number]);
       await this.preloadArea(coords);
     }
-    
-    // Now query all uncached elevations
+
     const results = await Promise.all(
       points.map(async ([lon, lat], i) => {
         if (cachedResults[i] !== null) {
@@ -290,15 +248,59 @@ export class ElevationService {
         return await this.getElevation(lon, lat);
       })
     );
+
+    return results;
+  }
+
+  async getElevationsWithRetries(coordinates: [number, number, number][]): Promise<number[]> {
+    console.log(`[${new Date().toISOString()}] [ElevationService.ts] Processing ${coordinates.length} coordinates with chunked retries`);
+    
+    const results: number[] = new Array(coordinates.length).fill(0);
+    const CHUNK_SIZE = 10; // Process in smaller chunks, like fillTerrain
+    
+    for (let i = 0; i < coordinates.length; i += CHUNK_SIZE) {
+      const chunk = coordinates.slice(i, i + CHUNK_SIZE);
+      
+      // Process chunk sequentially for better reliability
+      for (let j = 0; j < chunk.length; j++) {
+        const [lon, lat] = chunk[j];
+        try {
+          // Try multiple times with backoff
+          const elevation = await this.getElevation(lon, lat, 3);
+          results[i + j] = elevation;
+        } catch (err) {
+          console.error(`[${new Date().toISOString()}] [ElevationService.ts] Failed to get elevation for [${lon}, ${lat}]`, err);
+        }
+      }
+      
+      // Add delay between chunks to allow DEM tiles to load fully
+      if (i + CHUNK_SIZE < coordinates.length) {
+        await new Promise(r => setTimeout(r, 50));
+      }
+    }
+    
+    // Validate results
+    const zeroCount = results.filter(elev => elev === 0).length;
+    if (zeroCount > 0) {
+      console.warn(`[${new Date().toISOString()}] [ElevationService.ts] ${zeroCount}/${results.length} coordinates returned zero elevation`);
+    }
     
     return results;
   }
 
-  /**
-   * Clears the elevation cache.
-   * Useful when map style changes or after long periods.
-   */
   clearCache(): void {
     this.cache.clear();
+  }
+
+  clearFailedElevations(): void {
+    let clearedCount = 0;
+    for (const [key, value] of this.cache.entries()) {
+      if (value === 0) {
+        this.cache.delete(key);
+        clearedCount++;
+      }
+    }
+    console.log(`[${new Date().toISOString()}] [ElevationService.ts] Cleared ${clearedCount} failed elevations from cache`);
+    this.pendingLoads.clear();
   }
 }

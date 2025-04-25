@@ -29,7 +29,7 @@ import type {
   LineString,
   Position
 } from "geojson";
-import { ElevationService } from "../services/ElevationService";
+import { ensureDEMLoaded, preloadTiles } from "../utils/TerrainUtils";
 import * as turf from '@turf/turf';
 
 // DOMParser for KML/KMZ -> only in browser
@@ -57,6 +57,7 @@ function parseQGCFile(content: string): FlightPlanData {
   let homePosition = { latitude: 0, longitude: 0, altitude: 0 };
   const waypoints: WaypointData[] = [];
   const coordinates: [number, number, number][] = [];
+  const navigationIndices: number[] = []; // Store indices of waypoints with valid coordinates
   let takeoffAltitude: number | null = null;
   let isTerrainMission = false;
   let isRelativeMission = false;
@@ -84,6 +85,7 @@ function parseQGCFile(content: string): FlightPlanData {
     waypoints.push({ index, altitudeMode, originalAltitude: alt, commandType: command, frame });
     if (!isNaN(lat) && !isNaN(lon) && lat !== 0 && lon !== 0) {
       coordinates.push([lon, lat, alt]);
+      navigationIndices.push(index); // Store the index of navigation waypoints
     }
   }
 
@@ -115,7 +117,8 @@ function parseQGCFile(content: string): FlightPlanData {
             index: wp.index,
             command: wp.commandType,
             frame: wp.frame
-          }))
+          })),
+          navigationIndices // Add navigation indices to metadata
         }
       }
     },
@@ -428,73 +431,75 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({
   >("idle");
   const [fileName, setFileName] = useState<string | null>(null);
   const { setFlightPlan } = useFlightPlanContext();
-  const { map, elevationService } = useMapContext();
+  const { map } = useMapContext();
   const { processFlightPlan, isProcessing, error } =
     useFlightPlanProcessor();
-/**
- * Processes and stores the flight plan, ensuring terrain data is loaded.
- * @param raw - Raw flight plan data to process.
- * @param name - Name of the uploaded file.
- */
-const processAndStore = useCallback(
-  async (raw: FlightPlanData, name: string) => {
-    if (!map || !elevationService) {
-      setStatus("error");
-      throw new Error("Map or elevation service not initialized");
-    }
-    try {
-      // Compute originalWaypointDistances from coordinates
-      const coordinates = raw.features[0].geometry.coordinates;
-      let cumulativeDistance = 0;
-      const originalWaypointDistances: number[] = [0];
-      for (let i = 1; i < coordinates.length; i++) {
-        const prevCoord = coordinates[i - 1];
-        const currCoord = coordinates[i];
-        if (!prevCoord || !currCoord || !Array.isArray(prevCoord) || !Array.isArray(currCoord) || prevCoord.length < 2 || currCoord.length < 2) {
-          console.warn(`Invalid coordinate at index ${i - 1} or ${i}:`, { prevCoord, currCoord });
-          continue;
-        }
-        const segmentDistance = turf.distance(
-          [prevCoord[0], prevCoord[1]],
-          [currCoord[0], currCoord[1]],
-          { units: 'meters' }
-        );
-        cumulativeDistance += segmentDistance;
-        originalWaypointDistances.push(cumulativeDistance);
+
+  /**
+   * Processes and stores the flight plan, ensuring terrain data is loaded.
+   * @param raw - Raw flight plan data to process.
+   * @param name - Name of the uploaded file.
+   */
+  const processAndStore = useCallback(
+    async (raw: FlightPlanData, name: string) => {
+      if (!map) {
+        setStatus("error");
+        throw new Error("Map not initialized");
       }
-      console.log('processAndStore: Original Waypoint Distances (meters):', originalWaypointDistances);
-
-      // Update raw with originalWaypointDistances
-      const updatedRaw: FlightPlanData = {
-        ...raw,
-        originalWaypointDistances,
-        properties: {
-          ...raw.properties,
-          totalDistance: cumulativeDistance
+      try {
+        // Compute originalWaypointDistances from coordinates
+        const coordinates = raw.features[0].geometry.coordinates;
+        let cumulativeDistance = 0;
+        const originalWaypointDistances: number[] = [0];
+        for (let i = 1; i < coordinates.length; i++) {
+          const prevCoord = coordinates[i - 1];
+          const currCoord = coordinates[i];
+          if (!prevCoord || !currCoord || !Array.isArray(prevCoord) || !Array.isArray(currCoord) || prevCoord.length < 2 || currCoord.length < 2) {
+            console.warn(`Invalid coordinate at index ${i - 1} or ${i}:`, { prevCoord, currCoord });
+            continue;
+          }
+          const segmentDistance = turf.distance(
+            [prevCoord[0], prevCoord[1]],
+            [currCoord[0], currCoord[1]],
+            { units: 'meters' }
+          );
+          cumulativeDistance += segmentDistance;
+          originalWaypointDistances.push(cumulativeDistance);
         }
-      };
+        console.log('processAndStore: Original Waypoint Distances (meters):', originalWaypointDistances);
 
-      // Ensure terrain data is ready and preload the flight plan area
-      await elevationService.ensureTerrainReady();
-      await elevationService.preloadArea(updatedRaw.features[0].geometry.coordinates);
+        // Update raw with originalWaypointDistances
+        const updatedRaw: FlightPlanData = {
+          ...raw,
+          originalWaypointDistances,
+          properties: {
+            ...raw.properties,
+            totalDistance: cumulativeDistance
+          }
+        };
 
-      const proc = await processFlightPlan(updatedRaw);
-      setFlightPlan(proc);
-      onPlanUploaded?.(proc);
-      if (process.env.NODE_ENV === "production") {
-        await trackFlightPlan(proc, name);
+        // Ensure terrain data is ready and preload the flight plan area
+        await ensureDEMLoaded(map);
+        await preloadTiles(map, updatedRaw.features[0].geometry.coordinates.map(([lon, lat]) => [lon, lat]));
+        console.log(`[${new Date().toISOString()}] [FlightPlanUploader.tsx] Preload completed for ${updatedRaw.features[0].geometry.coordinates.length} coordinates`);
+
+        const proc = await processFlightPlan(updatedRaw);
+        setFlightPlan(proc);
+        onPlanUploaded?.(proc);
+        if (process.env.NODE_ENV === "production") {
+          await trackFlightPlan(proc, name);
+        }
+        setStatus("processed");
+        onClose?.();
+      } catch (error: any) {
+        console.error("🔥 processAndStore error:", error);
+        alert(`❌ Flight-plan processing failed:\n${error?.message ?? String(error)}`);
+        setStatus("error");
+        throw error;
       }
-      setStatus("processed");
-      onClose?.();
-    } catch (error: any) {
-      console.error("🔥 processAndStore error:", error);
-      alert(`❌ Flight-plan processing failed:\n${error?.message ?? String(error)}`);
-      setStatus("error");
-      throw error;
-    }
-  },
-  [map, elevationService, processFlightPlan, setFlightPlan, onPlanUploaded, onClose]
-);
+    },
+    [map, processFlightPlan, setFlightPlan, onPlanUploaded, onClose]
+  );
 
   /** handle file drop */
   const onDrop = useCallback(

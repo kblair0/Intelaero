@@ -4,11 +4,6 @@ import mapboxgl from 'mapbox-gl';
 import { layerManager, MAP_LAYERS, LayerVisibilityMap, LayerEventType } from '../services/LayerManager';
 import { ElevationService } from '../services/ElevationService';
 
-/* ────────────────────────────
- *  Critical debug logging
- *  (No functional behaviour altered)
- * ────────────────────────────*/
-
 /**
  * Defines the properties available in the MapContext.
  */

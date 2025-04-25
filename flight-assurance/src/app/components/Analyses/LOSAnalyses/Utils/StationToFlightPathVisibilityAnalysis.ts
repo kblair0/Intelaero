@@ -23,7 +23,7 @@ import { Coordinates2D, Coordinates3D } from '../../Types/GridAnalysisTypes';
 import { FlightPlanData } from '../../../../context/FlightPlanContext';
 import { LocationData } from '../../../../types/LocationData';
 import { layerManager, MAP_LAYERS } from '../../../../services/LayerManager';
-import { checkLineOfSight } from '../../Utils/gridAnalysisUtils';
+import { checkSingleLOS } from '../../Utils/gridAnalysisUtils';
 import { SamplePoint, sampleFlightPath } from '../../../../hooks/useFlightPathSampling';
 
 // ======== Type Definitions ========
@@ -210,7 +210,7 @@ export async function analyzeFlightPathVisibility(
     for (let stationIdx = 0; stationIdx < stationPositions.length; stationIdx++) {
       const station = stationPositions[stationIdx];
       
-      const isVisible = await checkLineOfSight(
+      const isVisible = await checkSingleLOS(
         queryTerrainElevation,
         station.position,
         samplePoint,

@@ -104,7 +104,6 @@ const BYDALayerHandler = forwardRef(
             type: "geojson",
             data: { type: "FeatureCollection", features: [] },
           });
-          console.log(`[BYDALayerHandler] Added source "${sourceId}".`);
         }
 
         // Add layer if it doesn't exist
@@ -130,19 +129,15 @@ const BYDALayerHandler = forwardRef(
           const { sourceId, layerId } = serviceLayerMapping[service];
           if (map.getLayer(layerId)) {
             map.removeLayer(layerId);
-            console.log(`[BYDALayerHandler] Removed layer "${layerId}".`);
           }
           if (map.getSource(sourceId)) {
             map.removeSource(sourceId);
-            console.log(`[BYDALayerHandler] Removed source "${sourceId}".`);
           }
         });
       };
     }, [map]);
 
     const fetchLayers = useCallback(() => {
-      const log = process.env.NODE_ENV === 'development' ? console.log : () => {};
-      log("[BYDALayerHandler] fetchLayers() called.");
     
       if (!map) {
         console.warn("[BYDALayerHandler] No map instance. Aborting fetch.");
@@ -156,13 +151,11 @@ const BYDALayerHandler = forwardRef(
       // Show Area of Operations when BYDA layers are fetched
       try {
         showAreaOfOperations();
-        log("[BYDALayerHandler] Area of Operations shown.");
       } catch (error) {
         console.warn("[BYDALayerHandler] Failed to show Area of Operations:", error);
       }
     
       const boundingBox = turf.bbox(aoGeometry) as [number, number, number, number];
-      log("[BYDALayerHandler] Calculated AO bounding box:", boundingBox);
       const geometry = boundingBox.join(",");
     
       services.forEach((service) => {
@@ -178,11 +171,9 @@ const BYDALayerHandler = forwardRef(
           f,
         });
         const queryUrl = `${baseUrl}/${service}/FeatureServer/0/query?${queryParams.toString()}`;
-        log(`[BYDALayerHandler] Querying ${service} with URL:`, queryUrl);
     
         fetch(queryUrl)
           .then((res) => {
-            log(`[BYDALayerHandler] Response received for ${service}`);
             return res.json();
           })
           .then((data) => {
@@ -195,21 +186,17 @@ const BYDALayerHandler = forwardRef(
                 type: "geojson",
                 data: { type: "FeatureCollection", features: [] },
               });
-              log(`[BYDALayerHandler] Re-added source "${sourceId}" during fetch.`);
             }
     
             if (data.features && data.features.length > 0) {
-              log(`[BYDALayerHandler] Updating ${service} with ${data.features.length} features`);
               const existingSource = map.getSource(sourceId) as mapboxgl.GeoJSONSource;
               if (existingSource) {
                 existingSource.setData(data);
-                log(`[BYDALayerHandler] Source "${sourceId}" updated successfully.`);
                 setLayerVisibility(layerId, true);
               } else {
                 console.warn(`[BYDALayerHandler] Source "${sourceId}" not found after re-adding.`);
               }
             } else {
-              log(`[BYDALayerHandler] No features found for ${service}`);
               const existingSource = map.getSource(sourceId) as mapboxgl.GeoJSONSource;
               if (existingSource) {
                 existingSource.setData({ type: "FeatureCollection", features: [] });
