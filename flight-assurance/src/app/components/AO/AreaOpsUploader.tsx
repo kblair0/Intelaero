@@ -91,48 +91,44 @@ const AreaOpsUploader: React.FC<AreaOpsUploaderProps> = ({ onClose }) => {
     }
   };
 
-  return (
-    <div className="flex-1 bg-white shadow-lg p-6 rounded-lg border border-gray-200">
-      <h3 className="text-lg font-bold">🗺️ Define Your Area of Ops</h3>
-      <p className="text-sm text-gray-600">
-        Upload a <strong>.kml</strong> file outlining your operational area, or use our example to see Sydney Harbour.
-      </p>
 
-      {/* Drag & Drop Zone */}
-      <div
-        {...getRootProps()}
-        className="mt-4 border-2 border-dotted border-gray-400 p-6 rounded-lg flex flex-col items-center justify-center cursor-pointer bg-gray-50"
-      >
-        <input {...getInputProps()} />
-        <p className="text-gray-600">Drag & Drop your KML file here, or click to select</p>
-        {fileName && (
-          <p className="mt-2 text-sm text-gray-700">Chosen file: {fileName}</p>
-        )}
-        {fileUploadStatus === "uploading" && (
-          <p className="mt-2 text-sm text-blue-600">Uploading…</p>
-        )}
-        {fileUploadStatus === "processed" && (
-          <p className="mt-2 text-sm text-green-600">File processed successfully!</p>
-        )}
-        {fileUploadStatus === "error" && (
-          <p className="mt-2 text-sm text-red-600">There was a problem processing your file.</p>
-        )}
-      </div>
+return (
+  <div className="w-full max-w-2xl bg-white p-4 rounded-lg shadow-lg border border-gray-300">
+    <h3 className="text-md font-semibold text-gray-800 mb-4">Define Area of Operations</h3>
+    <p className="text-xs text-gray-600 mb-4">
+      Upload a <strong>.kml</strong> file to outline your operational area or try our example.
+    </p>
 
-      {/* Example AO Button */}
-      <div className="mt-4">
-        <p className="text-sm text-gray-600 text-center">No file? Try our example area.</p>
-        <div className="flex justify-center mt-2">
-          <button
-            onClick={loadExampleAOFromFile}
-            className="bg-purple-600 text-white px-4 py-2 rounded shadow hover:bg-purple-700 text-sm"
-          >
-            Load Example Area
-          </button>
-        </div>
-      </div>
+    <div
+      {...getRootProps()}
+      className="p-6 bg-gray-50 rounded-lg border border-gray-300 hover:bg-gray-100 transition-colors cursor-pointer flex flex-col items-center justify-center"
+    >
+      <input {...getInputProps()} />
+      <p className="text-xs text-gray-600">Drop your KML file here or click to select</p>
+      {fileName && (
+        <p className="mt-2 text-xs text-gray-700">Selected file: {fileName}</p>
+      )}
+      {fileUploadStatus === "uploading" && (
+        <p className="mt-2 text-xs text-blue-600">Uploading...</p>
+      )}
+      {fileUploadStatus === "processed" && (
+        <p className="mt-2 text-xs text-green-500">File processed successfully!</p>
+      )}
+      {fileUploadStatus === "error" && (
+        <p className="mt-2 text-xs text-red-500">Error processing file.</p>
+      )}
     </div>
-  );
+
+    <div className="mt-4 flex justify-center">
+      <button
+        onClick={loadExampleAOFromFile}
+        className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition-colors text-sm"
+      >
+        Load Example Area
+      </button>
+    </div>
+  </div>
+);
 };
 
 export default AreaOpsUploader;

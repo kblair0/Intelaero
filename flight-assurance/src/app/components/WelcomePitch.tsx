@@ -1,4 +1,6 @@
 // components/WelcomePitch.tsx
+// In  bottom Right of Screen
+// This component provides a welcome message and a brief overview of the features
 import React from "react";
 import Image from "next/image";
 

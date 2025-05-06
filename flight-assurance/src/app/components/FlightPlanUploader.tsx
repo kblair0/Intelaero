@@ -565,70 +565,51 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({
   }, [processAndStore]);
 
   return (
-    <div className="flex-1 bg-white shadow-lg p-6 rounded-lg border border-gray-200">
-      <h3 className="text-lg font-bold">
-        🚀 Upload or Use Example Flight Plan 📁
-      </h3>
-      <p className="text-sm text-gray-600">
-        Upload a <strong>.waypoints</strong>, <strong>.geojson</strong>,{" "}
-        <strong>.kml</strong>, or <strong>.kmz</strong> file, or use our example
-        to analyze a drone flight path.
+    <div className="w-full max-w-2xl bg-white p-4 rounded-lg shadow-lg border border-gray-300">
+      <h3 className="text-md font-semibold text-gray-800 mb-4">Upload Flight Plan</h3>
+      <p className="text-xs text-gray-600 mb-4">
+        Upload a <strong>.waypoints</strong>, <strong>.geojson</strong>, <strong>.kml</strong>, or <strong>.kmz</strong> file to analyze your drone flight path.
       </p>
-
+  
       <MapLoadingGuard
         fallback={
-          <div className="mt-4 border-2 border-gray-300 p-6 rounded-lg flex flex-col items-center justify-center">
-            <p className="text-gray-500">Waiting for map to initialize...</p>
+          <div className="flex flex-col items-center justify-center p-6 bg-gray-50 rounded-lg border border-gray-300">
+            <p className="text-sm text-gray-600">Waiting for map to initialize...</p>
             <div className="mt-4 w-8 h-8 border-t-2 border-b-2 border-blue-500 rounded-full animate-spin" />
-            <p className="mt-2 text-xs text-gray-400">
-              This may take a moment, especially with developer tools open
-            </p>
+            <p className="mt-2 text-xs text-gray-400">This may take a moment</p>
           </div>
         }
       >
         <div
           {...getRootProps()}
-          className="mt-4 border-2 border-dashed border-gray-300 p-6 rounded-lg flex flex-col items-center justify-center cursor-pointer"
+          className="p-6 bg-gray-50 rounded-lg border border-gray-300 hover:bg-gray-100 transition-colors cursor-pointer flex flex-col items-center justify-center"
         >
           <input {...getInputProps()} />
-          <p className="text-gray-500">
-            Drag & Drop your file here or click to upload
-          </p>
+          <p className="text-xs text-gray-600">Drop your flight plan file here or click to select</p>
           {fileName && (
-            <p className="mt-2 text-sm text-gray-600">Selected file: {fileName}</p>
+            <p className="mt-2 text-xs text-gray-700">Selected file: {fileName}</p>
           )}
           {(status === "uploading" || isProcessing) && (
-            <p className="mt-2 text-sm text-blue-600">Processing file...</p>
+            <p className="mt-2 text-xs text-blue-600">Processing file...</p>
           )}
           {status === "processed" && (
-            <p className="mt-2 text-sm text-green-600">
-              File processed successfully!
-            </p>
+            <p className="mt-2 text-xs text-green-500">File processed successfully!</p>
           )}
           {status === "error" && (
-            <p className="mt-2 text-sm text-red-600">
-              Error processing file: {error ?? "Please try again."}
-            </p>
+            <p className="mt-2 text-xs text-red-500">Error processing file: {error ?? "Please try again."}</p>
           )}
         </div>
-
-        <div className="mt-4">
-          <p className="text-sm text-gray-600 text-center">
-            Don’t have a file? Try our example to get started.
-          </p>
-          <div className="flex justify-center mt-2">
-            <button
-              onClick={() => {
-                trackEvent("example_geojson_click", {
-                  panel: "flightplanuploader.tsx"
-                });
-                loadExample();
-              }}
-              className="bg-blue-500 text-white px-4 py-2 rounded shadow hover:bg-blue-600 text-sm"
-            >
-              Load Example Flight Plan
-            </button>
-          </div>
+  
+        <div className="mt-4 flex justify-center">
+          <button
+            onClick={() => {
+              trackEvent("example_geojson_click", { panel: "flightplanuploader.tsx" });
+              loadExample();
+            }}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition-colors text-sm"
+          >
+            Load Example Flight Plan
+          </button>
         </div>
       </MapLoadingGuard>
     </div>
