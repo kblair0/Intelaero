@@ -485,12 +485,12 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({
 
         const proc = await processFlightPlan(updatedRaw);
         setFlightPlan(proc);
-        onPlanUploaded?.(proc);
+        onPlanUploaded?.(proc); // Notify parent before closing
         if (process.env.NODE_ENV === "production") {
           await trackFlightPlan(proc, name);
         }
         setStatus("processed");
-        onClose?.();
+        onClose?.(); // Close after notifying parent
       } catch (error: any) {
         console.error("🔥 processAndStore error:", error);
         alert(`❌ Flight-plan processing failed:\n${error?.message ?? String(error)}`);

@@ -1,11 +1,14 @@
 "use client";
 import React, { useState, useCallback } from "react";
-import { X, Eye, Radio, Link, User, MapPin, Zap } from "lucide-react";
+import { X, Eye, Radio, Link, User, MapPin, Zap, Plane } from "lucide-react";
 import { trackEventWithForm as trackEvent } from "../components/tracking/tracking";
 import FlightPlanUploader from "./FlightPlanUploader";
 import AreaOpsUploader from "./AO/AreaOpsUploader";
 import { useMarkersContext } from "../context/MarkerContext";
 import { useLOSAnalysis } from "../context/LOSAnalysisContext";
+import { useFlightPlanContext } from "../context/FlightPlanContext";
+import { useAreaOfOpsContext } from "../context/AreaOfOpsContext";
+import { useChecklistContext } from "../context/ChecklistContext";
 
 /**
  * Props for AnalysisWizard component
@@ -135,6 +138,7 @@ const ButtonGroup: React.FC<ButtonGroupProps> = ({
  * 2. Select Analyses (Vs Terrain and Visibility rows, with left-justified headings and centered buttons),
  * 3. Configure Parameters (Analysis Fidelity, Area Analysis Dist, Antenna Height for Flight Plan; Observer Height for Operating Area),
  * Followed by buttons to show the appropriate uploader or reset filters.
+ * Triggers checklist population on successful upload and closes the wizard.
  */
 const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
   const [selectedAnalysisType, setSelectedAnalysisType] = useState<string | null>(null);
@@ -147,6 +151,9 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
 
   const { setGcsElevationOffset, setRepeaterElevationOffset } = useMarkersContext();
   const { setGridSize: setContextGridSize } = useLOSAnalysis();
+  const { flightPlan, setFlightPlan } = useFlightPlanContext();
+  const { aoGeometry, setAoGeometry, setBufferDistance: setContextBufferDistance } = useAreaOfOpsContext();
+  const { addChecks } = useChecklistContext();
 
   /**
    * Toggles the analysis type, ensuring mutual exclusivity
@@ -208,6 +215,17 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
   );
 
   /**
+   * Handles Buffer Distance changes, updating AreaOfOpsContext
+   */
+  const handleBufferDistanceChange = useCallback(
+    (value: number) => {
+      setBufferDistance(value);
+      setContextBufferDistance(value);
+    },
+    [setContextBufferDistance]
+  );
+
+  /**
    * Handles button click to show the appropriate uploader
    */
   const handleButtonClick = () => {
@@ -224,6 +242,26 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
   const handleBackClick = () => {
     setShowUploader(null);
     trackEvent("wizard_back_clicked", { uploader: showUploader });
+  };
+
+  /**
+   * Handles successful flight plan upload
+   */
+  const handleFlightPlanUploaded = (flightData: any) => {
+    setFlightPlan(flightData);
+    addChecks(selectedAnalyses); // Populate checklist
+    onClose(); // Close wizard
+    trackEvent("flight_plan_uploaded", {});
+  };
+
+  /**
+   * Handles successful AO upload
+   */
+  const handleAOUploaded = (aoData: any) => {
+    setAoGeometry(aoData);
+    addChecks(selectedAnalyses); // Populate checklist
+    // Delay closure handled by AreaOpsUploader
+    trackEvent("area_ops_uploaded", {});
   };
 
   /**
@@ -256,8 +294,14 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
     },
     {
       id: "powerline",
-      label: "Powerline",
+      label: "Powerlines",
       icon: <Zap className="w-4 h-4 text-red-600" />,
+      iconBg: "bg-red-200",
+    },
+    {
+      id: "airspace",
+      label: "Airspace",
+      icon: <Plane className="w-4 h-4 text-red-600" />,
       iconBg: "bg-red-200",
     },
   ];
@@ -290,7 +334,7 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
   ];
 
   return (
-    <div className="relative bg-white rounded-lg p-6 max-w-3xl mx-auto shadow-lg max-h-[80vh] overflow-y-auto">
+    <div className="relative bg-white rounded-lg p-4 max-w-full mx-auto shadow-lg max-h-[90vh] overflow-y-auto">
       {/* Close Button */}
       <button
         onClick={onClose}
@@ -302,7 +346,7 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
 
       {/* Section 1: Select Analysis Type */}
       <section className="mb-8">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Select Analysis Type</h2>
+        <h2 className="text-xl font-semibold text-gray-800 mb-4">Choose your type of analysis:</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <button
             onClick={() => toggleAnalysisType("operatingArea")}
@@ -326,8 +370,8 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
                 />
               </svg>
             </div>
-            <h3 className="text-sm font-medium text-gray-800">Operating Area</h3>
-            <p className="text-xs text-green-500">Ideal for local flying (VLOS) and mission planning.</p>
+            <h3 className="text-md font-medium text-gray-800">Operating Area Analysis</h3>
+            <p className="text-sm text-green-500">Ideal for local flying (VLOS) and mission planning.</p>
           </button>
           <button
             onClick={() => toggleAnalysisType("flightPlan")}
@@ -347,18 +391,18 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <h3 className="text-sm font-medium text-gray-800">Flight Plan and Operating Area</h3>
-            <p className="text-xs text-blue-500">Suitable for VLOS, EVLOS, and BVLOS missions.</p>
+            <h3 className="text-md font-medium text-gray-800">Flight Plan and Operating Area Analysis</h3>
+            <p className="text-sm text-blue-500">Suitable for VLOS, EVLOS, and BVLOS missions.</p>
           </button>
         </div>
       </section>
 
       {/* Section 2: Select Analyses */}
       <section className="mb-2">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Select Analyses</h2>
+        <h2 className="text-xl font-semibold text-gray-800 mb-4">Select Analyses</h2>
         <div className="flex flex-col gap-2">
           <div className="w-full">
-            <h3 className="text-sm font-medium text-gray-800 mb-2 text-left">Vs Terrain</h3>
+            <h3 className="text-md font-medium text-gray-800 mb-2 text-left">Vs Terrain</h3>
             <div className="flex flex-wrap gap-3 justify-center">
               {vsTerrainButtons.map((button) => (
                 <div key={button.id} className="flex flex-col items-center gap-1">
@@ -375,13 +419,13 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
                       {button.icon}
                     </div>
                   </button>
-                  <span className="text-xs text-gray-700 text-center w-20">{button.label}</span>
+                  <span className="text-sm text-gray-700 text-center w-20">{button.label}</span>
                 </div>
               ))}
             </div>
           </div>
           <div className="w-full">
-            <h3 className="text-sm font-medium text-gray-800 mb-2 text-left">Visibility</h3>
+            <h3 className="text-md font-medium text-gray-800 mb-2 text-left">Visibility</h3>
             <div className="flex flex-wrap gap-3 justify-center">
               {visibilityButtons.map((button) => (
                 <div key={button.id} className="flex flex-col items-center gap-1">
@@ -398,7 +442,7 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
                       {button.icon}
                     </div>
                   </button>
-                  <span className="text-xs text-gray-700 text-center w-20">{button.label}</span>
+                  <span className="text-sm text-gray-700 text-center w-20">{button.label}</span>
                 </div>
               ))}
             </div>
@@ -426,7 +470,7 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
               label="Area Analysis Dist from Flight Plan (m):"
               options={[500, 1000, 2000, "Other"]}
               selectedValue={bufferDistance}
-              onChange={setBufferDistance}
+              onChange={handleBufferDistanceChange}
               ariaLabel="Area Analysis Distance"
               min={0}
               max={5000}
@@ -441,7 +485,7 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
               max={50}
             />
           </div>
-        )  : selectedAnalysisType === "operatingArea" ? (
+        ) : selectedAnalysisType === "operatingArea" ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <ButtonGroup
               label="Observer Height Above Ground (m):"
@@ -475,9 +519,15 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
           </div>
           <div className="bg-white p-4 rounded-lg w-full max-w-4xl mx-auto">
             {showUploader === "flightPlan" ? (
-              <FlightPlanUploader onClose={onClose} />
+              <FlightPlanUploader
+                onClose={onClose}
+                onPlanUploaded={handleFlightPlanUploaded}
+              />
             ) : (
-              <AreaOpsUploader onClose={onClose} />
+              <AreaOpsUploader
+                onClose={onClose}
+                onAOUploaded={handleAOUploaded}
+              />
             )}
           </div>
         </section>
