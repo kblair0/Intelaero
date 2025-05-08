@@ -1,5 +1,5 @@
 /**
- * PlanVerification/Cards/LOSAnalysisCard.tsx
+ * PlanVerification/Cards/VisibilityAnalysisCard.tsx
  * 
  * Purpose:
  * Provides a verification interface for Line of Sight (LOS) analysis.

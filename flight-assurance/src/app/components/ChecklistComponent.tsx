@@ -1,8 +1,21 @@
+/**
+ * ChecklistComponent.tsx
+ * 
+ * Purpose:
+ * Provides a guided, interactive checklist to help users complete workflow tasks.
+ * Supports both guided and list viewing modes for flexible user experience.
+ * 
+ * Related Files:
+ * - ChecklistContext: Provides checklist data and toggle functions
+ * - ToolsDashboard: Parent container where this component is rendered
+ * - Card: UI component used for consistent styling
+ */
+
 "use client";
 
 import React, { useState } from 'react';
 import { useChecklistContext } from '../context/ChecklistContext';
-import { CheckCircle2, Circle, ChevronDown, ChevronUp } from 'lucide-react';
+import { CheckCircle2, Circle, ChevronDown, ChevronUp, ChevronRight, Loader } from 'lucide-react';
 import Card from '../components/UI/Card';
 
 // Define interfaces for type safety and clarity
@@ -12,7 +25,13 @@ interface ChecklistComponentProps {
 }
 
 interface ChecklistItemProps {
-  check: { id: string; label: string; action: string; status: 'pending' | 'completed'; target: { component: string; action: string } };
+  check: { 
+    id: string; 
+    label: string; 
+    action: string; 
+    status: 'pending' | 'completed'; 
+    target: { component: string; action: string } 
+  };
   index?: number;
   onToggle: (id: string) => void;
   onGuideMe: (target: { component: string; action: string }) => void;
@@ -24,7 +43,13 @@ interface ChecklistItemProps {
  * Encapsulates item rendering logic, ensuring DRY and testability.
  * Uses div for accessibility and to avoid button nesting issues.
  */
-const ChecklistItem: React.FC<ChecklistItemProps> = ({ check, index, onToggle, onGuideMe, isGuidedMode = false }) => {
+const ChecklistItem: React.FC<ChecklistItemProps> = ({ 
+  check, 
+  index, 
+  onToggle, 
+  onGuideMe, 
+  isGuidedMode = false 
+}) => {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
@@ -34,7 +59,11 @@ const ChecklistItem: React.FC<ChecklistItemProps> = ({ check, index, onToggle, o
 
   return (
     <div
-      className={`flex items-center gap-2 ${isGuidedMode ? 'bg-blue-50 p-1 rounded-lg border border-blue-200' : 'bg-white p-1 rounded-lg shadow-sm'}`}
+      className={`flex items-center gap-2 p-2 border rounded-md ${
+        isGuidedMode 
+          ? 'bg-blue-50 border-blue-200' 
+          : 'bg-white border-gray-200 hover:bg-gray-50'
+      }`}
       onClick={() => onToggle(check.id)}
       onKeyDown={handleKeyDown}
       role="checkbox"
@@ -43,22 +72,22 @@ const ChecklistItem: React.FC<ChecklistItemProps> = ({ check, index, onToggle, o
       tabIndex={0}
     >
       {check.status === 'completed' ? (
-        <CheckCircle2 className="w-5 h-5 text-green-500" />
+        <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
       ) : (
-        <Circle className="w-5 h-5 text-gray-400" />
+        <Circle className="w-5 h-5 text-gray-400 flex-shrink-0" />
       )}
       <div className="flex-1">
         <p className={`text-xs ${check.status === 'completed' ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
-          {isGuidedMode ? `1. ${check.label}` : `${index! + 1}. ${check.label}`}
+          {isGuidedMode ? check.label : `${index! + 1}. ${check.label}`}
         </p>
-        {isGuidedMode && <p className="text-[10px] text-gray-600">{check.action}</p>}
+        {isGuidedMode && <p className="text-xs text-gray-600 mt-1">{check.action}</p>}
       </div>
       <button
         onClick={(e) => {
           e.stopPropagation();
           onGuideMe(check.target);
         }}
-        className="text-blue-500 text-xs hover:text-blue-600"
+        className="flex-shrink-0 px-3 py-1 bg-blue-500 text-white text-xs rounded-md hover:bg-blue-600 transition-colors"
         aria-label={`Guide me to ${check.label}`}
       >
         Guide Me
@@ -72,7 +101,10 @@ const ChecklistItem: React.FC<ChecklistItemProps> = ({ check, index, onToggle, o
  * Adheres to SRP by focusing on checklist rendering and user interaction.
  * Uses loose coupling via context and props for testability.
  */
-const ChecklistComponent: React.FC<ChecklistComponentProps> = ({ className, togglePanel }) => {
+const ChecklistComponent: React.FC<ChecklistComponentProps> = ({ 
+  className, 
+  togglePanel 
+}) => {
   const { checks, toggleCheck, actionToPanelMap } = useChecklistContext();
   const [mode, setMode] = useState<'guided' | 'list'>('guided');
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -116,9 +148,9 @@ const ChecklistComponent: React.FC<ChecklistComponentProps> = ({ className, togg
   const renderGuidedMode = () => {
     if (!nextIncompleteCheck) {
       return (
-        <div className="text-center p-1">
+        <div className="text-center p-1 bg-green-50 border border-green-200 rounded-lg">
           <CheckCircle2 className="w-8 h-8 text-green-500 mx-auto mb-2" />
-          <p className="text-xs text-gray-700">All steps completed! Great job!</p>
+          <p className="text-sm text-gray-700">All steps completed! Great job!</p>
         </div>
       );
     }
@@ -133,8 +165,9 @@ const ChecklistComponent: React.FC<ChecklistComponentProps> = ({ className, togg
         />
         <button
           onClick={() => setMode('list')}
-          className="text-blue-500 text-xs hover:underline"
+          className="text-blue-500 text-sm hover:underline flex items-center gap-1"
         >
+          <ChevronDown className="w-4 h-4" />
           View Full Checklist
         </button>
       </div>
@@ -147,70 +180,109 @@ const ChecklistComponent: React.FC<ChecklistComponentProps> = ({ className, togg
       {Object.entries(groupedChecks).map(([group, groupChecks]) => {
         const groupCompleted = groupChecks.filter((check) => check.status === 'completed').length;
         const isExpanded = expandedGroups.has(group);
+        
         return (
-          <div key={group} className="space-y-2">
+          <div key={group} className="border rounded-lg overflow-hidden bg-white shadow-sm">
             <button
-              className="flex items-center justify-between w-full text-left p-1 hover:bg-gray-100 rounded"
+              className="w-full px-2 py-2 flex items-center justify-between hover:bg-gray-50"
               onClick={() => toggleGroup(group)}
             >
-              <h4 className="text-sm font-medium text-gray-800 capitalize">
-                {group.replace(/([A-Z])/g, ' $1').trim()} ({groupCompleted}/{groupChecks.length})
-              </h4>
-              {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              <div className="flex items-center gap-2">
+                {groupCompleted === groupChecks.length ? (
+                  <CheckCircle2 className="w-5 h-5 text-green-500" />
+                ) : (
+                  <Circle className="w-5 h-5 text-gray-400" />
+                )}
+                <h4 className="font- text-sm text-gray-900 capitalize">
+                  {group.replace(/([A-Z])/g, ' $1').trim()}
+                </h4>
+                <span className="text-sm text-gray-500">
+                  ({groupCompleted}/{groupChecks.length})
+                </span>
+              </div>
+              {isExpanded ? (
+                <ChevronDown className="w-5 h-5 text-gray-400" />
+              ) : (
+                <ChevronRight className="w-5 h-5 text-gray-400" />
+              )}
             </button>
+            
             {isExpanded && (
-              <ul className="space-y-2 pl-4">
+              <div className="px-2 py-2 bg-gray-50 border-t space-y-1">
                 {groupChecks.map((check, index) => (
-                  <li key={check.id}>
-                    <ChecklistItem
-                      check={check}
-                      index={index}
-                      onToggle={toggleCheck}
-                      onGuideMe={handleGuideMe}
-                    />
-                  </li>
+                  <ChecklistItem
+                    key={check.id}
+                    check={check}
+                    index={index}
+                    onToggle={toggleCheck}
+                    onGuideMe={handleGuideMe}
+                  />
                 ))}
-              </ul>
+              </div>
             )}
           </div>
         );
       })}
+      
       <button
         onClick={() => setMode('guided')}
-        className="text-blue-500 text-xs hover:underline"
+        className="text-blue-500 text-xs hover:underline flex items-center gap-1"
       >
+        <ChevronUp className="w-4 h-4" />
         Switch to Guided Mode
       </button>
     </div>
   );
 
   return (
-    <Card className={`w-full rounded-l-xl ${className}`}>
+    <Card className={`w-full rounded-lg bg-white shadow ${className}`}>
       <div className="space-y-4 p-1 flex flex-col h-full">
         <div className="flex items-center justify-between">
-          <h3 className="text-base font-semibold text-gray-900">
+          <h3 className="font-medium text-gray-900 flex items-center mr-1 gap-2">
             Your Analysis Checklist
-            <span className="text-xs font-normal text-gray-600 ml-2">
+            <span className="text-sm font-normal text-gray-600">
               ({completedChecks}/{totalChecks})
             </span>
           </h3>
           <button
             onClick={() => setMode(mode === 'guided' ? 'list' : 'guided')}
-            className="text-blue-500 text-xs hover:underline"
+            className="flex items-center gap-1 px-1 ml-1 py-1 bg-gray-100 text-gray-800 text-xs rounded-md hover:bg-gray-200 transition-colors"
           >
-            {mode === 'guided' ? 'List Mode' : 'Guided Mode'}
+            {mode === 'guided' ? (
+              <>
+                <ChevronDown className="w-3 h-3" />
+                List Mode
+              </>
+            ) : (
+              <>
+                <ChevronUp className="w-3 h-3" />
+                Guided Mode
+              </>
+            )}
           </button>
         </div>
-        <div className="w-full bg-gray-200 rounded-full h-2.5">
+        
+        <div className="w-full bg-gray-200 rounded-full h-1.5">
           <div
-            className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+            className="bg-blue-500 h-2 rounded-full transition-all duration-300"
             style={{ width: `${progressPercentage}%` }}
           />
         </div>
+        
         <p className="text-xs text-gray-600">
           Follow these steps to complete your analyses. Use 'Guide Me' to locate each action in the app.
         </p>
-        <div className="flex-1 overflow-y-auto">{mode === 'guided' ? renderGuidedMode() : renderListMode()}</div>
+        
+        {progressPercentage < 100 && completedChecks > 0 && (
+          <div className="flex items-center gap-2 p-2 bg-blue-50 text-blue-700 rounded border border-blue-100">
+            <Loader className="w-4 h-4 animate-spin" />
+            <span className="text-xs">Analysis in progress...</span>
+          </div>
+        )}
+        
+        <div className="flex-1 overflow-y-auto">
+          {mode === 'guided' ? renderGuidedMode() : renderListMode()}
+        </div>
       </div>
     </Card>
   );

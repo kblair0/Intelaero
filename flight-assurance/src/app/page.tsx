@@ -29,7 +29,7 @@ import { LOSAnalysisProvider } from "./context/LOSAnalysisContext";
 import { FlightConfigurationProvider } from "./context/FlightConfigurationContext";
 import { AreaOfOpsProvider } from "./context/AreaOfOpsContext";
 import { ChecklistProvider } from "./context/ChecklistContext";
-import PlanVerificationDashboard from "./components/PlanVerification/ToolsDashboard";
+import PlanVerificationDashboard from "./components/VerificationToolbar/ToolsDashboard";
 import Card from "./components/UI/Card";
 import { ObstacleAnalysisProvider } from "./context/ObstacleAnalysisContext";
 import MapSidePanel from "./components/UI/MapSidePanel";
@@ -162,25 +162,26 @@ const HomeContent = () => {
           </div>
 
           {/* Right Sidebar: Checklist and Plan Verification */}
-          <div className="w-80 h-full shrink-0 max-h-screen overflow-y-auto flex flex-col gap-4 pb-4">
-            {/* Checklist Section */}
-            {(flightPlan || aoGeometry) && !showWizard && !showUploader && !showAreaOpsUploader && (
-              <div className="w-full relative z-10">
-                <ChecklistComponent className="relative" togglePanel={togglePanel} />
-              </div>
-            )}
+          <div className="w-80 h-full shrink-0 max-h-screen overflow-y-auto flex p-1 mr-2 flex-col gap-4 pb-4">
 
             {/* Plan Verification Section */}
             <div className="w-full z-0">
               <Card className="w-full rounded-l-xl">
                 <div className="space-y-4 h-full flex flex-col">
-                  <h3 className="text-lg font-semibold text-gray-900">Terrain and Visibility Toolbar</h3>
+                  <h3 className="text-lg font-medium text-gray-900">Terrain and Visibility Toolbar</h3>
                   <div className="flex-1 overflow-y-auto">
                     <PlanVerificationDashboard onTogglePanel={togglePanel} />
                   </div>
                 </div>
               </Card>
             </div>
+
+            {/* Checklist Section */}
+            {(flightPlan || aoGeometry) && !showWizard && !showUploader && !showAreaOpsUploader && (
+              <div className="w-full relative z-10">
+                <ChecklistComponent className="relative" togglePanel={togglePanel} />
+              </div>
+            )}            
           </div>
 
           {/* Analysis Panels */}
@@ -211,7 +212,6 @@ const HomeContent = () => {
             onToggle={() => togglePanel("terrain")}
             className="z-30"
           >
-
               <ObstacleAnalysisDashboard />
 
           </MapSidePanel>

@@ -19,7 +19,7 @@ import {
   LocationData,
   StationLOSResult
 } from '../Types/GridAnalysisTypes';
-import { FlightPlanData } from '../context/FlightPlanContext';
+import { FlightPlanData } from '../../../context/FlightPlanContext';
 
 // Type definitions for internal use
 type BBox = [number, number, number, number];

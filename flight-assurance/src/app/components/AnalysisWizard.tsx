@@ -401,6 +401,8 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
       <section className="mb-2">
         <h2 className="text-xl font-semibold text-gray-800 mb-4">Select Analyses</h2>
         <div className="flex flex-col gap-2">
+
+
           <div className="w-full">
             <h3 className="text-md font-medium text-gray-800 mb-2 text-left">Vs Terrain</h3>
             <div className="flex flex-wrap gap-3 justify-center">
@@ -424,6 +426,8 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
               ))}
             </div>
           </div>
+
+
           <div className="w-full">
             <h3 className="text-md font-medium text-gray-800 mb-2 text-left">Visibility</h3>
             <div className="flex flex-wrap gap-3 justify-center">
@@ -447,6 +451,8 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
               ))}
             </div>
           </div>
+
+          
         </div>
       </section>
 

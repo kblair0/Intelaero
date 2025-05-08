@@ -2,13 +2,13 @@ import React, { useState, useRef } from 'react';
 import { useMapContext } from '../../context/mapcontext';
 import { MAP_LAYERS } from '../../services/LayerManager';
 import { trackEventWithForm as trackEvent } from '../tracking/tracking';
-import { Battery, Radio, GripVertical } from 'lucide-react';
+import { Mountain, Radio, GripVertical } from 'lucide-react';
 import { useAreaOpsProcessor } from '../AO/Hooks/useAreaOpsProcessor';
 
 interface LayerControlsProps {
   onToggleDBYD?: () => void;
-  activePanel?: 'energy' | 'los' | null;
-  togglePanel?: (panel: 'energy' | 'los') => void;
+  activePanel?: 'energy' | 'los' | 'terrain' | null;
+  togglePanel?: (panel: 'energy' | 'los' | 'terrain') => void;
   flightPlan?: any; // Replace with FlightPlan type if available
   setShowUploader?: (show: boolean) => void;
 }
@@ -87,17 +87,17 @@ const LayerControls: React.FC<LayerControlsProps> = ({
         <div className="flex flex-row gap-2 items-start">
           <button
             onClick={() => {
-              trackEvent('map_energy_panel_click', { panel: 'layer-controls' });
+              trackEvent('map_terrain_panel_click', { panel: 'layer-controls' });
               togglePanel('terrain');
             }}
             className={`map-button flex items-center gap-2 transition-colors ${
-              activePanel === 'energy'
+              activePanel === 'terrain'
                 ? 'bg-blue-100 border-blue-300 shadow-md'
                 : 'hover:bg-gray-300/80'
             }`}
           >
-            <Battery className="w-4 h-4" />
-            Energy Analysis
+            <Mountain className="w-4 h-4" />
+            Terrain Tools
           </button>
           <button
             onClick={() => {
