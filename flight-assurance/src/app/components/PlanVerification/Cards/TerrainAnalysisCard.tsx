@@ -1,3 +1,11 @@
+/**
+ * TerrainAnalysisCard.tsx
+ * 
+ * Purpose: Provides a verification interface for terrain obstacle analysis
+ * Displays analysis status and controls for running terrain analysis
+ * Integrates with TerrainAnalysisDashboard via MapSidePanel in page.tsx
+ */
+
 'use client';
 import React, { useState, useEffect } from "react";
 import { 
@@ -12,10 +20,9 @@ import { useObstacleAnalysis } from "../../../context/ObstacleAnalysisContext";
 import { useMapContext } from "../../../context/mapcontext";
 import { useAreaOfOpsContext } from "../../../context/AreaOfOpsContext";
 import { VerificationCardProps, VerificationStatus } from "../Utils/types";
-import { formatDistance, getTerrainAnalysisStatus } from "../Utils/terrainAnalysis";
+import { getTerrainAnalysisStatus } from "../Utils/terrainAnalysis";
 import { useAreaOpsProcessor } from "../../AO/Hooks/useAreaOpsProcessor";
 import { trackEventWithForm as trackEvent } from "../../tracking/tracking";
-import { useLayers } from "../../../hooks/useLayers";
 import dynamic from 'next/dynamic';
 import { layerManager } from "../../../services/LayerManager";
 
@@ -24,17 +31,11 @@ const ObstacleChartModal = dynamic(
   () => import('../../Analyses/ObstacleAnalysis/ObstacleChartModal'),
   { ssr: false }
 );
-const ObstacleAnalysisDashboard = dynamic(
-  () => import('../../Analyses/ObstacleAnalysis/ObstacleAnalysisDashboard'),
+const TerrainAnalysisDashboard = dynamic(
+  () => import('../../Analyses/ObstacleAnalysis/TerrainAnalysisDashboard'),
   { ssr: false }
 );
 
-/**
- * TerrainAnalysisCard component
- * Purpose: Provides a verification interface for terrain obstacle analysis
- * Displays analysis status and controls for running terrain analysis
- * Integrates with ObstacleAnalysisDashboard via MapSidePanel in page.tsx
- */
 const TerrainAnalysisCard: React.FC<VerificationCardProps> = ({
   isExpanded,
   onToggleExpanded,
@@ -47,13 +48,11 @@ const TerrainAnalysisCard: React.FC<VerificationCardProps> = ({
     status: analysisStatus, 
     error: analysisError, 
     runAnalysis,
-    runAOAnalysis,
     clearResults
   } = useObstacleAnalysis();
   const { map, elevationService } = useMapContext();
   const context = useAreaOfOpsContext();
-  const { togglePowerlines } = useLayers();
-  const { generateTerrainGrid, generateAOFromFlightPlan } = useAreaOpsProcessor();
+  const { generateAOFromFlightPlan } = useAreaOpsProcessor();
   const [showTerrainPopup, setShowTerrainPopup] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -76,7 +75,7 @@ const TerrainAnalysisCard: React.FC<VerificationCardProps> = ({
     return <div>Error: Area of Operations context not initialized</div>;
   }
 
-  const { aoGeometry, aoTerrainGrid, bufferDistance, setBufferDistance, setAoTerrainGrid } = context;
+  const { aoGeometry, setBufferDistance, setAoTerrainGrid } = context;
 
   /**
    * Runs terrain obstacle analysis for the flight plan
@@ -105,35 +104,6 @@ const TerrainAnalysisCard: React.FC<VerificationCardProps> = ({
     trackEvent("run_obstacle_analysis", { panel: "terrainanalysis.tsx" });
     console.log("Status before analysis:", analysisStatus);
     runAnalysis();
-  };
-
-  /**
-   * Resets terrain analysis and clears results
-   */
-  const handleResetAnalysis = () => {
-    console.log("Resetting terrain analysis completely");
-    trackEvent("reset_terrain_analysis", { panel: "terrainanalysis.tsx" });
-    
-    clearResults();
-    setAoTerrainGrid(null);
-    
-    if (map && layerManager.isLayerVisible(layerManager.MAP_LAYERS.AOTERRAIN_GRID)) {
-      layerManager.setLayerVisibility(layerManager.MAP_LAYERS.AOTERRAIN_GRID, false);
-      layerManager.removeLayer(layerManager.MAP_LAYERS.AOTERRAIN_GRID);
-    }
-    
-    setLocalError(null);
-    setIsAnalyzing(false);
-    setShowTerrainPopup(false);
-  };
-
-  /**
-   * Toggles powerlines layer visibility
-   */
-  const handleTogglePowerlines = () => {
-    trackEvent("powerlines_add_overlay_click", { panel: "terrainanalysis.tsx" });
-    trackEvent("DYBDpowerlines_add_overlay_click", { panel: "terrainanalysis.tsx" });
-    togglePowerlines();
   };
 
   /**
@@ -266,58 +236,12 @@ const TerrainAnalysisCard: React.FC<VerificationCardProps> = ({
               {isAnalyzing ? "Analyzing..." : "Analyse Terrain Obstacles"}
             </button>
           )}
-          {hasAOGeometry && (
-            <button
-              onClick={async () => {
-                trackEvent("run_ao_terrain_analysis", { panel: "terrainanalysis.tsx" });
-                setIsAnalyzing(true);
-                setLocalError(null);
-                try {
-                  let terrainGrid = aoTerrainGrid;
-                  if (!terrainGrid || terrainGrid.length === 0) {
-                    console.log("Generating AO terrain grid before analysis");
-                    terrainGrid = await generateTerrainGrid();
-                  }
-                  if (terrainGrid && terrainGrid.length > 0) {
-                    console.log("Running AO analysis with grid:", terrainGrid.length, "cells");
-                    await runAOAnalysis(terrainGrid);
-                  } else {
-                    console.error("Failed to generate terrain grid:", terrainGrid);
-                    throw new Error("No terrain grid available for analysis");
-                  }
-                } catch (error) {
-                  console.error("AO terrain analysis error:", error);
-                  setLocalError(error instanceof Error ? error.message : "Unknown error");
-                } finally {
-                  setIsAnalyzing(false);
-                }
-              }}
-              className="flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={isAnalyzing || !map || !elevationService || !hasAOGeometry}
-            >
-              <Mountain className="w-4 h-4" />
-              {isAnalyzing ? "Analyzing..." : "Analyse Terrain In AO"}
-            </button>
-          )}
           <button
             onClick={handleToggleSidePanel}
             className="flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors"
           >
             <Mountain className="w-4 h-4" />
             Open Terrain Dashboard
-          </button>
-          <button
-            onClick={handleTogglePowerlines}
-            className="flex items-center justify-center gap-2 px-3 py-1.5 bg-green-500 text-white text-sm rounded-md hover:bg-green-600 transition-colors"
-          >
-            ⚡ Toggle Powerlines
-          </button>
-          <button 
-            onClick={handleResetAnalysis}
-            className="flex items-center justify-center gap-2 px-3 py-1.5 bg-gray-500 text-white text-sm rounded-md hover:bg-gray-600 transition-colors"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Reset Analysis
           </button>
         </div>
       </div>

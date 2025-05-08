@@ -9,12 +9,12 @@
  * - Updated activePanel type to include "terrain".
  * - Added MapSidePanel for Terrain Analysis (ObstacleAnalysisDashboard).
  * - Ensured consistent z-index and styling with LOS and Energy panels.
+ * - Passed togglePanel to ChecklistComponent for "Guide Me" functionality.
  */
 
 "use client";
 import React, { useState, ReactNode, useEffect } from "react";
 import Calculator from "./components/Calculator";
-import Image from "next/image";
 import FlightPlanUploader from "./components/FlightPlanUploader";
 import AreaOpsUploader from "./components/AO/AreaOpsUploader";
 import Map from "./components/Map";
@@ -33,7 +33,7 @@ import PlanVerificationDashboard from "./components/PlanVerification/ToolsDashbo
 import Card from "./components/UI/Card";
 import { ObstacleAnalysisProvider } from "./context/ObstacleAnalysisContext";
 import MapSidePanel from "./components/UI/MapSidePanel";
-import { Battery, Radio, GripVertical, Wand2, X, Mountain } from "lucide-react";
+import { Battery, Radio, Mountain } from "lucide-react";
 import { trackEventWithForm as trackEvent } from "./components/tracking/tracking";
 import { MapProvider } from "./context/mapcontext";
 import { AnalysisControllerProvider } from "./context/AnalysisControllerContext";
@@ -42,13 +42,12 @@ import AnalysisWizard from "./components/AnalysisWizard";
 import WelcomeMessage from "./components/WelcomeMessage";
 import ChecklistComponent from "./components/ChecklistComponent";
 import 'mapbox-gl/dist/mapbox-gl.css';
-import ObstacleAnalysisDashboard from "./components/Analyses/ObstacleAnalysis/ObstacleAnalysisDashboard"; // Static import for performance
+import ObstacleAnalysisDashboard from "./components/Analyses/ObstacleAnalysis/TerrainAnalysisDashboard";
 
 /**
  * Main content component for the home page, managing UI layout and uploader/wizard overlays
  */
 const HomeContent = () => {
-  // Updated activePanel to include "terrain"
   const [activePanel, setActivePanel] = useState<"energy" | "los" | "terrain" | null>(null);
   const [showUploader, setShowUploader] = useState(false);
   const [showAreaOpsUploader, setShowAreaOpsUploader] = useState(false);
@@ -167,7 +166,7 @@ const HomeContent = () => {
             {/* Checklist Section */}
             {(flightPlan || aoGeometry) && !showWizard && !showUploader && !showAreaOpsUploader && (
               <div className="w-full relative z-10">
-                <ChecklistComponent className="relative" />
+                <ChecklistComponent className="relative" togglePanel={togglePanel} />
               </div>
             )}
 
@@ -196,7 +195,7 @@ const HomeContent = () => {
           </MapSidePanel>
 
           <MapSidePanel
-            title="LOS Analysis"
+            title="Visibilty and Comms Tools"
             icon={<Radio className="w-5 h-5" />}
             isExpanded={activePanel === "los"}
             onToggle={() => togglePanel("los")}
@@ -206,21 +205,15 @@ const HomeContent = () => {
           </MapSidePanel>
 
           <MapSidePanel
-            title="Terrain Analysis"
+            title="Terrain Analysis Tools"
             icon={<Mountain className="w-5 h-5" />}
             isExpanded={activePanel === "terrain"}
             onToggle={() => togglePanel("terrain")}
             className="z-30"
           >
-            <div className="space-y-4 p-1">
-              <div className="mb-4">
-                <h2 className="text-lg font-semibold text-gray-800 mb-1">Terrain Analysis</h2>
-                <p className="text-sm text-gray-600">
-                  Verify terrain clearance and obstacles for your flight plan
-                </p>
-              </div>
-              <ObstacleAnalysisDashboard autoRun={false} />
-            </div>
+
+              <ObstacleAnalysisDashboard />
+
           </MapSidePanel>
         </div>
       </div>

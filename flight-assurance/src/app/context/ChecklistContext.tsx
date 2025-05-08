@@ -32,6 +32,7 @@ interface ChecklistContextProps {
   resetChecks: () => void;
   guidedTarget: { component: string; action: string } | null;
   setGuidedTarget: (target: { component: string; action: string } | null) => void;
+  actionToPanelMap: Record<string, 'terrain' | 'los' | 'energy' | null>;
 }
 
 const ChecklistContext = createContext<ChecklistContextProps | undefined>(undefined);
@@ -206,6 +207,26 @@ export const ChecklistProvider: React.FC<{ children: ReactNode }> = ({ children 
   };
 
   /**
+   * Mapping of checklist actions to MapSidePanel names
+   */
+  const actionToPanelMap: Record<string, 'terrain' | 'los' | 'energy' | null> = {
+    openTerrainTools: 'terrain',
+    analyseTerrainInAO: 'terrain',
+    analyseFlightPathVsTerrain: 'terrain',
+    togglePowerlines: 'terrain',
+    addObserver: 'terrain', // Map-related, but terrain context
+    addGCSorRepeater: 'terrain', // Map-related, but terrain context
+    uploadFlightPlan: 'terrain', // Map-related, but terrain context
+    openLayerControls: null, // Map-related, no panel
+    toggleAirspace: null, // Map-related, no panel
+    openLOSPanel: 'los',
+    observerToDrone: 'los',
+    antennaToDrone: 'los',
+    droneToGround: 'los',
+    antennaToAntenna: 'los',
+  };
+
+  /**
    * Adds checklist items based on selected analyses
    * @param analyses - Array of analysis IDs from AnalysisWizard
    */
@@ -254,6 +275,7 @@ export const ChecklistProvider: React.FC<{ children: ReactNode }> = ({ children 
     resetChecks,
     guidedTarget,
     setGuidedTarget,
+    actionToPanelMap,
   };
 
   return (

@@ -117,7 +117,6 @@ const AnalysisDashboard: React.FC = () => {
   return (
     <div className="space-y-4 p-1">
       <div className="mb-4">
-        <h2 className="text-lg font-semibold text-gray-800 mb-1">Line of Sight Analysis</h2>
         <p className="text-sm text-gray-600">
           Verify communication coverage and visibility for your flight plan
         </p>

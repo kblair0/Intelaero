@@ -88,7 +88,7 @@ const LayerControls: React.FC<LayerControlsProps> = ({
           <button
             onClick={() => {
               trackEvent('map_energy_panel_click', { panel: 'layer-controls' });
-              togglePanel('energy');
+              togglePanel('terrain');
             }}
             className={`map-button flex items-center gap-2 transition-colors ${
               activePanel === 'energy'
@@ -111,7 +111,7 @@ const LayerControls: React.FC<LayerControlsProps> = ({
             }`}
           >
             <Radio className="w-4 h-4" />
-            LOS Analysis
+            Visibility Tools
           </button>
           {flightPlan && (
             <button
