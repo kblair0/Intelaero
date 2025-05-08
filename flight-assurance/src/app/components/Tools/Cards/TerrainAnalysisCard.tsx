@@ -1,3 +1,21 @@
+/**
+ * TerrainAnalysisCard.tsx
+ * 
+ * Purpose:
+ * Provides a verification interface for terrain and obstacle analysis.
+ * Displays analysis status, controls for running analysis, and options to view detailed results.
+ * 
+ * Changes:
+ * - Removed local MapSidePanel and isSidePanelOpen state.
+ * - Updated handleToggleSidePanel to use onTogglePanel("terrain") without local state.
+ * - Adjusted button label to reflect panel open/close state using activePanel prop.
+ * 
+ * Related Components:
+ * - PlanVerificationDashboard: Renders this as a verification card
+ * - ObstacleAnalysisContext: Provides analysis data and functionality
+ * - ObstacleAnalysisDashboard: Detailed analysis dashboard (rendered in page.tsx)
+ */
+
 'use client';
 import React, { useState, useEffect } from "react";
 import { 
@@ -19,29 +37,20 @@ import { useLayers } from "../../../hooks/useLayers";
 import dynamic from 'next/dynamic';
 import { layerManager } from "../../../services/LayerManager";
 
-// Dynamic imports for performance optimization
+// Dynamic imports
 const ObstacleChartModal = dynamic(
   () => import('../../Analyses/ObstacleAnalysis/ObstacleChartModal'),
   { ssr: false }
 );
-const ObstacleAnalysisDashboard = dynamic(
-  () => import('../../Analyses/ObstacleAnalysis/ObstacleAnalysisDashboard'),
-  { ssr: false }
-);
 
-/**
- * TerrainAnalysisCard component
- * Purpose: Provides a verification interface for terrain obstacle analysis
- * Displays analysis status and controls for running terrain analysis
- * Integrates with ObstacleAnalysisDashboard via MapSidePanel in page.tsx
- */
-const TerrainAnalysisCard: React.FC<VerificationCardProps> = ({
+const TerrainAnalysisCard: React.FC<VerificationCardProps & { activePanel?: string | null }> = ({
   isExpanded,
   onToggleExpanded,
   flightPlan,
-  onTogglePanel
+  onTogglePanel,
+  activePanel // Reflects global panel state
 }) => {
-  // Hooks for context and state management
+  // Hooks
   const { 
     results, 
     status: analysisStatus, 
@@ -53,24 +62,26 @@ const TerrainAnalysisCard: React.FC<VerificationCardProps> = ({
   const { map, elevationService } = useMapContext();
   const context = useAreaOfOpsContext();
   const { togglePowerlines } = useLayers();
-  const { generateTerrainGrid, generateAOFromFlightPlan } = useAreaOpsProcessor();
+  const { generateTerrainGrid, processAreaOfOperations, generateAOFromFlightPlan } = useAreaOpsProcessor();
   const [showTerrainPopup, setShowTerrainPopup] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [localBufferDistance, setLocalBufferDistance] = useState<number>(context?.bufferDistance ?? 500);
 
-  // Sync local buffer distance with context
   useEffect(() => {
     setLocalBufferDistance(context?.bufferDistance ?? 500);
   }, [context?.bufferDistance]);
 
-  // Update analyzing state and error handling
   useEffect(() => {
     setIsAnalyzing(analysisStatus === 'loading');
-    setLocalError(analysisStatus === 'error' && analysisError ? analysisError : null);
+    if (analysisStatus === 'error' && analysisError) {
+      setLocalError(analysisError);
+    } else {
+      setLocalError(null);
+    }
   }, [analysisStatus, analysisError]);
 
-  // Early return if context is unavailable
+  // Early return after Hooks
   if (!context) {
     console.error("AreaOfOpsContext is not available");
     return <div>Error: Area of Operations context not initialized</div>;
@@ -79,7 +90,7 @@ const TerrainAnalysisCard: React.FC<VerificationCardProps> = ({
   const { aoGeometry, aoTerrainGrid, bufferDistance, setBufferDistance, setAoTerrainGrid } = context;
 
   /**
-   * Runs terrain obstacle analysis for the flight plan
+   * Runs obstacle analysis for the flight plan
    */
   const handleRunAnalysis = () => {
     console.log("Attempting obstacle analysis with:", {
@@ -108,7 +119,7 @@ const TerrainAnalysisCard: React.FC<VerificationCardProps> = ({
   };
 
   /**
-   * Resets terrain analysis and clears results
+   * Resets analysis state and clears map layers
    */
   const handleResetAnalysis = () => {
     console.log("Resetting terrain analysis completely");
@@ -117,9 +128,11 @@ const TerrainAnalysisCard: React.FC<VerificationCardProps> = ({
     clearResults();
     setAoTerrainGrid(null);
     
-    if (map && layerManager.isLayerVisible(layerManager.MAP_LAYERS.AOTERRAIN_GRID)) {
-      layerManager.setLayerVisibility(layerManager.MAP_LAYERS.AOTERRAIN_GRID, false);
-      layerManager.removeLayer(layerManager.MAP_LAYERS.AOTERRAIN_GRID);
+    if (map) {
+      if (layerManager.isLayerVisible(layerManager.MAP_LAYERS.AOTERRAIN_GRID)) {
+        layerManager.setLayerVisibility(layerManager.MAP_LAYERS.AOTERRAIN_GRID, false);
+        layerManager.removeLayer(layerManager.MAP_LAYERS.AOTERRAIN_GRID);
+      }
     }
     
     setLocalError(null);
@@ -128,7 +141,7 @@ const TerrainAnalysisCard: React.FC<VerificationCardProps> = ({
   };
 
   /**
-   * Toggles powerlines layer visibility
+   * Toggles powerline visibility on the map
    */
   const handleTogglePowerlines = () => {
     trackEvent("powerlines_add_overlay_click", { panel: "terrainanalysis.tsx" });
@@ -137,7 +150,7 @@ const TerrainAnalysisCard: React.FC<VerificationCardProps> = ({
   };
 
   /**
-   * Opens detailed terrain analysis popup
+   * Opens the detailed analysis popup
    */
   const openDetailedAnalysis = () => {
     console.log("Opening detailed terrain analysis...");
@@ -146,7 +159,7 @@ const TerrainAnalysisCard: React.FC<VerificationCardProps> = ({
   };
 
   /**
-   * Toggles the terrain analysis side panel via parent
+   * Toggles the terrain analysis dashboard via parent
    */
   const handleToggleSidePanel = () => {
     console.log("Toggling terrain side panel");
@@ -155,8 +168,7 @@ const TerrainAnalysisCard: React.FC<VerificationCardProps> = ({
   };
 
   /**
-   * Updates buffer distance and regenerates AO
-   * @param newDistance - New buffer distance in meters
+   * Updates the AO buffer distance and regenerates AO
    */
   const handleBufferDistanceChange = (newDistance: number) => {
     setLocalBufferDistance(newDistance);
@@ -171,7 +183,6 @@ const TerrainAnalysisCard: React.FC<VerificationCardProps> = ({
 
   /**
    * Determines the verification status based on analysis results
-   * @returns Verification status
    */
   const getVerificationStatus = (): VerificationStatus => {
     if (analysisStatus === 'loading') return 'loading';
@@ -187,8 +198,7 @@ const TerrainAnalysisCard: React.FC<VerificationCardProps> = ({
   };
 
   /**
-   * Renders the card content based on state
-   * @returns JSX for card content
+   * Renders the card content based on analysis state
    */
   const getCardContent = () => {
     const hasAOGeometry = aoGeometry && aoGeometry.features.length > 0;
@@ -300,11 +310,14 @@ const TerrainAnalysisCard: React.FC<VerificationCardProps> = ({
             </button>
           )}
           <button
-            onClick={handleToggleSidePanel}
+            onClick={() => {
+              console.log("Toggling terrain dashboard");
+              handleToggleSidePanel();
+            }}
             className="flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors"
           >
             <Mountain className="w-4 h-4" />
-            Open Terrain Dashboard
+            {activePanel === "terrain" ? "Close Terrain Dashboard" : "Open Terrain Dashboard"}
           </button>
           <button
             onClick={handleTogglePowerlines}

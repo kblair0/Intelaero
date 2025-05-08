@@ -1,16 +1,12 @@
 /**
- * PlanVerification/PlanVerificationDashboard.tsx
+ * PlanVerification/ToolsDashboard.tsx
  * 
  * Purpose:
  * Main container component for flight plan verification.
- * Acts as the orchestrator for all verification cards and manages
- * shared state between verification components.
+ * Orchestrates verification cards and manages shared state between verification components.
  * 
- * This component:
- * - Controls which verification sections are expanded
- * - Passes flight plan data to child components
- * - Coordinates panel toggling (energy/LOS)
- * - Manages overall analysis state
+ * Changes:
+ * - Added activePanel prop to TerrainAnalysisCard to reflect panel state for button labeling.
  * 
  * Related Files:
  * - Card components: Rendered as children of this dashboard
@@ -37,6 +33,7 @@ import {
   TerrainAnalysisCard, 
   LOSAnalysisCard 
 } from "./Cards";
+import { useChecklistContext } from "../../context/ChecklistContext";
 
 // Dynamic imports for map layer handlers
 import dynamic from "next/dynamic";
@@ -48,23 +45,16 @@ const BYDALayerHandler = dynamic(
 );
 
 /**
- * Card components will be imported and rendered here once implemented
- * These imports will be uncommented as each card is developed
- */
-// import BasicChecksCard from "./Cards/BasicChecksCard";
-// import EnergyAnalysisCard from "./Cards/EnergyAnalysisCard";
-// import TerrainAnalysisCard from "./Cards/TerrainAnalysisCard";
-// import LOSAnalysisCard from "./Cards/LOSAnalysisCard";
-
-/**
  * Main dashboard component for flight plan verification
  */
-const PlanVerificationDashboard: React.FC<PlanVerificationDashboardProps> = ({ 
-  onTogglePanel 
+const PlanVerificationDashboard: React.FC<PlanVerificationDashboardProps & { activePanel?: string | null }> = ({ 
+  onTogglePanel,
+  activePanel 
 }) => {
   const { map } = useMapContext();
   const { flightPlan, isProcessed } = useFlightPlanContext();
   const { status: analysisStatus } = useObstacleAnalysis();
+  const { guidedTarget } = useChecklistContext();
   
   // State
   const [expandedSection, setExpandedSection] = useState<string | null>("basic");
@@ -133,7 +123,7 @@ const PlanVerificationDashboard: React.FC<PlanVerificationDashboardProps> = ({
               <div className="flex items-center gap-2">
                 <h3 className="font-medium text-gray-900">{section.title}</h3>
                 <a
-                  href={guideUrl}
+                  href={CISPA-compliant}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex gap-1 items-center"
@@ -205,12 +195,6 @@ const PlanVerificationDashboard: React.FC<PlanVerificationDashboardProps> = ({
       <div className="hidden">
         <BYDALayerHandler map={map || null} />
       </div>
-  
-      <BasicChecksCard 
-        isExpanded={expandedSection === 'basic'}
-        onToggleExpanded={() => setExpandedSection(expandedSection === 'basic' ? null : 'basic')}
-        flightPlan={flightPlan}
-      />
 
       <LOSAnalysisCard
         isExpanded={expandedSection === 'los'}
@@ -223,15 +207,26 @@ const PlanVerificationDashboard: React.FC<PlanVerificationDashboardProps> = ({
         isExpanded={expandedSection === 'terrain'}
         onToggleExpanded={() => setExpandedSection(expandedSection === 'terrain' ? null : 'terrain')}
         flightPlan={flightPlan}
+        onTogglePanel={onTogglePanel}
+        activePanel={activePanel} // Pass activePanel to reflect panel state
       />
-      
+
+      {/* Energy Analysis Card Hidden For Now
       <EnergyAnalysisCard 
         isExpanded={expandedSection === 'energy'}
         onToggleExpanded={() => setExpandedSection(expandedSection === 'energy' ? null : 'energy')}
         flightPlan={flightPlan}
         onTogglePanel={onTogglePanel}
       />
-
+      */}
+      
+      {/* Basic Checks Card Hidden For Now
+      <BasicChecksCard 
+        isExpanded={expandedSection === 'basic'}
+        onToggleExpanded={() => setExpandedSection(expandedSection === 'basic' ? null : 'basic')}
+        flightPlan={flightPlan}
+      />
+      */}
     </div>
   );
 };

@@ -1,3 +1,16 @@
+/**
+ * page.tsx
+ * 
+ * Purpose:
+ * Main entry point for the application, orchestrating the layout and state management
+ * for map, analysis panels, and verification tools. Wraps content with necessary providers.
+ * 
+ * Changes:
+ * - Updated activePanel type to include "terrain".
+ * - Added MapSidePanel for Terrain Analysis (ObstacleAnalysisDashboard).
+ * - Ensured consistent z-index and styling with LOS and Energy panels.
+ */
+
 "use client";
 import React, { useState, ReactNode, useEffect } from "react";
 import Calculator from "./components/Calculator";
@@ -16,11 +29,11 @@ import { LOSAnalysisProvider } from "./context/LOSAnalysisContext";
 import { FlightConfigurationProvider } from "./context/FlightConfigurationContext";
 import { AreaOfOpsProvider } from "./context/AreaOfOpsContext";
 import { ChecklistProvider } from "./context/ChecklistContext";
-import PlanVerificationDashboard from "./components/PlanVerification/PlanVerificationDashboard";
+import PlanVerificationDashboard from "./components/PlanVerification/ToolsDashboard";
 import Card from "./components/UI/Card";
 import { ObstacleAnalysisProvider } from "./context/ObstacleAnalysisContext";
 import MapSidePanel from "./components/UI/MapSidePanel";
-import { Battery, Radio, GripVertical, Wand2, X } from "lucide-react";
+import { Battery, Radio, GripVertical, Wand2, X, Mountain } from "lucide-react";
 import { trackEventWithForm as trackEvent } from "./components/tracking/tracking";
 import { MapProvider } from "./context/mapcontext";
 import { AnalysisControllerProvider } from "./context/AnalysisControllerContext";
@@ -29,12 +42,14 @@ import AnalysisWizard from "./components/AnalysisWizard";
 import WelcomeMessage from "./components/WelcomeMessage";
 import ChecklistComponent from "./components/ChecklistComponent";
 import 'mapbox-gl/dist/mapbox-gl.css';
+import ObstacleAnalysisDashboard from "./components/Analyses/ObstacleAnalysis/ObstacleAnalysisDashboard"; // Static import for performance
 
 /**
  * Main content component for the home page, managing UI layout and uploader/wizard overlays
  */
 const HomeContent = () => {
-  const [activePanel, setActivePanel] = useState<"energy" | "los" | null>(null);
+  // Updated activePanel to include "terrain"
+  const [activePanel, setActivePanel] = useState<"energy" | "los" | "terrain" | null>(null);
   const [showUploader, setShowUploader] = useState(false);
   const [showAreaOpsUploader, setShowAreaOpsUploader] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
@@ -47,8 +62,9 @@ const HomeContent = () => {
    * Toggles the active analysis panel
    * @param panel - The panel to toggle
    */
-  const togglePanel = (panel: "energy" | "los" | null) => {
+  const togglePanel = (panel: "energy" | "los" | "terrain" | null) => {
     setActivePanel((prev) => (prev === panel ? null : panel));
+    trackEvent("toggle_analysis_panel", { panel });
   };
 
   /**
@@ -159,7 +175,7 @@ const HomeContent = () => {
             <div className="w-full z-0">
               <Card className="w-full rounded-l-xl">
                 <div className="space-y-4 h-full flex flex-col">
-                  <h3 className="text-lg font-semibold text-gray-900">Plan Verification</h3>
+                  <h3 className="text-lg font-semibold text-gray-900">Terrain and Visibility Toolbar</h3>
                   <div className="flex-1 overflow-y-auto">
                     <PlanVerificationDashboard onTogglePanel={togglePanel} />
                   </div>
@@ -187,6 +203,24 @@ const HomeContent = () => {
             className="z-30"
           >
             <AnalysisDashboard />
+          </MapSidePanel>
+
+          <MapSidePanel
+            title="Terrain Analysis"
+            icon={<Mountain className="w-5 h-5" />}
+            isExpanded={activePanel === "terrain"}
+            onToggle={() => togglePanel("terrain")}
+            className="z-30"
+          >
+            <div className="space-y-4 p-1">
+              <div className="mb-4">
+                <h2 className="text-lg font-semibold text-gray-800 mb-1">Terrain Analysis</h2>
+                <p className="text-sm text-gray-600">
+                  Verify terrain clearance and obstacles for your flight plan
+                </p>
+              </div>
+              <ObstacleAnalysisDashboard autoRun={false} />
+            </div>
           </MapSidePanel>
         </div>
       </div>

@@ -1,19 +1,25 @@
-// src/context/ChecklistContext.tsx
 "use client";
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 
 /**
- * Interface for a single checklist item
+ * Interface for a single checklist step
  */
-interface ChecklistItem {
-  id: string; // Matches analysis ID (e.g., 'terrainProfile')
-  label: string; // User-friendly name (e.g., 'View the Terrain Profile')
-  action: string; // Instructions (e.g., 'Click the "Show Terrain Profile" button...')
-  status: 'pending' | 'completed'; // Completion status
+interface ChecklistStep {
+  label: string; // User-friendly name (e.g., 'Open Terrain Tools')
+  action: string; // Instructions (e.g., 'Click on the Terrain Analysis card...')
   target: {
     component: string; // Target component (e.g., 'PlanVerificationDashboard')
-    action: string; // Action identifier (e.g., 'showTerrainProfile')
+    action: string; // Action identifier (e.g., 'openTerrainTools')
   };
+}
+
+/**
+ * Interface for a single checklist item
+ */
+interface ChecklistItem extends ChecklistStep {
+  id: string; // Unique ID for the step (e.g., 'terrainProfile-0')
+  status: 'pending' | 'completed'; // Completion status
+  group: string; // Analysis group (e.g., 'terrainProfile')
 }
 
 /**
@@ -24,6 +30,8 @@ interface ChecklistContextProps {
   addChecks: (analyses: string[]) => void;
   completeCheck: (id: string) => void;
   resetChecks: () => void;
+  guidedTarget: { component: string; action: string } | null;
+  setGuidedTarget: (target: { component: string; action: string } | null) => void;
 }
 
 const ChecklistContext = createContext<ChecklistContextProps | undefined>(undefined);
@@ -34,61 +42,167 @@ const ChecklistContext = createContext<ChecklistContextProps | undefined>(undefi
  */
 export const ChecklistProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [checks, setChecks] = useState<ChecklistItem[]>([]);
+  const [guidedTarget, setGuidedTarget] = useState<{ component: string; action: string } | null>(null);
 
   /**
-   * Mapping of analysis IDs to checklist items
+   * Mapping of analysis IDs to checklist steps
    */
-  const analysisToChecklistMap: Record<string, Omit<ChecklistItem, 'id' | 'status'>> = {
-    terrainProfile: {
-      label: 'View the Terrain Profile',
-      action: 'Click the "Show Terrain Profile" button in the Plan Verification panel',
-      target: { component: 'PlanVerificationDashboard', action: 'showTerrainProfile' },
-    },
-    observerVsTerrain: {
-      label: 'Check Observer vs Terrain',
-      action: 'Click the "Observer vs Terrain" button in the Plan Verification panel',
-      target: { component: 'PlanVerificationDashboard', action: 'observerVsTerrain' },
-    },
-    gcsRepeaterVsTerrain: {
-      label: 'Check GCS/Repeater vs Terrain',
-      action: 'Click the "GCS/Repeater vs Terrain" button in the Plan Verification panel',
-      target: { component: 'PlanVerificationDashboard', action: 'gcsRepeaterVsTerrain' },
-    },
-    flightPathVsTerrain: {
-      label: 'Check Flight Path vs Terrain',
-      action: 'Click the "Flight Path vs Terrain" button in the Plan Verification panel',
-      target: { component: 'PlanVerificationDashboard', action: 'flightPathVsTerrain' },
-    },
-    powerline: {
-      label: 'Check Powerline Proximity',
-      action: 'Click the "Powerlines" button in the Plan Verification panel',
-      target: { component: 'PlanVerificationDashboard', action: 'powerline' },
-    },
-    airspace: {
-      label: 'Check Airspace Compliance',
-      action: 'Click the "Airspace" button in the Plan Verification panel',
-      target: { component: 'PlanVerificationDashboard', action: 'airspace' },
-    },
-    observerToDrone: {
-      label: 'Analyze Observer to Drone Visibility',
-      action: 'Open the LOS Analysis panel and run the "Observer to Drone" analysis',
-      target: { component: 'AnalysisDashboard', action: 'observerToDrone' },
-    },
-    antennaToDrone: {
-      label: 'Analyze Antenna to Drone Visibility',
-      action: 'Open the LOS Analysis panel and run the "Antenna to Drone" analysis',
-      target: { component: 'AnalysisDashboard', action: 'antennaToDrone' },
-    },
-    droneToGround: {
-      label: 'Analyze Drone to Ground Visibility',
-      action: 'Open the LOS Analysis panel and run the "Drone to Ground" analysis',
-      target: { component: 'AnalysisDashboard', action: 'droneToGround' },
-    },
-    antennaToAntenna: {
-      label: 'Analyze Antenna to Antenna Visibility',
-      action: 'Open the LOS Analysis panel and run the "Antenna to Antenna" analysis',
-      target: { component: 'AnalysisDashboard', action: 'antennaToAntenna' },
-    },
+  const analysisToChecklistSteps: Record<string, ChecklistStep[]> = {
+    terrainProfile: [
+      {
+        label: 'Open Terrain Tools',
+        action: 'Click on the Terrain Analysis card in the Plan Verification Dashboard',
+        target: { component: 'PlanVerificationDashboard', action: 'openTerrainTools' },
+      },
+      {
+        label: 'Run Terrain Analysis in AO',
+        action: 'Click the "Analyse Terrain in AO" button',
+        target: { component: 'TerrainAnalysisCard', action: 'analyseTerrainInAO' },
+      },
+    ],
+    observerVsTerrain: [
+      {
+        label: 'Place Observer Marker',
+        action: 'Click the "Add Observer" button on the map and select a location',
+        target: { component: 'MarkerControls', action: 'addObserver' },
+      },
+      {
+        label: 'Open Terrain Tools',
+        action: 'Click on the Terrain Analysis card in the Plan Verification Dashboard',
+        target: { component: 'PlanVerificationDashboard', action: 'openTerrainTools' },
+      },
+      {
+        label: 'Run Observer vs Terrain Analysis',
+        action: 'Click the "Analyse Terrain in AO" button with Observer marker placed',
+        target: { component: 'TerrainAnalysisCard', action: 'analyseTerrainInAO' },
+      },
+    ],
+    gcsRepeaterVsTerrain: [
+      {
+        label: 'Place GCS or Repeater Marker',
+        action: 'Click the "Add Ground Station" or "Add Repeater" button on the map',
+        target: { component: 'MarkerControls', action: 'addGCSorRepeater' },
+      },
+      {
+        label: 'Open Terrain Tools',
+        action: 'Click on the Terrain Analysis card in the Plan Verification Dashboard',
+        target: { component: 'PlanVerificationDashboard', action: 'openTerrainTools' },
+      },
+      {
+        label: 'Run GCS/Repeater vs Terrain Analysis',
+        action: 'Click the "Analyse Terrain in AO" button with GCS/Repeater marker placed',
+        target: { component: 'TerrainAnalysisCard', action: 'analyseTerrainInAO' },
+      },
+    ],
+    flightPathVsTerrain: [
+      {
+        label: 'Upload Flight Plan',
+        action: 'Click the "Upload Flight Plan" button and select a file',
+        target: { component: 'LayerControls', action: 'uploadFlightPlan' },
+      },
+      {
+        label: 'Open Terrain Tools',
+        action: 'Click on the Terrain Analysis card in the Plan Verification Dashboard',
+        target: { component: 'PlanVerificationDashboard', action: 'openTerrainTools' },
+      },
+      {
+        label: 'Run Flight Path vs Terrain Analysis',
+        action: 'Click the "Analyse Terrain Obstacles" button',
+        target: { component: 'TerrainAnalysisCard', action: 'analyseFlightPathVsTerrain' },
+      },
+    ],
+    powerline: [
+      {
+        label: 'Open Terrain Tools',
+        action: 'Click on the Terrain Analysis card in the Plan Verification Dashboard',
+        target: { component: 'PlanVerificationDashboard', action: 'openTerrainTools' },
+      },
+      {
+        label: 'Toggle Powerlines',
+        action: 'Click the "Toggle Powerlines" button',
+        target: { component: 'TerrainAnalysisCard', action: 'togglePowerlines' },
+      },
+    ],
+    airspace: [
+      {
+        label: 'Open Layer Controls',
+        action: 'Find the layer controls on the top-left of the map',
+        target: { component: 'LayerControls', action: 'openLayerControls' },
+      },
+      {
+        label: 'Toggle Airspace Overlay',
+        action: 'Click the "Toggle Airspace Overlay" button',
+        target: { component: 'LayerControls', action: 'toggleAirspace' },
+      },
+    ],
+    observerToDrone: [
+      {
+        label: 'Place Observer Marker',
+        action: 'Click the "Add Observer" button on the map and select a location',
+        target: { component: 'MarkerControls', action: 'addObserver' },
+      },
+      {
+        label: 'Open LOS Analysis Panel',
+        action: 'Click the "LOS Analysis" button in the Layer Controls',
+        target: { component: 'LayerControls', action: 'openLOSPanel' },
+      },
+      {
+        label: 'Run Observer to Drone Analysis',
+        action: 'Click the "Station Analysis" section and run the Observer analysis',
+        target: { component: 'AnalysisDashboard', action: 'observerToDrone' },
+      },
+    ],
+    antennaToDrone: [
+      {
+        label: 'Place GCS or Repeater Marker',
+        action: 'Click the "Add Ground Station" or "Add Repeater" button on the map',
+        target: { component: 'MarkerControls', action: 'addGCSorRepeater' },
+      },
+      {
+        label: 'Open LOS Analysis Panel',
+        action: 'Click the "LOS Analysis" button in the Layer Controls',
+        target: { component: 'LayerControls', action: 'openLOSPanel' },
+      },
+      {
+        label: 'Run Antenna to Drone Analysis',
+        action: 'Click the "Station Analysis" section and run the GCS or Repeater analysis',
+        target: { component: 'AnalysisDashboard', action: 'antennaToDrone' },
+      },
+    ],
+    droneToGround: [
+      {
+        label: 'Upload Flight Plan',
+        action: 'Click the "Upload Flight Plan" button and select a file',
+        target: { component: 'LayerControls', action: 'uploadFlightPlan' },
+      },
+      {
+        label: 'Open LOS Analysis Panel',
+        action: 'Click the "LOS Analysis" button in the Layer Controls',
+        target: { component: 'LayerControls', action: 'openLOSPanel' },
+      },
+      {
+        label: 'Run Drone to Ground Analysis',
+        action: 'Click the "Merged Analysis" section and run the analysis',
+        target: { component: 'AnalysisDashboard', action: 'droneToGround' },
+      },
+    ],
+    antennaToAntenna: [
+      {
+        label: 'Place Two Markers (GCS/Repeater)',
+        action: 'Click the "Add Ground Station" and "Add Repeater" buttons on the map',
+        target: { component: 'MarkerControls', action: 'addGCSorRepeater' },
+      },
+      {
+        label: 'Open LOS Analysis Panel',
+        action: 'Click the "LOS Analysis" button in the Layer Controls',
+        target: { component: 'LayerControls', action: 'openLOSPanel' },
+      },
+      {
+        label: 'Run Antenna to Antenna Analysis',
+        action: 'Click the "Station-to-Station LOS" section and run the analysis',
+        target: { component: 'AnalysisDashboard', action: 'antennaToAntenna' },
+      },
+    ],
   };
 
   /**
@@ -97,12 +211,16 @@ export const ChecklistProvider: React.FC<{ children: ReactNode }> = ({ children 
    */
   const addChecks = useCallback((analyses: string[]) => {
     const newChecks: ChecklistItem[] = analyses
-      .filter((id) => analysisToChecklistMap[id]) // Ensure valid analysis IDs
-      .map((id) => ({
-        id,
-        ...analysisToChecklistMap[id],
-        status: 'pending',
-      }));
+      .filter((id) => analysisToChecklistSteps[id]) // Ensure valid analysis IDs
+      .flatMap((analysisId) => {
+        const steps = analysisToChecklistSteps[analysisId];
+        return steps.map((step, index) => ({
+          id: `${analysisId}-${index}`,
+          group: analysisId,
+          ...step,
+          status: 'pending' as const,
+        }));
+      });
     setChecks(newChecks);
     console.log('[ChecklistContext] Added checks:', newChecks);
   }, []);
@@ -125,6 +243,7 @@ export const ChecklistProvider: React.FC<{ children: ReactNode }> = ({ children 
    */
   const resetChecks = useCallback(() => {
     setChecks([]);
+    setGuidedTarget(null);
     console.log('[ChecklistContext] Reset checks');
   }, []);
 
@@ -133,6 +252,8 @@ export const ChecklistProvider: React.FC<{ children: ReactNode }> = ({ children 
     addChecks,
     completeCheck,
     resetChecks,
+    guidedTarget,
+    setGuidedTarget,
   };
 
   return (

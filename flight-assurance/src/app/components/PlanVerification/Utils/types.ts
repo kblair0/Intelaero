@@ -58,14 +58,14 @@ export interface VerificationCardProps {
   isExpanded: boolean;             // Whether section is expanded
   onToggleExpanded: () => void;    // Toggle expansion callback
   flightPlan: FlightPlanData | null; // Current flight plan
-  onTogglePanel?: (panel: "energy" | "los" | null) => void; // Panel toggle callback
+  onTogglePanel?: (panel: "energy" | "los" | "terrain" | null) => void; // Panel toggle callback
 }
 
 /**
  * Props for the PlanVerificationDashboard
  */
 export interface PlanVerificationDashboardProps {
-  onTogglePanel: (panel: "energy" | "los" | null) => void;
+  onTogglePanel: (panel: "energy" | "los" | "terrain" | null) => void;
 }
 
 /**

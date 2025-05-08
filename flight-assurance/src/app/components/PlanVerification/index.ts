@@ -10,7 +10,7 @@
  */
 
 // Export the dashboard component
-export { default as PlanVerificationDashboard } from './PlanVerificationDashboard';
+export { default as PlanVerificationDashboard } from './ToolsDashboard';
 
 // Re-export utility functions
 export * from './Utils';
