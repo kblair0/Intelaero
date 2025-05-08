@@ -23,7 +23,7 @@ import {
   checkStationLOS,
   checkFlightPathLOS,
   getLOSProfile,
-  checkStationToStationLOS as coreCheckStationToStationLOS,
+  checkStationToStationLOS,
   generateCombinedBoundingBox,
   createError
 } from '../Utils/GridAnalysisCore';
@@ -713,10 +713,7 @@ export function useGridAnalysis(options: UseGridAnalysisOptions = {}) {
       if (!map) {
         throw createError('Map not initialized', 'MAP_INTERACTION');
       }
-      
-      // Log the station types for debugging
-      console.log('Station types passed to hook:', { sourceStation, targetStation });
-  
+
       const stations = {
         gcs: {
           location: gcsLocation,
@@ -731,35 +728,22 @@ export function useGridAnalysis(options: UseGridAnalysisOptions = {}) {
           offset: repeaterElevationOffset,
         },
       };
-  
-      // Ensure sourceStation and targetStation are valid strings
-      if (typeof sourceStation !== 'string' || !['gcs', 'observer', 'repeater'].includes(sourceStation)) {
-        throw new Error(`Invalid source station type: ${sourceStation}`);
-      }
-  
-      if (typeof targetStation !== 'string' || !['gcs', 'observer', 'repeater'].includes(targetStation)) {
-        throw new Error(`Invalid target station type: ${targetStation}`);
-      }
-  
-      const source = stations[sourceStation as keyof typeof stations];
-      const target = stations[targetStation as keyof typeof stations];
-      
+
+      const source = stations[sourceStation];
+      const target = stations[targetStation];
       setIsAnalyzing(true);
-  
+
       try {
-        // Defensive null check before accessing properties
-        if (!source?.location || !target?.location) {
-          console.error('Station details:', {
-            source: { type: sourceStation, data: source },
-            target: { type: targetStation, data: target }
-          });
-          throw new Error(`Both ${sourceStation} and ${targetStation} must be on the map with valid locations.`);
+        if (!source.location || !target.location || 
+            typeof source.location.lng !== 'number' || typeof source.location.lat !== 'number' ||
+            typeof target.location.lng !== 'number' || typeof target.location.lat !== 'number') {
+          throw new Error(`Both ${sourceStation.toUpperCase()} and ${targetStation.toUpperCase()} locations must be set`);
         }
-  
+
         updateProgress(20);
         
-        // Use the renamed core function to avoid recursion
-        const losData = await coreCheckStationToStationLOS(
+        // Use optimized core function
+        const losData = await checkStationToStationLOS(
           map,
           {
             location: source.location,
@@ -797,6 +781,7 @@ export function useGridAnalysis(options: UseGridAnalysisOptions = {}) {
       setIsAnalyzing
     ]
   );
+
   /**
    * Main analysis function that handles all analysis types
    */

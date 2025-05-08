@@ -6,6 +6,8 @@
  * or loading an example flight plan. It parses each format into a standardized GeoJSON-based FlightPlanData,
  * processes it (resolves altitudes, queries terrain, calculates distances), and stores the result in context.
  * In production it also tracks uploads via a Google Form.
+ * 
+ * Optimized to use ElevationService instead of TerrainUtils for more efficient terrain handling.
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -29,7 +31,6 @@ import type {
   LineString,
   Position
 } from "geojson";
-import { ensureDEMLoaded, preloadTiles } from "../utils/TerrainUtils";
 import * as turf from '@turf/turf';
 
 // DOMParser for KML/KMZ -> only in browser
@@ -431,9 +432,9 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({
   >("idle");
   const [fileName, setFileName] = useState<string | null>(null);
   const { setFlightPlan } = useFlightPlanContext();
-  const { map } = useMapContext();
-  const { processFlightPlan, isProcessing, error } =
-    useFlightPlanProcessor();
+  const { map, elevationService } = useMapContext();
+  const { processFlightPlan, isProcessing, error } = useFlightPlanProcessor();
+  const [progress, setProgress] = useState(0);
 
   /**
    * Processes and stores the flight plan, ensuring terrain data is loaded.
@@ -446,11 +447,17 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({
         setStatus("error");
         throw new Error("Map not initialized");
       }
+      
+      if (!elevationService) {
+        console.warn("ElevationService not available, terrain functionality may be limited");
+      }
+      
       try {
         // Compute originalWaypointDistances from coordinates
         const coordinates = raw.features[0].geometry.coordinates;
         let cumulativeDistance = 0;
         const originalWaypointDistances: number[] = [0];
+        
         for (let i = 1; i < coordinates.length; i++) {
           const prevCoord = coordinates[i - 1];
           const currCoord = coordinates[i];
@@ -466,6 +473,7 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({
           cumulativeDistance += segmentDistance;
           originalWaypointDistances.push(cumulativeDistance);
         }
+        
         console.log('processAndStore: Original Waypoint Distances (meters):', originalWaypointDistances);
 
         // Update raw with originalWaypointDistances
@@ -478,17 +486,37 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({
           }
         };
 
-        // Ensure terrain data is ready and preload the flight plan area
-        await ensureDEMLoaded(map);
-        await preloadTiles(map, updatedRaw.features[0].geometry.coordinates.map(([lon, lat]) => [lon, lat]));
-        console.log(`[${new Date().toISOString()}] [FlightPlanUploader.tsx] Preload completed for ${updatedRaw.features[0].geometry.coordinates.length} coordinates`);
+        // Progress indicator
+        setProgress(10);
 
+        // Ensure terrain data is ready and preload the flight plan area using ElevationService
+        if (elevationService) {
+          await elevationService.ensureDEM();
+          setProgress(20);
+          
+          // Extract 2D coordinates for preloading
+          const coordsFor2D = updatedRaw.features[0].geometry.coordinates.map(
+            ([lon, lat]) => [lon, lat] as [number, number]
+          );
+          
+          // Use the preloadArea method from ElevationService
+          await elevationService.preloadArea(coordsFor2D);
+          setProgress(40);
+          
+          console.log(`[${new Date().toISOString()}] [FlightPlanUploader.tsx] Preload completed for ${coordsFor2D.length} coordinates`);
+        }
+
+        setProgress(50);
         const proc = await processFlightPlan(updatedRaw);
+        setProgress(90);
         setFlightPlan(proc);
         onPlanUploaded?.(proc); // Notify parent before closing
+        
         if (process.env.NODE_ENV === "production") {
           await trackFlightPlan(proc, name);
         }
+        
+        setProgress(100);
         setStatus("processed");
         onClose?.(); // Close after notifying parent
       } catch (error: any) {
@@ -498,7 +526,7 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({
         throw error;
       }
     },
-    [map, processFlightPlan, setFlightPlan, onPlanUploaded, onClose]
+    [map, elevationService, processFlightPlan, setFlightPlan, onPlanUploaded, onClose]
   );
 
   /** handle file drop */
@@ -507,10 +535,14 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({
       const f = files[0];
       setFileName(f.name);
       setStatus("uploading");
+      setProgress(0);
 
       try {
         let raw: FlightPlanData;
         const ext = f.name.split(".").pop()?.toLowerCase();
+        
+        setProgress(10);
+        
         if (ext === "kmz") {
           raw = await parseKMZFile(f);
         } else {
@@ -520,11 +552,15 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({
             r.onerror = () => rej();
             r.readAsText(f);
           });
+          
           if (ext === "waypoints") raw = parseQGCFile(txt);
           else if (ext === "geojson") raw = parseGeoJSONFile(txt);
           else if (ext === "kml") raw = parseKMLFile(txt, f);
           else throw new Error("Unsupported file type");
         }
+        
+        setProgress(20);
+        
         await processAndStore(
           { ...raw, properties: { ...raw.properties, processed: false } },
           f.name
@@ -533,6 +569,7 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({
         console.error("🌶️ onDrop catch:", error);
         alert(`❌ Upload failed:\n${error?.message ?? String(error)}`);
         setStatus("error");
+        setProgress(0);
       }
     },
     [processAndStore]
@@ -551,16 +588,24 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({
   /** load built‑in example */
   const loadExample = useCallback(async () => {
     setStatus("uploading");
+    setProgress(0);
+    
     try {
+      setProgress(10);
       const res = await fetch("/example.geojson");
       const data = await res.json();
+      
+      setProgress(30);
       const raw = parseGeoJSONFile(JSON.stringify(data));
+      
       await processAndStore(
         { ...raw, properties: { ...raw.properties, processed: false } },
         "example.geojson"
       );
-    } catch {
+    } catch (error) {
+      console.error("Example loading error:", error);
       setStatus("error");
+      setProgress(0);
     }
   }, [processAndStore]);
 
@@ -590,7 +635,15 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({
             <p className="mt-2 text-xs text-gray-700">Selected file: {fileName}</p>
           )}
           {(status === "uploading" || isProcessing) && (
-            <p className="mt-2 text-xs text-blue-600">Processing file...</p>
+            <div className="mt-3 w-full">
+              <p className="text-xs text-blue-600 mb-1">Processing file... {progress}%</p>
+              <div className="w-full bg-gray-200 rounded-full h-1.5">
+                <div 
+                  className="bg-blue-500 h-1.5 rounded-full" 
+                  style={{ width: `${progress}%` }}
+                ></div>
+              </div>
+            </div>
           )}
           {status === "processed" && (
             <p className="mt-2 text-xs text-green-500">File processed successfully!</p>
