@@ -11,6 +11,7 @@
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+"use client";
 import React, { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 import { useFlightPlanContext } from "../context/FlightPlanContext";
@@ -20,6 +21,14 @@ import toGeoJSON from "@mapbox/togeojson";
 import JSZip from "jszip";
 import { trackEventWithForm as trackEvent } from "./tracking/tracking";
 import MapLoadingGuard from "./Map/MapLoadingGuard";
+import { 
+  RotateCw, 
+  CheckCircle, 
+  XCircle, 
+  FileUp,
+  FileText,
+  Info
+} from "lucide-react";
 import type {
   FlightPlanData,
   WaypointData,
@@ -32,6 +41,7 @@ import type {
   Position
 } from "geojson";
 import * as turf from '@turf/turf';
+
 
 // DOMParser for KML/KMZ -> only in browser
 const parser = typeof window !== "undefined" ? new DOMParser() : null;
@@ -422,19 +432,56 @@ interface FlightPlanUploaderProps {
   onClose?: () => void;
 }
 
-/** SINGLE FlightPlanUploader with matching locals & UI */
+/**
+ * Component to display file format badge
+ */
+const FileBadge = ({ type }: { type: string }) => (
+  <span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full font-medium">
+    {type}
+  </span>
+);
+
+/**
+ * Progress indicator component
+ */
+const ProgressIndicator = ({ progress, currentStage }: { progress: number, currentStage: string }) => (
+  <div className="w-full max-w-xs mt-3">
+    <div className="relative pt-1">
+      <div className="flex mb-2 items-center justify-between">
+        <div>
+          <span className="text-xs font-semibold inline-block text-blue-600">
+            {progress}% Complete
+          </span>
+        </div>
+        <div className="text-right">
+          <span className="text-xs font-semibold inline-block text-blue-600">
+            {currentStage}
+          </span>
+        </div>
+      </div>
+      <div className="overflow-hidden h-2 text-xs flex rounded-full bg-blue-100">
+        <div
+          style={{ width: `${progress}%` }}
+          className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-blue-500 transition-all duration-300 ease-in-out"
+        ></div>
+      </div>
+    </div>
+  </div>
+);
+
+/** IMPROVED FlightPlanUploader with better UX and layout */
 const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({
   onPlanUploaded,
   onClose
 }) => {
-  const [status, setStatus] = useState<
-    "idle" | "uploading" | "processed" | "error"
-  >("idle");
+const [status, setStatus] = useState<"idle" | "uploading" | "processed" | "error">("idle");
   const [fileName, setFileName] = useState<string | null>(null);
   const { setFlightPlan } = useFlightPlanContext();
   const { map, elevationService } = useMapContext();
   const { processFlightPlan, isProcessing, error } = useFlightPlanProcessor();
   const [progress, setProgress] = useState(0);
+  const [currentStage, setCurrentStage] = useState("Preparing...");
+
 
   /**
    * Processes and stores the flight plan, ensuring terrain data is loaded.
@@ -574,8 +621,7 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({
     },
     [processAndStore]
   );
-
-  const { getRootProps, getInputProps } = useDropzone({
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
       "text/plain": [".waypoints"],
@@ -585,10 +631,10 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({
     }
   });
 
-  /** load built‑in example */
   const loadExample = useCallback(async () => {
     setStatus("uploading");
     setProgress(0);
+    setCurrentStage("Loading example...");
     
     try {
       setProgress(10);
@@ -596,8 +642,10 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({
       const data = await res.json();
       
       setProgress(30);
+      setCurrentStage("Processing data...");
       const raw = parseGeoJSONFile(JSON.stringify(data));
       
+      setCurrentStage("Analyzing terrain...");
       await processAndStore(
         { ...raw, properties: { ...raw.properties, processed: false } },
         "example.geojson"
@@ -610,58 +658,124 @@ const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({
   }, [processAndStore]);
 
   return (
-    <div className="w-full max-w-2xl bg-white p-4 rounded-lg shadow-lg border border-gray-300">
-      <h3 className="text-md font-semibold text-gray-800 mb-4">Upload Flight Plan</h3>
-      <p className="text-xs text-gray-600 mb-4">
-        Upload a <strong>.waypoints</strong>, <strong>.geojson</strong>, <strong>.kml</strong>, or <strong>.kmz</strong> file to analyze your drone flight path.
-      </p>
+    <div className="w-full bg-white py-2">
+      {/* Header section */}
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-800">Upload Flight Plan</h3>
+          <p className="text-sm text-gray-600">Upload your drone flight path for analysis</p>
+        </div>
+        <div className="flex items-center space-x-1">
+          <FileBadge type=".waypoints" />
+          <FileBadge type=".geojson" />
+          <FileBadge type=".kml" />
+          <FileBadge type=".kmz" />
+          <button 
+            className="ml-2 text-blue-600 hover:text-blue-800" 
+            aria-label="File format information"
+          >
+            <Info className="h-5 w-5" />
+          </button>
+        </div>
+      </div>
   
       <MapLoadingGuard
         fallback={
           <div className="flex flex-col items-center justify-center p-6 bg-gray-50 rounded-lg border border-gray-300">
-            <p className="text-sm text-gray-600">Waiting for map to initialize...</p>
+            <p className="text-sm text-gray-600">Waiting for map resources...</p>
             <div className="mt-4 w-8 h-8 border-t-2 border-b-2 border-blue-500 rounded-full animate-spin" />
             <p className="mt-2 text-xs text-gray-400">This may take a moment</p>
           </div>
         }
       >
+        {/* Improved drop zone with better states */}
         <div
           {...getRootProps()}
-          className="p-6 bg-gray-50 rounded-lg border border-gray-300 hover:bg-gray-100 transition-colors cursor-pointer flex flex-col items-center justify-center"
+          className={`
+            p-5 rounded-lg border-2 border-dashed transition-all duration-200
+            flex flex-col items-center justify-center
+            ${isDragActive ? "border-blue-400 bg-blue-50 scale-[1.02] shadow-md" : ""}
+            ${status === "error" ? "border-red-300 bg-red-50" : 
+              status === "processed" ? "border-green-300 bg-green-50" : 
+              "border-gray-300 bg-gray-50 hover:border-blue-300 hover:bg-blue-50"}
+          `}
+          style={{ minHeight: "180px" }}
         >
           <input {...getInputProps()} />
-          <p className="text-xs text-gray-600">Drop your flight plan file here or click to select</p>
-          {fileName && (
-            <p className="mt-2 text-xs text-gray-700">Selected file: {fileName}</p>
+          
+          {/* Conditional icon based on status */}
+          <div className="mb-3">
+            {status === "idle" && (
+              <FileUp className={`w-12 h-12 ${isDragActive ? "text-blue-500" : "text-gray-400"} transition-colors`} />
+            )}
+            {status === "uploading" && (
+              <RotateCw className="w-12 h-12 text-blue-500 animate-spin" />
+            )}
+            {status === "processed" && (
+              <CheckCircle className="w-12 h-12 text-green-500" />
+            )}
+            {status === "error" && (
+              <XCircle className="w-12 h-12 text-red-500" />
+            )}
+          </div>
+          
+          {/* Better status messaging */}
+          {status === "idle" && (
+            <>
+              <p className={`text-sm font-medium ${isDragActive ? "text-blue-700" : "text-gray-700"} transition-colors`}>
+                {isDragActive ? "Drop your file here" : "Drag and drop your file here"}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">or click to browse files</p>
+            </>
           )}
-          {(status === "uploading" || isProcessing) && (
-            <div className="mt-3 w-full">
-              <p className="text-xs text-blue-600 mb-1">Processing file... {progress}%</p>
-              <div className="w-full bg-gray-200 rounded-full h-1.5">
-                <div 
-                  className="bg-blue-500 h-1.5 rounded-full" 
-                  style={{ width: `${progress}%` }}
-                ></div>
-              </div>
-            </div>
+          
+          {status === "uploading" && (
+            <>
+              <p className="text-sm font-medium text-blue-700">
+                {fileName ? `Processing ${fileName}` : "Processing file..."}
+              </p>
+              <ProgressIndicator progress={progress} currentStage={currentStage} />
+            </>
           )}
+          
           {status === "processed" && (
-            <p className="mt-2 text-xs text-green-500">File processed successfully!</p>
+            <>
+              <p className="text-sm font-medium text-green-700">File processed successfully!</p>
+              <p className="text-xs text-green-600 mt-1">Your flight plan has been loaded</p>
+            </>
           )}
+          
           {status === "error" && (
-            <p className="mt-2 text-xs text-red-500">Error processing file: {error ?? "Please try again."}</p>
+            <>
+              <p className="text-sm font-medium text-red-700">Error processing file</p>
+              <p className="text-xs text-red-600 mt-1 max-w-md text-center">
+                {error || "Please check your file format and try again"}
+              </p>
+              <button 
+                className="mt-3 px-3 py-1 text-xs bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setStatus("idle");
+                }}
+              >
+                Try again
+              </button>
+            </>
           )}
         </div>
   
-        <div className="mt-4 flex justify-center">
+        {/* Better action buttons */}
+        <div className="mt-5 flex justify-center">
           <button
             onClick={() => {
               trackEvent("example_geojson_click", { panel: "flightplanuploader.tsx" });
               loadExample();
             }}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition-colors text-sm"
+            className="flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-md shadow-sm hover:bg-blue-700 transition-all hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-blue-300"
+            disabled={status === "uploading"}
           >
-            Load Example Flight Plan
+            <FileText className="w-5 h-5" />
+            <span>Load Example Flight Plan</span>
           </button>
         </div>
       </MapLoadingGuard>

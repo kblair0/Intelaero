@@ -45,18 +45,23 @@ const WelcomeMessage: React.FC<WelcomeMessageProps> = ({ onGetStarted, onClose }
         <p className="text-xl mb-1 font-bold text-gray-700 mt-2">
           Unmatched Visibility and Communications Coverage Analysis
         </p>
-        <p className="font-bold max-w-2xl mx-auto">
-        Don't be caught out by poor visibility or connectivity ever again</p>
       </div>
 
       {/* Body */}
-      <div className="mt-6 text-center">
-        <p className="text-md mb-2 text-gray-600 max-w-2xl mx-auto">
-          DroneView empowers drone pilots, from hobbyists to commercial operators, with clear insights into visibility and/or connectivity over any terrain.</p>
-          <p className="text-md mb-2 text-gray-600 max-w-2xl mx-auto">
-          Fly worry-free, knowing you’ll maintain visual contact and reliable connectivity e.g GCS/LTE with your drone.</p>
-
-      </div>
+      <div className="mt-3 text-center">
+  <p className="text-md mb-2 text-gray-600 max-w-2xl mx-auto">
+    DroneView empowers drone pilots, from hobbyists to commercial operators, with clear insights into visibility and/or connectivity over any terrain.
+  </p>
+  <p className="text-md mb-2 text-gray-600 max-w-2xl mx-auto">
+    Fly worry-free, knowing you’ll maintain visual contact and reliable connectivity e.g GCS/LTE with your drone.
+  </p>
+  <p className="text-lg font-bold text-gray-800 max-w-2xl mx-auto">
+    Plan smarter, fly farther—never let complexity ground your drones.
+  </p>
+  <p className="mt-3 max-w-2xl mx-auto">
+  <em>'Your software has literally turned my planning from days into hours!'</em> - Surveying Customer
+</p>
+</div>
 
       {/* Call to Action */}
       <div className="mt-8 flex justify-center gap-4">

@@ -103,7 +103,6 @@ const HomeContent = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-white overflow-x-hidden">
-      <DisclaimerModal />
 
       {/* Main Content Area */}
       <div className="flex-1 w-full h-full mx-2">
@@ -129,7 +128,7 @@ const HomeContent = () => {
               {/* Wizard Overlay */}
               {(!showUploader && !showAreaOpsUploader && showWizard && !flightPlan && !aoGeometry) && (
                 <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20 p-4">
-                  <div className="bg-white p-2 rounded-lg shadow-lg w-full max-w-5xl">
+                  <div className="bg-white p-2 rounded-lg shadow-lg w-full max-w-3xl">
                     <h3 className="text-2xl font-semibold mx-4 mt-4 mb-2">Start Your Analysis</h3>
                     <AnalysisWizard onClose={() => setShowWizard(false)} />
                   </div>
