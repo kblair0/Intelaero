@@ -14,54 +14,60 @@ interface StationAnalysisCardProps {
 }
 
 const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisRef, stationType }) => {
+  // Use markers collection instead of individual marker references
   const {
-    gcsLocation,
-    observerLocation,
-    repeaterLocation,
-    gcsElevationOffset,
-    observerElevationOffset,
-    repeaterElevationOffset,
-    setGcsElevationOffset,
-    setObserverElevationOffset,
-    setRepeaterElevationOffset,
+    markers,
+    updateMarker,
+    defaultElevationOffsets,
+    setDefaultElevationOffset
   } = useMarkersContext();
-  const { markerConfigs, setMarkerConfig, isAnalyzing, setError, setIsAnalyzing, results, gridSize, setGridSize } =
-    useLOSAnalysis();
+  
+  const { 
+    markerConfigs, 
+    setMarkerConfig, 
+    isAnalyzing, 
+    setError, 
+    setIsAnalyzing, 
+    results, 
+    gridSize, 
+    setGridSize 
+  } = useLOSAnalysis();
+  
   const { elevationService } = useMapContext();
   
-  // Use useMemo to create a stable stations object that only updates when the underlying data changes
-  const stations = useMemo(() => ({
-    gcs: {
-      location: gcsLocation,
-      config: markerConfigs.gcs,
-      elevationOffset: gcsElevationOffset,
-      setElevationOffset: setGcsElevationOffset,
-      layerId: MAP_LAYERS.GCS_GRID,
-    },
-    observer: {
-      location: observerLocation,
-      config: markerConfigs.observer,
-      elevationOffset: observerElevationOffset,
-      setElevationOffset: setObserverElevationOffset,
-      layerId: MAP_LAYERS.OBSERVER_GRID,
-    },
-    repeater: {
-      location: repeaterLocation,
-      config: markerConfigs.repeater,
-      elevationOffset: repeaterElevationOffset,
-      setElevationOffset: setRepeaterElevationOffset,
-      layerId: MAP_LAYERS.REPEATER_GRID,
-    },
-  }), [
-    gcsLocation, observerLocation, repeaterLocation,
-    gcsElevationOffset, observerElevationOffset, repeaterElevationOffset,
-    markerConfigs,
-    setGcsElevationOffset, setObserverElevationOffset, setRepeaterElevationOffset
-  ]);
+  // Filter markers of the specified type
+  const typeMarkers = useMemo(() => 
+    markers.filter(m => m.type === stationType), 
+    [markers, stationType]
+  );
   
-  const station = stations[stationType];
+  // State for selected marker
+  const [selectedMarkerId, setSelectedMarkerId] = useState<string>('');
   const [localError, setLocalError] = useState<string | null>(null);
-
+  
+  // Set initial selected marker when markers change
+  useEffect(() => {
+    if (typeMarkers.length > 0 && (!selectedMarkerId || !typeMarkers.some(m => m.id === selectedMarkerId))) {
+      setSelectedMarkerId(typeMarkers[0].id);
+    } else if (typeMarkers.length === 0) {
+      setSelectedMarkerId('');
+    }
+  }, [typeMarkers, selectedMarkerId]);
+  
+  // Get the selected marker object
+  const selectedMarker = typeMarkers.find(m => m.id === selectedMarkerId);
+  
+  // Get layer ID for this marker
+  const getLayerId = (markerId: string) => {
+    const layerPrefix = 
+      stationType === 'gcs' ? MAP_LAYERS.GCS_GRID :
+      stationType === 'observer' ? MAP_LAYERS.OBSERVER_GRID :
+      MAP_LAYERS.REPEATER_GRID;
+    
+    return `${layerPrefix}-${markerId}`;
+  };
+  
+  // Run station analysis
   const handleRunStationAnalysis = async () => {
     if (!gridAnalysisRef.current) {
       setError("Analysis controller not initialized");
@@ -69,44 +75,41 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
       return;
     }
     
-    // Directly access the location for the specific station type to avoid race conditions
-    let stationLocation;
-    if (stationType === "gcs") {
-      stationLocation = gcsLocation;
-    } else if (stationType === "observer") {
-      stationLocation = observerLocation;
-    } else if (stationType === "repeater") {
-      stationLocation = repeaterLocation;
-    }
-    
-    if (!stationLocation || typeof stationLocation.lng !== 'number' || typeof stationLocation.lat !== 'number') {
-      const errorMsg = `${stationType.toUpperCase()} location not set or invalid`;
+    if (!selectedMarker) {
+      const errorMsg = `No ${stationType.toUpperCase()} selected for analysis`;
       setError(errorMsg);
       setLocalError(errorMsg);
-      console.log(`[${new Date().toISOString()}] [StationAnalysisCard.tsx] Invalid location for ${stationType}:`, stationLocation);
       return;
     }
     
     try {
       setError(null);
       setLocalError(null);
-      trackEvent("station_analysis_start", { station: stationType });
+      trackEvent("station_analysis_start", { 
+        station: stationType,
+        markerId: selectedMarkerId 
+      });
       
       console.log(`[${new Date().toISOString()}] [StationAnalysisCard.tsx] Running analysis with:`, {
         stationType,
-        location: stationLocation, 
-        range: station.config.gridRange,
-        elevationOffset: station.elevationOffset
+        location: selectedMarker.location, 
+        range: markerConfigs[stationType].gridRange,
+        elevationOffset: selectedMarker.elevationOffset,
+        markerId: selectedMarkerId
       });
 
       await gridAnalysisRef.current.runStationAnalysis({
         stationType,
-        location: stationLocation,
-        range: station.config.gridRange,
-        elevationOffset: station.elevationOffset,
+        location: selectedMarker.location,
+        range: markerConfigs[stationType].gridRange,
+        elevationOffset: selectedMarker.elevationOffset,
+        markerId: selectedMarkerId
       });
 
-      trackEvent("station_analysis_success", { station: stationType });
+      trackEvent("station_analysis_success", { 
+        station: stationType,
+        markerId: selectedMarkerId 
+      });
     } catch (err: any) {
       console.error("Station analysis error:", err);
       setError(err.message || "Station analysis failed");
@@ -126,14 +129,26 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
         return "Repeater";
     }
   };
+  
+  // Helper to generate display name for a marker
+  const getMarkerDisplayName = (marker: any, index: number) => {
+    const displayName = getStationDisplayName();
+    // Add index if there are multiple markers of this type
+    const indexLabel = typeMarkers.length > 1 ? ` #${index + 1}` : '';
+    
+    return `${displayName}${indexLabel} (${marker.location.lat.toFixed(3)}, ${marker.location.lng.toFixed(3)})`;
+  };
 
   const [, forceUpdate] = React.useReducer((x) => x + 1, 0);
 
+  // Listen for layer visibility changes
   useEffect(() => {
     const unsubscribe = layerManager.addEventListener((event, layerId) => {
-      if (
-        layerId === station.layerId &&
-        (event === "visibilityChange" || event === "layerAdded")
+      // Check if this is a layer for any marker of our type
+      if (selectedMarkerId && 
+         (layerId === getLayerId(selectedMarkerId) || layerId.startsWith(MAP_LAYERS.GCS_GRID) || 
+          layerId.startsWith(MAP_LAYERS.OBSERVER_GRID) || layerId.startsWith(MAP_LAYERS.REPEATER_GRID)) &&
+         (event === "visibilityChange" || event === "layerAdded")
       ) {
         forceUpdate();
       }
@@ -141,26 +156,20 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
     return () => {
       unsubscribe();
     };
-  }, [station.layerId]);
-  
-  // Determine the current station location for the specific type
-  const currentLocation = 
-    stationType === "gcs" ? gcsLocation :
-    stationType === "observer" ? observerLocation :
-    repeaterLocation;
+  }, [selectedMarkerId]);
 
   return (
     <div className="bg-white rounded shadow p-3 mb-4">
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-sm font-semibold">{getStationDisplayName()} Analysis</h2>
-        {currentLocation && layerManager.isLayerVisible(station.layerId) !== undefined && (
+        {selectedMarker && (
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-600">Show/Hide</span>
             <label className="toggle-switch">
               <input
                 type="checkbox"
-                checked={layerManager.isLayerVisible(station.layerId)}
-                onChange={() => layerManager.toggleLayerVisibility(station.layerId)}
+                checked={layerManager.isLayerVisible(getLayerId(selectedMarkerId))}
+                onChange={() => layerManager.toggleLayerVisibility(getLayerId(selectedMarkerId))}
                 disabled={isAnalyzing}
               />
               <span className="toggle-slider"></span>
@@ -168,32 +177,43 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
           </div>
         )}
       </div>
-      {!currentLocation ? (
+      
+      {typeMarkers.length === 0 ? (
         <div className="p-3 bg-yellow-100 border border-yellow-400 text-xs text-yellow-700 rounded">
           ⚠️ Please place a {getStationDisplayName()} marker on the map to enable analysis.
         </div>
       ) : (
         <>
-          <div className="mb-2 text-xs">
-            <p>
-              <strong>Location:</strong>{" "}
-              {currentLocation
-                ? `${currentLocation.lat.toFixed(3)}, ${currentLocation.lng.toFixed(3)}`
-                : "Not set"}
-            </p>
-          </div>
+          {typeMarkers.length > 0 && (
+            <div className="mb-3">
+              <label className="block text-xs text-gray-600 mb-1">Select {getStationDisplayName()}</label>
+              <select
+                value={selectedMarkerId}
+                onChange={(e) => setSelectedMarkerId(e.target.value)}
+                className="w-full p-2 border rounded text-xs"
+                disabled={isAnalyzing}
+              >
+                {typeMarkers.map((marker, index) => (
+                  <option key={marker.id} value={marker.id}>
+                    {getMarkerDisplayName(marker, index)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          
           <div className="space-y-3">
             <div>
               <div className="flex justify-between items-center mb-1">
                 <label className="block text-xs text-gray-600">Adjust Grid Range (m):</label>
-                <span className="text-xs text-gray-600">{station.config.gridRange}m</span>
+                <span className="text-xs text-gray-600">{markerConfigs[stationType].gridRange}m</span>
               </div>
               <input
                 type="range"
                 min="500"
                 max="5000"
                 step="100"
-                value={station.config.gridRange}
+                value={markerConfigs[stationType].gridRange}
                 onChange={(e) => setMarkerConfig(stationType, { gridRange: Number(e.target.value) })}
                 className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                 disabled={isAnalyzing}
@@ -203,6 +223,7 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
                 <span>5000m</span>
               </div>
             </div>
+            
             <div>
               <div className="flex justify-between items-center mb-1">
                 <label className="block text-xs text-gray-600">Grid Size (m):</label>
@@ -226,6 +247,7 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
                 The lower the number, the higher the fidelity
               </p>
             </div>
+            
             <div>
               <div className="flex items-center space-x-2">
                 <label className="text-xs text-gray-600">Elevation Offset (m)</label>
@@ -234,8 +256,15 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
                   min="0"
                   max="100"
                   step="0.1"
-                  value={station.elevationOffset}
-                  onChange={(e) => station.setElevationOffset(Number(e.target.value))}
+                  value={selectedMarker ? selectedMarker.elevationOffset : defaultElevationOffsets[stationType]}
+                  onChange={(e) => {
+                    const newOffset = Number(e.target.value);
+                    if (selectedMarker) {
+                      updateMarker(selectedMarker.id, { elevationOffset: newOffset });
+                    } else {
+                      setDefaultElevationOffset(stationType, newOffset);
+                    }
+                  }}
                   className="w-16 h-6 p-1 border rounded text-sm"
                   disabled={isAnalyzing}
                 />
@@ -245,11 +274,12 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
               </p>
             </div>
           </div>
+          
           <button
             onClick={handleRunStationAnalysis}
-            disabled={isAnalyzing || !currentLocation}
+            disabled={isAnalyzing || !selectedMarker}
             className={`w-full py-1 rounded mt-3 ${
-              isAnalyzing || !currentLocation
+              isAnalyzing || !selectedMarker
                 ? "bg-gray-300 cursor-not-allowed"
                 : "bg-blue-500 hover:bg-blue-600 text-sm text-white"
             }`}
@@ -258,7 +288,8 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
           </button>
         </>
       )}
-      {results && results.stats && currentLocation && (
+      
+      {results && results.stats && selectedMarker && (
         <div className="mt-4">
           <p className="text-xs">
             <strong>Visible Cells:</strong> {results.stats.visibleCells} /{" "}
@@ -272,6 +303,7 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
           </p>
         </div>
       )}
+      
       {localError && <div className="mt-2 text-xs text-red-500">{localError}</div>}
     </div>
   );

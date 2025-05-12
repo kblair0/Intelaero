@@ -60,7 +60,7 @@ const Map: FC<MapProps> = ({ activePanel, togglePanel, flightPlan, setShowUpload
   );
 
   const { processFlightPlan } = useFlightPlanProcessor();
-  const { updateMarkerPopups } = useMarkers({ map, terrainLoaded });
+  const { markers, updateMarkerPopups } = useMarkers({ map, terrainLoaded });
   const { addFlightPath, resetLayers } = useLayers();
 
   /**

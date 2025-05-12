@@ -12,8 +12,8 @@
  * - MarkerContext (marker state)
  * - LOSAnalysisContext (analysis configuration)
  */
-
-import React, { useRef, useContext } from 'react';
+// components/Map/Controls/MarkerControls.tsx
+import React, { useRef } from 'react';
 import { useMarkers } from './Hooks/useMarkers';
 import { useMapContext } from '../../context/mapcontext';
 import { useLOSAnalysis } from '../../context/LOSAnalysisContext';
@@ -28,6 +28,7 @@ const MarkerControls: React.FC = () => {
   const gridAnalysisRef = useRef<GridAnalysisRef | null>(null);
   
   const {
+    markers, // Get all markers from hook
     addGroundStation,
     addObserver,
     addRepeater,
@@ -39,17 +40,28 @@ const MarkerControls: React.FC = () => {
 
   // Enhanced handlers to optionally trigger analysis
   const handleAddGroundStation = async () => {
-    trackEvent("add_ground_station_click", { panel: "map.tsx" });
+    // Add marker and get location
     const location = await addGroundStation();
     
     // If auto-analysis is enabled and location was created successfully
     if (location && gridAnalysisRef.current) {
       try {
-        await gridAnalysisRef.current.runStationAnalysis({
-          stationType: 'gcs',
-          location,
-          range: markerConfigs.gcs.gridRange,
-        });
+        // Find the marker we just created to get its ID
+        const newMarker = markers.find(m => 
+          m.type === 'gcs' && 
+          m.location.lng === location.lng && 
+          m.location.lat === location.lat
+        );
+        
+        if (newMarker) {
+          await gridAnalysisRef.current.runStationAnalysis({
+            stationType: 'gcs',
+            location,
+            range: markerConfigs.gcs.gridRange,
+            elevationOffset: newMarker.elevationOffset,
+            markerId: newMarker.id
+          });
+        }
       } catch (error) {
         console.error("Failed to run GCS analysis:", error);
       }
@@ -57,17 +69,26 @@ const MarkerControls: React.FC = () => {
   };
 
   const handleAddObserver = async () => {
-    trackEvent("add_observer_click", { panel: "map.tsx" });
     const location = await addObserver();
     
-    // If auto-analysis is enabled and location was created successfully
     if (location && gridAnalysisRef.current) {
       try {
-        await gridAnalysisRef.current.runStationAnalysis({
-          stationType: 'observer',
-          location,
-          range: markerConfigs.observer.gridRange,
-        });
+        // Find the marker we just created
+        const newMarker = markers.find(m => 
+          m.type === 'observer' && 
+          m.location.lng === location.lng && 
+          m.location.lat === location.lat
+        );
+        
+        if (newMarker) {
+          await gridAnalysisRef.current.runStationAnalysis({
+            stationType: 'observer',
+            location,
+            range: markerConfigs.observer.gridRange,
+            elevationOffset: newMarker.elevationOffset,
+            markerId: newMarker.id
+          });
+        }
       } catch (error) {
         console.error("Failed to run Observer analysis:", error);
       }
@@ -75,17 +96,26 @@ const MarkerControls: React.FC = () => {
   };
 
   const handleAddRepeater = async () => {
-    trackEvent("add_repeater_click", { panel: "map.tsx" });
     const location = await addRepeater();
     
-    // If auto-analysis is enabled and location was created successfully
     if (location && gridAnalysisRef.current) {
       try {
-        await gridAnalysisRef.current.runStationAnalysis({
-          stationType: 'repeater',
-          location,
-          range: markerConfigs.repeater.gridRange,
-        });
+        // Find the marker we just created
+        const newMarker = markers.find(m => 
+          m.type === 'repeater' && 
+          m.location.lng === location.lng && 
+          m.location.lat === location.lat
+        );
+        
+        if (newMarker) {
+          await gridAnalysisRef.current.runStationAnalysis({
+            stationType: 'repeater',
+            location,
+            range: markerConfigs.repeater.gridRange,
+            elevationOffset: newMarker.elevationOffset,
+            markerId: newMarker.id
+          });
+        }
       } catch (error) {
         console.error("Failed to run Repeater analysis:", error);
       }

@@ -115,7 +115,7 @@ export function useGridAnalysis(options: UseGridAnalysisOptions = {}) {
         console.error('Map not initialized, cannot visualize grid');
         return;
       }
-
+  
       try {
         const geojson: GeoJSON.FeatureCollection = {
           type: 'FeatureCollection',
@@ -125,7 +125,7 @@ export function useGridAnalysis(options: UseGridAnalysisOptions = {}) {
             properties: cell.properties,
           })),
         };
-
+  
         if (map.getSource(layerId)) {
           const source = map.getSource(layerId) as mapboxgl.GeoJSONSource;
           source.setData(geojson);
@@ -381,27 +381,31 @@ export function useGridAnalysis(options: UseGridAnalysisOptions = {}) {
       location,
       range,
       elevationOffset,
+      markerId,
+      layerId
     }: {
       stationType: "gcs" | "observer" | "repeater";
       location: LocationData;
       range: number;
       elevationOffset: number;
+      markerId?: string;
+      layerId?: string;
     }): Promise<AnalysisResults> => {
       if (!map) {
         throw createError('Map not initialized', 'MAP_INTERACTION');
       }
-
+  
       setIsAnalyzing(true);
       const startTime = performance.now();
-
+  
       try {
         // Validate location data
         if (!location || typeof location.lng !== 'number' || typeof location.lat !== 'number') {
           throw createError(`${stationType.toUpperCase()} location not set or invalid`, 'INVALID_INPUT');
         }
-
+  
         updateProgress(10);
-
+  
         // Generate grid using optimized core function
         const cells = await generateGrid(map, {
           center: [location.lng, location.lat],
@@ -409,11 +413,11 @@ export function useGridAnalysis(options: UseGridAnalysisOptions = {}) {
           gridSize,
           elevationService
         });
-
+  
         if (!cells || !cells.length) {
           throw createError('Failed to generate grid', 'GRID_GENERATION');
         }
-
+  
         updateProgress(40);
 
         // Get observer elevation
@@ -486,34 +490,37 @@ export function useGridAnalysis(options: UseGridAnalysisOptions = {}) {
         const analysisTime = performance.now() - startTime;
         updateProgress(95);
 
-        const layerId = 
-          stationType === 'gcs' ? MAP_LAYERS.GCS_GRID :
-          stationType === 'observer' ? MAP_LAYERS.OBSERVER_GRID :
-          MAP_LAYERS.REPEATER_GRID;
+      // Use the provided layerId or generate a default one
+      const effectiveLayerId = layerId || 
+        (stationType === 'gcs' ? MAP_LAYERS.GCS_GRID :
+         stationType === 'observer' ? MAP_LAYERS.OBSERVER_GRID :
+         MAP_LAYERS.REPEATER_GRID);
 
-        const analysisResults: AnalysisResults = {
-          cells: updatedCells,
-          stats: {
-            visibleCells: visibleCells,
-            totalCells: cells.length,
-            averageVisibility: cells.length > 0 ? totalVisibility / cells.length : 0,
-            analysisTime,
-          },
-        };
+      const analysisResults: AnalysisResults = {
+        cells: updatedCells,
+        stats: {
+          visibleCells: visibleCells,
+          totalCells: cells.length,
+          averageVisibility: cells.length > 0 ? totalVisibility / cells.length : 0,
+          analysisTime,
+        },
+      };
 
-        visualizeGrid(analysisResults, layerId);
-        updateProgress(100);
-        setLastAnalysisTime(Date.now());
-        return analysisResults;
-      } catch (error) {
-        console.error(`Station analysis error:`, error);
-        throw error;
-      } finally {
-        updateProgress(0);
-        cleanupAnalysis();
-        setIsAnalyzing(false);
-      }
-    },
+      // Visualize with the effective layer ID
+      visualizeGrid(analysisResults, effectiveLayerId);
+      
+      updateProgress(100);
+      setLastAnalysisTime(Date.now());
+      return analysisResults;
+    } catch (error) {
+      console.error(`Station analysis error:`, error);
+      throw error;
+    } finally {
+      updateProgress(0);
+      cleanupAnalysis();
+      setIsAnalyzing(false);
+    }
+  },
     [
       map,
       gridSize,
@@ -702,51 +709,57 @@ export function useGridAnalysis(options: UseGridAnalysisOptions = {}) {
     ]
   );
 
-  /**
-   * Checks LOS between two stations
-   */
-  const checkStationToStationLOS = useCallback(
-    async (
-      sourceStation: MarkerType,
-      targetStation: MarkerType
-    ): Promise<{ result: StationLOSResult; profile: LOSProfilePoint[] }> => {
-      if (!map) {
-        throw createError('Map not initialized', 'MAP_INTERACTION');
-      }
-      
-      // Log the station types for debugging
-      console.log('Station types passed to hook:', { sourceStation, targetStation });
-  
-      const stations = {
-        gcs: {
-          location: gcsLocation,
-          offset: gcsElevationOffset,
-        },
-        observer: {
-          location: observerLocation,
-          offset: observerElevationOffset,
-        },
-        repeater: {
-          location: repeaterLocation,
-          offset: repeaterElevationOffset,
-        },
-      };
-  
-      // Ensure sourceStation and targetStation are valid strings
-      if (typeof sourceStation !== 'string' || !['gcs', 'observer', 'repeater'].includes(sourceStation)) {
-        throw new Error(`Invalid source station type: ${sourceStation}`);
-      }
-  
-      if (typeof targetStation !== 'string' || !['gcs', 'observer', 'repeater'].includes(targetStation)) {
-        throw new Error(`Invalid target station type: ${targetStation}`);
-      }
-  
-      const source = stations[sourceStation as keyof typeof stations];
-      const target = stations[targetStation as keyof typeof stations];
-      
-      setIsAnalyzing(true);
-  
-      try {
+/**
+ * Checks LOS between two stations - either by marker IDs or station types
+ */
+const checkStationToStationLOS = useCallback(
+  async (
+    sourceStationData: string | { type: string; location: LocationData; elevationOffset: number },
+    targetStationData: string | { type: string; location: LocationData; elevationOffset: number }
+  ): Promise<{ result: StationLOSResult; profile: LOSProfilePoint[] }> => {
+    if (!map) {
+      throw createError('Map not initialized', 'MAP_INTERACTION');
+    }
+    
+    setIsAnalyzing(true);
+
+    try {
+      // Handle string-based station types (backward compatibility)
+      if (typeof sourceStationData === 'string' && typeof targetStationData === 'string') {
+        // Original implementation for string-based station types
+        const sourceStation = sourceStationData as 'gcs' | 'observer' | 'repeater';
+        const targetStation = targetStationData as 'gcs' | 'observer' | 'repeater';
+
+        // Log the station types for debugging
+        console.log('Using string-based station types:', { sourceStation, targetStation });
+    
+        const stations = {
+          gcs: {
+            location: gcsLocation,
+            offset: gcsElevationOffset,
+          },
+          observer: {
+            location: observerLocation,
+            offset: observerElevationOffset,
+          },
+          repeater: {
+            location: repeaterLocation,
+            offset: repeaterElevationOffset,
+          },
+        };
+    
+        // Ensure sourceStation and targetStation are valid strings
+        if (!['gcs', 'observer', 'repeater'].includes(sourceStation)) {
+          throw new Error(`Invalid source station type: ${sourceStation}`);
+        }
+    
+        if (!['gcs', 'observer', 'repeater'].includes(targetStation)) {
+          throw new Error(`Invalid target station type: ${targetStation}`);
+        }
+    
+        const source = stations[sourceStation as keyof typeof stations];
+        const target = stations[targetStation as keyof typeof stations];
+        
         // Defensive null check before accessing properties
         if (!source?.location || !target?.location) {
           console.error('Station details:', {
@@ -755,7 +768,7 @@ export function useGridAnalysis(options: UseGridAnalysisOptions = {}) {
           });
           throw new Error(`Both ${sourceStation} and ${targetStation} must be on the map with valid locations.`);
         }
-  
+    
         updateProgress(20);
         
         // Use the renamed core function to avoid recursion
@@ -774,29 +787,69 @@ export function useGridAnalysis(options: UseGridAnalysisOptions = {}) {
         
         updateProgress(100);
         return losData;
-      } catch (error) {
-        console.error(`Station-to-station LOS error:`, error);
-        throw error;
-      } finally {
-        updateProgress(0);
-        cleanupAnalysis();
-        setIsAnalyzing(false);
+      } 
+      // Handle direct object station data
+      else if (
+        typeof sourceStationData === 'object' && sourceStationData !== null &&
+        typeof targetStationData === 'object' && targetStationData !== null
+      ) {
+        // New implementation for object-based station data
+        console.log('Using object-based station data');
+        
+        const sourceStation = sourceStationData as { type: string; location: LocationData; elevationOffset: number };
+        const targetStation = targetStationData as { type: string; location: LocationData; elevationOffset: number };
+
+        // Validate input objects
+        if (!sourceStation.location || !targetStation.location) {
+          console.error('Invalid station data:', { sourceStation, targetStation });
+          throw new Error('Both source and target stations must have valid location data');
+        }
+
+        updateProgress(20);
+        
+        // Directly use the core function with the station objects
+        const losData = await coreCheckStationToStationLOS(
+          map,
+          {
+            location: sourceStation.location,
+            elevationOffset: sourceStation.elevationOffset
+          },
+          {
+            location: targetStation.location,
+            elevationOffset: targetStation.elevationOffset
+          },
+          { elevationService }
+        );
+        
+        updateProgress(100);
+        return losData;
       }
-    },
-    [
-      map,
-      gcsLocation,
-      observerLocation,
-      repeaterLocation,
-      gcsElevationOffset,
-      observerElevationOffset,
-      repeaterElevationOffset,
-      elevationService,
-      updateProgress,
-      cleanupAnalysis,
-      setIsAnalyzing
-    ]
-  );
+      else {
+        throw new Error(`Invalid station data format. Expected either station type strings or station objects.`);
+      }
+    } catch (error) {
+      console.error(`Station-to-station LOS error:`, error);
+      throw error;
+    } finally {
+      updateProgress(0);
+      cleanupAnalysis();
+      setIsAnalyzing(false);
+    }
+  },
+  [
+    map,
+    gcsLocation,
+    observerLocation,
+    repeaterLocation,
+    gcsElevationOffset,
+    observerElevationOffset,
+    repeaterElevationOffset,
+    elevationService,
+    updateProgress,
+    cleanupAnalysis,
+    setIsAnalyzing
+  ]
+);
   /**
    * Main analysis function that handles all analysis types
    */
@@ -805,11 +858,11 @@ export function useGridAnalysis(options: UseGridAnalysisOptions = {}) {
       if (isAnalyzing) {
         throw createError('Analysis already in progress', 'INVALID_INPUT');
       }
-
+  
       try {
         setIsAnalyzing(true);
         setError(null);
-
+  
         let result: AnalysisResults;
 
         switch (type) {
@@ -844,6 +897,7 @@ export function useGridAnalysis(options: UseGridAnalysisOptions = {}) {
             if (!options?.sourceStation || !options?.targetStation) {
               throw createError('Source and target stations are required', 'INVALID_INPUT');
             }
+            // Pass the station data objects directly to checkStationToStationLOS
             const stationResult = await checkStationToStationLOS(
               options.sourceStation,
               options.targetStation

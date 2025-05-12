@@ -16,41 +16,43 @@ interface StationLOSAnalysisCardProps {
 }
 
 const StationLOSAnalysisCard: React.FC<StationLOSAnalysisCardProps> = ({ gridAnalysisRef }) => {
-  const {
-    gcsLocation,
-    observerLocation,
-    repeaterLocation,
-    gcsElevationOffset,
-    observerElevationOffset,
-    repeaterElevationOffset
-  } = useMarkersContext();
+  // Use markers collection instead of individual marker references
+  const { markers } = useMarkersContext();
   const { isAnalyzing, setError, setIsAnalyzing } = useLOSAnalysis();
   const { elevationService } = useMapContext();
-  const [sourceStation, setSourceStation] = useState<"gcs" | "observer" | "repeater">("gcs");
-  const [targetStation, setTargetStation] = useState<"gcs" | "observer" | "repeater">("observer");
+  
+  // State for selected marker IDs instead of marker types
+  const [sourceMarkerId, setSourceMarkerId] = useState<string>("");
+  const [targetMarkerId, setTargetMarkerId] = useState<string>("");
+  
   const [stationLOSResult, setStationLOSResult] = useState<StationLOSResult | null>(null);
   const [losProfileData, setLosProfileData] = useState<LOSProfilePoint[] | null>(null);
   const [isGraphEnlarged, setIsGraphEnlarged] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
-  const stationLocations = {
-    gcs: gcsLocation,
-    observer: observerLocation,
-    repeater: repeaterLocation
+  // Group markers by type for easier access
+  const markersByType = {
+    gcs: markers.filter(m => m.type === 'gcs'),
+    observer: markers.filter(m => m.type === 'observer'),
+    repeater: markers.filter(m => m.type === 'repeater')
   };
 
-  const availableStations = Object.entries(stationLocations)
-    .filter(([_, loc]) => loc !== null)
-    .map(([type]) => type as "gcs" | "observer" | "repeater");
+  // Get all available markers
+  const availableMarkers = markers.length > 0 ? markers : [];
 
+  // Set initial marker selections when markers change
   useEffect(() => {
-    if (availableStations.length >= 2) {
-      setSourceStation(availableStations[0]);
-      setTargetStation(availableStations[1]);
-    } else if (availableStations.length === 1) {
-      setSourceStation(availableStations[0]);
+    if (availableMarkers.length >= 2) {
+      setSourceMarkerId(availableMarkers[0].id);
+      setTargetMarkerId(availableMarkers[1].id);
+    } else if (availableMarkers.length === 1) {
+      setSourceMarkerId(availableMarkers[0].id);
+      setTargetMarkerId(""); // Clear target if we don't have enough markers
+    } else {
+      setSourceMarkerId("");
+      setTargetMarkerId("");
     }
-  }, [availableStations]);
+  }, [availableMarkers]);
 
   const handleRunStationLOS = async () => {
     if (!gridAnalysisRef.current) {
@@ -59,22 +61,33 @@ const StationLOSAnalysisCard: React.FC<StationLOSAnalysisCardProps> = ({ gridAna
       return;
     }
   
-    const source = stationLocations[sourceStation];
-    const target = stationLocations[targetStation];
-    if (!source || !target) {
-      const errMsg = `Both ${sourceStation.toUpperCase()} and ${targetStation.toUpperCase()} locations must be set.`;
+    // Find the selected source and target markers
+    const sourceMarker = markers.find(m => m.id === sourceMarkerId);
+    const targetMarker = markers.find(m => m.id === targetMarkerId);
+    
+    if (!sourceMarker || !targetMarker) {
+      const errMsg = "Both source and target markers must be selected.";
       setError(errMsg);
       setLocalError(errMsg);
       return;
     }
   
     try {
-      
       setError(null);
       setLocalError(null);
-      trackEvent("station_to_station_los_start", { source: sourceStation, target: targetStation });
+      
+      trackEvent("station_to_station_los_start", { 
+        sourceType: sourceMarker.type, 
+        targetType: targetMarker.type,
+        sourceId: sourceMarkerId,
+        targetId: targetMarkerId 
+      });
 
-      const losData = await gridAnalysisRef.current.checkStationToStationLOS(sourceStation, targetStation);
+      // Use marker IDs for the station-to-station LOS check
+      const losData = await gridAnalysisRef.current.checkStationToStationLOS(
+        sourceMarkerId, 
+        targetMarkerId
+      );
 
       setStationLOSResult(losData.result);
       setLosProfileData(losData.profile);
@@ -93,10 +106,22 @@ const StationLOSAnalysisCard: React.FC<StationLOSAnalysisCardProps> = ({ gridAna
     }
   };
 
-  const getStationDisplay = (station: "gcs" | "observer" | "repeater") => {
+  const getStationDisplay = (stationType: "gcs" | "observer" | "repeater") => {
     const emojis = { gcs: "📡", observer: "🔭", repeater: "⚡️" };
     const names = { gcs: "GCS Station", observer: "Observer Station", repeater: "Repeater Station" };
-    return { emoji: emojis[station], name: names[station] };
+    return { emoji: emojis[stationType], name: names[stationType] };
+  };
+
+  // Get a descriptive name for a marker, including its index if there are multiples of same type
+  const getMarkerDisplayName = (marker: any) => {
+    const { emoji, name } = getStationDisplay(marker.type);
+    const markersOfSameType = markersByType[marker.type];
+    const markerIndex = markersOfSameType.findIndex(m => m.id === marker.id);
+    
+    // If there are multiple markers of this type, add an index
+    const indexLabel = markersOfSameType.length > 1 ? ` #${markerIndex + 1}` : '';
+    
+    return `${emoji} ${name}${indexLabel}`;
   };
 
   const chartData = losProfileData
@@ -144,61 +169,86 @@ const StationLOSAnalysisCard: React.FC<StationLOSAnalysisCardProps> = ({ gridAna
     }
   };
 
+  // Determine if we have enough markers to run an analysis
+  const hasEnoughMarkers = availableMarkers.length >= 2;
+  
+  // Get the source and target marker objects
+  const sourceMarker = markers.find(m => m.id === sourceMarkerId);
+  const targetMarker = markers.find(m => m.id === targetMarkerId);
+  
+  // Determine if source and target are valid and different
+  const isValidSelection = sourceMarker && targetMarker && sourceMarker.id !== targetMarker.id;
+
   return (
     <div className="bg-white rounded shadow p-3 mb-4">
       <p className="text-xs mb-2">Check the direct line of sight between any two stations.</p>
-      <div className="mb-2">
-        <div className="flex flex-row gap-4">
-          <div className="flex-1">
-            <label className="block text-xs text-gray-600 mb-1">Source Station</label>
-            <select
-              value={sourceStation}
-              onChange={(e) => setSourceStation(e.target.value as "gcs" | "observer" | "repeater")}
-              className="w-full p-2 border rounded text-xs"
-            >
-              {availableStations.map(station => {
-                const { emoji, name } = getStationDisplay(station);
-                return (
-                  <option key={station} value={station}>
-                    {emoji} {name}
+      
+      {!hasEnoughMarkers ? (
+        <div className="p-3 bg-yellow-100 border border-yellow-400 text-xs text-yellow-700 rounded mb-2">
+          ⚠️ Please place at least two markers on the map to enable station-to-station LOS analysis.
+        </div>
+      ) : (
+        <div className="mb-2">
+          <div className="flex flex-row gap-4">
+            <div className="flex-1">
+              <label className="block text-xs text-gray-600 mb-1">Source Station</label>
+              <select
+                value={sourceMarkerId}
+                onChange={(e) => setSourceMarkerId(e.target.value)}
+                className="w-full p-2 border rounded text-xs"
+                disabled={isAnalyzing || availableMarkers.length < 2}
+              >
+                <option value="" disabled>Select source station</option>
+                {availableMarkers.map(marker => (
+                  <option key={marker.id} value={marker.id}>
+                    {getMarkerDisplayName(marker)}
                   </option>
-                );
-              })}
-            </select>
-          </div>
-          <div className="flex-1">
-            <label className="block text-xs text-gray-600 mb-1">Target Station</label>
-            <select
-              value={targetStation}
-              onChange={(e) => setTargetStation(e.target.value as "gcs" | "observer" | "repeater")}
-              className="w-full p-2 border rounded text-xs"
-            >
-              {availableStations.filter(station => station !== sourceStation).map(station => {
-                const { emoji, name } = getStationDisplay(station);
-                return (
-                  <option key={station} value={station}>
-                    {emoji} {name}
-                  </option>
-                );
-              })}
-            </select>
+                ))}
+              </select>
+            </div>
+            <div className="flex-1">
+              <label className="block text-xs text-gray-600 mb-1">Target Station</label>
+              <select
+                value={targetMarkerId}
+                onChange={(e) => setTargetMarkerId(e.target.value)}
+                className="w-full p-2 border rounded text-xs"
+                disabled={isAnalyzing || availableMarkers.length < 2}
+              >
+                <option value="" disabled>Select target station</option>
+                {availableMarkers
+                  .filter(marker => marker.id !== sourceMarkerId)
+                  .map(marker => (
+                    <option key={marker.id} value={marker.id}>
+                      {getMarkerDisplayName(marker)}
+                    </option>
+                  ))
+                }
+              </select>
+            </div>
           </div>
         </div>
-      </div>
+      )}
+      
       <button
         onClick={() => {
-          trackEvent("station_los_check_click", { source: sourceStation, target: targetStation });
+          trackEvent("station_los_check_click", { 
+            sourceId: sourceMarkerId, 
+            targetId: targetMarkerId,
+            sourceType: sourceMarker?.type,
+            targetType: targetMarker?.type
+          });
           handleRunStationLOS();
         }}
-        disabled={isAnalyzing || sourceStation === targetStation || availableStations.length < 2}
+        disabled={isAnalyzing || !isValidSelection}
         className={`w-full py-1 text-sm rounded mt-3 ${
-          isAnalyzing || sourceStation === targetStation || availableStations.length < 2
+          isAnalyzing || !isValidSelection
             ? "bg-gray-300 cursor-not-allowed"
             : "bg-blue-500 hover:bg-blue-600 text-white text-sm"
         }`}
       >
         {isAnalyzing ? "Analysing..." : "Check LOS"}
       </button>
+      
       {stationLOSResult && (
         <div className="mt-4">
           {stationLOSResult.clear ? (
@@ -219,6 +269,7 @@ const StationLOSAnalysisCard: React.FC<StationLOSAnalysisCardProps> = ({ gridAna
           )}
         </div>
       )}
+      
       {isGraphEnlarged && losProfileData && (
         <div className="mt-4 p-2 bg-white rounded shadow">
           <div className="flex justify-between items-center mb-2">
@@ -235,6 +286,7 @@ const StationLOSAnalysisCard: React.FC<StationLOSAnalysisCardProps> = ({ gridAna
           </div>
         </div>
       )}
+      
       {localError && <div className="mt-2 text-xs text-red-500">{localError}</div>}
     </div>
   );

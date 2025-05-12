@@ -56,10 +56,10 @@ const AnalysisStatus: React.FC<AnalysisStatusProps> = ({
     };
   } else if (isLOSAnalyzing) {
     activeAnalysis = {
-      type: 'Line of Sight',
+      type: 'Analysing Visibility',
       progress: losProgress,
       message: 'This may take a few moments...',
-      note: 'Especially for terrain following missions.',
+      note: 'Larger areas required longer analysis times.',
       onStop: onStopLOS || (() => {})
     };
   }

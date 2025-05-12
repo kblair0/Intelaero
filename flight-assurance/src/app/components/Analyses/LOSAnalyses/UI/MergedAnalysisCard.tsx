@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect,  useCallback, useMemo } from "react";
 import { layerManager, MAP_LAYERS } from "../../../../services/LayerManager";
 import distance from "@turf/distance";
 import { useMarkersContext } from "../../../../context/MarkerContext";
@@ -16,6 +16,7 @@ interface MergedAnalysisCardProps {
 }
 
 interface Station {
+  id: string;
   type: "gcs" | "observer" | "repeater";
   location: LocationData;
   range: number;
@@ -23,44 +24,27 @@ interface Station {
 }
 
 const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef }) => {
-  const {
-    gcsLocation,
-    observerLocation,
-    repeaterLocation,
-    gcsElevationOffset,
-    observerElevationOffset,
-    repeaterElevationOffset,
-  } = useMarkersContext();
+  // Use markers collection instead of individual references
+  const { markers } = useMarkersContext();
   const { markerConfigs, isAnalyzing, setError, setIsAnalyzing, results, setResults } = useLOSAnalysis();
   const { elevationService } = useMapContext();
 
-  const availableStations: Station[] = [
-    {
-      type: "gcs",
-      location: gcsLocation,
-      range: markerConfigs.gcs.gridRange,
-      elevationOffset: gcsElevationOffset,
-    },
-    {
-      type: "observer",
-      location: observerLocation,
-      range: markerConfigs.observer.gridRange,
-      elevationOffset: observerElevationOffset,
-    },
-    {
-      type: "repeater",
-      location: repeaterLocation,
-      range: markerConfigs.repeater.gridRange,
-      elevationOffset: repeaterElevationOffset,
-    },
-  ].filter((station): station is Station => station.location !== null);
+  // Create available stations from all markers - using useMemo to prevent recreation on every render
+  const availableStations = useMemo(() => markers.map(marker => ({
+    id: marker.id,
+    type: marker.type,
+    location: marker.location,
+    range: markerConfigs[marker.type].gridRange,
+    elevationOffset: marker.elevationOffset,
+  })), [markers, markerConfigs]);
 
-  const computedStations: Station[] =
+  // Compute station ranges based on distances between markers - also memoized
+  const computedStations = useMemo(() => 
     availableStations.length >= 2
       ? availableStations.map((station) => {
           let maxDistance = 0;
           availableStations.forEach((otherStation) => {
-            if (station.type !== otherStation.type) {
+            if (station.id !== otherStation.id) {
               const d = distance(
                 [station.location.lng, station.location.lat],
                 [otherStation.location.lng, otherStation.location.lat],
@@ -73,9 +57,38 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
           });
           return { ...station, range: Math.round(maxDistance) };
         })
-      : availableStations;
+      : availableStations,
+    [availableStations]
+  );
 
+  // Keep track of which markers to include in the analysis
+  const [selectedMarkerIds, setSelectedMarkerIds] = useState<string[]>([]);
   const [localError, setLocalError] = useState<string | null>(null);
+
+  // Initialize selected markers when available markers change - with proper dependency tracking
+  useEffect(() => {
+    // The key fix: Use a stable reference by getting the IDs first
+    const markerIds = availableStations.map(station => station.id);
+    
+    // Only update if we have different IDs than currently selected
+    if (JSON.stringify(markerIds.sort()) !== JSON.stringify([...selectedMarkerIds].sort())) {
+      setSelectedMarkerIds(markerIds);
+    }
+  }, [availableStations]); // This dependency is now properly memoized
+
+  const handleMarkerSelectionChange = (markerId: string, isSelected: boolean) => {
+    if (isSelected) {
+      setSelectedMarkerIds(prev => [...prev, markerId]);
+    } else {
+      setSelectedMarkerIds(prev => prev.filter(id => id !== markerId));
+    }
+  };
+
+  // Filter stations based on selection - memoized to prevent recreation on every render
+  const selectedStations = useMemo(() => 
+    computedStations.filter(station => selectedMarkerIds.includes(station.id)),
+    [computedStations, selectedMarkerIds]
+  );
 
   const handleRunMergedAnalysis = async () => {
     if (!gridAnalysisRef.current) {
@@ -83,27 +96,34 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
       setLocalError("Analysis controller not initialized");
       return;
     }
-    if (computedStations.length < 2) {
+    
+    if (selectedStations.length < 2) {
       setError("At least two stations are required for merged analysis");
       setLocalError("At least two stations are required for merged analysis");
       return;
     }
+    
     try {
-      
       setError(null);
       setLocalError(null);
       trackEvent("merged_analysis_start", {
-        stations: computedStations.map((s) => ({
+        stations: selectedStations.map((s) => ({
+          id: s.id,
           type: s.type,
           range: s.range,
           elevationOffset: s.elevationOffset,
         })),
       });
 
-      const mergedResults: AnalysisResults = await gridAnalysisRef.current.runMergedAnalysis(computedStations);
+      const mergedResults: AnalysisResults = await gridAnalysisRef.current.runMergedAnalysis({
+        stations: selectedStations
+      });
+      
       setResults(mergedResults);
+      
       trackEvent("merged_analysis_success", {
-        stations: computedStations.map((s) => ({
+        stations: selectedStations.map((s) => ({
+          id: s.id,
           type: s.type,
           range: s.range,
           elevationOffset: s.elevationOffset,
@@ -117,19 +137,27 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
     }
   };
 
-  const getStationDisplayName = (type: string) => {
-    switch (type) {
-      case "gcs":
-        return "GCS Station";
-      case "observer":
-        return "Observer Station";
-      case "repeater":
-        return "Repeater Station";
-      default:
-        return type;
+  // Get display name for a station - memoized to prevent function recreation on every render
+  const getStationDisplayName = useCallback((station: Station) => {
+    const baseNames = {
+      "gcs": "GCS Station",
+      "observer": "Observer Station",
+      "repeater": "Repeater Station"
+    };
+    
+    // Count how many markers of this type exist
+    const typeMarkers = availableStations.filter(s => s.type === station.type);
+    
+    // If multiple markers of this type, add index
+    if (typeMarkers.length > 1) {
+      const index = typeMarkers.findIndex(s => s.id === station.id);
+      return `${baseNames[station.type]} #${index + 1}`;
     }
-  };
+    
+    return baseNames[station.type];
+  }, [availableStations]);
 
+  // Layer visibility listener - no issues here
   useEffect(() => {
     const unsubscribe = layerManager.addEventListener((event, layerId) => {
       if (
@@ -158,26 +186,45 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
         </label>
       </div>
       <p className="text-xs mb-2">
-        This analysis combines visibility from all available stations.
+        This analysis combines visibility from selected stations.
       </p>
-      {computedStations.length < 2 ? (
+      {availableStations.length < 2 ? (
         <div className="p-2 bg-yellow-100 border border-yellow-400 text-xs text-yellow-700 rounded">
           ⚠️ Please place at least two station markers (GCS, Observer, or Repeater) on the map to enable merged analysis.
-          {computedStations.length === 1 && (
+          {availableStations.length === 1 && (
             <p className="mt-1">
-              Currently placed: {getStationDisplayName(computedStations[0].type)}
+              Currently placed: {getStationDisplayName(availableStations[0])}
             </p>
           )}
         </div>
       ) : (
         <>
+          <div className="mb-3 border rounded p-2 bg-gray-50">
+            <p className="text-xs font-medium mb-1">Select stations to include:</p>
+            {availableStations.map((station) => (
+              <div key={station.id} className="flex items-center mb-1">
+                <input
+                  type="checkbox"
+                  id={`station-${station.id}`}
+                  checked={selectedMarkerIds.includes(station.id)}
+                  onChange={(e) => handleMarkerSelectionChange(station.id, e.target.checked)}
+                  className="mr-2"
+                  disabled={isAnalyzing}
+                />
+                <label htmlFor={`station-${station.id}`} className="text-xs">
+                  {getStationDisplayName(station)}
+                </label>
+              </div>
+            ))}
+          </div>
+
           <div className="mb-2 text-xs">
             <p>
               <strong>Available Stations (computed grid ranges):</strong>
             </p>
-            {computedStations.map((station) => (
-              <p key={station.type} className="ml-2">
-                - {getStationDisplayName(station.type)}: (
+            {selectedStations.map((station) => (
+              <p key={station.id} className="ml-2">
+                - {getStationDisplayName(station)}: (
                 {station.location.lat.toFixed(3)}, {station.location.lng.toFixed(3)}, {(station.location.elevation ?? 0).toFixed(1)}m)
                 , Range: {station.range}m, Elevation Offset: {station.elevationOffset}m
               </p>
@@ -185,9 +232,9 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
           </div>
           <button
             onClick={handleRunMergedAnalysis}
-            disabled={isAnalyzing || computedStations.length < 2}
+            disabled={isAnalyzing || selectedStations.length < 2}
             className={`w-full py-1 rounded mt-3 ${
-              isAnalyzing || computedStations.length < 2
+              isAnalyzing || selectedStations.length < 2
                 ? "bg-gray-300 cursor-not-allowed"
                 : "bg-blue-500 hover:bg-blue-600 text-white text-sm"
             }`}
@@ -196,7 +243,7 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
           </button>
         </>
       )}
-      {results && results.stats && computedStations.length >= 2 && (
+      {results && results.stats && selectedStations.length >= 2 && (
         <div className="mt-4">
           <p className="text-xs">
             <strong>Visible Areas:</strong> {results.stats.visibleCells} / {results.stats.totalCells}

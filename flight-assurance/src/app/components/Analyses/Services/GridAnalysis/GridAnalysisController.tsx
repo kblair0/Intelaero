@@ -28,6 +28,7 @@ export interface GridAnalysisRef {
     location: LocationData;
     range: number;
     elevationOffset: number;
+    markerId: string;
   }) => Promise<AnalysisResults>;
   runMergedAnalysis: (stations: Array<{
     type: 'gcs' | 'observer' | 'repeater';
@@ -65,14 +66,9 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
     const { map, elevationService } = useMapContext();
     const { setResults, setError, setProgress, setIsAnalyzing } = useLOSAnalysis();
     const [internalProgress, setInternalProgress] = useState(0);
-    const { 
-      gcsLocation, 
-      observerLocation, 
-      repeaterLocation,
-      gcsElevationOffset,
-      observerElevationOffset,
-      repeaterElevationOffset
-    } = useMarkersContext();
+    
+    // Use the markers collection instead of individual locations
+    const { markers } = useMarkersContext();
     
     // Initialize the grid analysis hook with progress tracking
     const {
@@ -91,12 +87,22 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
     const cleanup = useCallback(() => {
       if (!map) return;
       
-      layerManager.removeLayer(MAP_LAYERS.ELOS_GRID);
-      layerManager.removeLayer(MAP_LAYERS.GCS_GRID);
-      layerManager.removeLayer(MAP_LAYERS.OBSERVER_GRID);
-      layerManager.removeLayer(MAP_LAYERS.REPEATER_GRID);
-      layerManager.removeLayer(MAP_LAYERS.MERGED_VISIBILITY);
-      layerManager.removeLayer(MAP_LAYERS.FLIGHT_PATH_VISIBILITY);
+      // Clean up analysis layers - now need to find layers with dynamic prefixes
+      Object.values(MAP_LAYERS).forEach(layerId => {
+        // Remove exact matches
+        if (map.getLayer(layerId)) {
+          layerManager.removeLayer(layerId);
+        }
+        
+        // For marker-specific layers (those with ID pattern like "gcs-grid-123")
+        // we can find and remove them by checking all layers
+        const layers = map.getStyle().layers || [];
+        layers.forEach(layer => {
+          if (layer.id.startsWith(`${layerId}-`)) {
+            layerManager.removeLayer(layer.id);
+          }
+        });
+      });
     }, [map]);
 
     // Expose methods through the ref
@@ -139,17 +145,27 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
           
           setIsAnalyzing(true);
             
-          const layerId = 
+          // Create a unique layer ID using marker type and ID
+          const layerPrefix = 
             options.stationType === 'gcs' 
               ? MAP_LAYERS.GCS_GRID 
               : options.stationType === 'observer' 
                 ? MAP_LAYERS.OBSERVER_GRID 
                 : MAP_LAYERS.REPEATER_GRID;
                 
+          const layerId = options.markerId 
+            ? `${layerPrefix}-${options.markerId}`
+            : layerPrefix;
+          
+          // Remove existing layer if present
           layerManager.removeLayer(layerId);
           
-          // Run the analysis
-          const results = await runAnalysis(AnalysisType.STATION, options);
+          // Run the analysis with the unique layer ID
+          const results = await runAnalysis(AnalysisType.STATION, {
+            ...options,
+            layerId
+          });
+          
           setResults(results);
           
           if (onComplete) onComplete(results);
@@ -164,11 +180,19 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
         }
       },
       
-      // Merged analysis
-      async runMergedAnalysis(stations) {
+      // Merged analysis - update to use markers collection
+      async runMergedAnalysis(options) {
         try {
           setIsAnalyzing(true);
           layerManager.removeLayer(MAP_LAYERS.MERGED_VISIBILITY);
+          
+          // If no specific stations are provided, use all markers
+          const stations = options?.stations || markers.map(marker => ({
+            type: marker.type,
+            location: marker.location,
+            range: 500, // Default range if not specified
+            elevationOffset: marker.elevationOffset
+          }));
           
           const results = await runAnalysis(AnalysisType.MERGED, { stations });
           setResults(results);
@@ -185,14 +209,43 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
         }
       },
       
-      // Station-to-station LOS check
-      async checkStationToStationLOS(sourceStation, targetStation) {
+      // Station-to-station LOS check - update to use marker IDs
+      async checkStationToStationLOS(sourceMarkerId, targetMarkerId) {
         try {
           setIsAnalyzing(true);
           
+          // Find markers by ID
+          const sourceMarker = markers.find(m => m.id === sourceMarkerId);
+          const targetMarker = markers.find(m => m.id === targetMarkerId);
+          
+          if (!sourceMarker || !targetMarker) {
+            throw new Error("One or both markers not found");
+          }
+          
+          // Create clean objects with only the needed properties
+          // This avoids passing full markers which might have circular references
+          const sourceStationData = {
+            type: sourceMarker.type,
+            location: {
+              ...sourceMarker.location
+            },
+            elevationOffset: sourceMarker.elevationOffset
+          };
+          
+          const targetStationData = {
+            type: targetMarker.type,
+            location: {
+              ...targetMarker.location
+            },
+            elevationOffset: targetMarker.elevationOffset
+          };
+          
           const losData = await runAnalysis(
             AnalysisType.STATION_TO_STATION,
-            { sourceStation, targetStation }
+            { 
+              sourceStation: sourceStationData,
+              targetStation: targetStationData
+            }
           );
           
           // Extract LOS result from analysis results
@@ -211,7 +264,6 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
           
           if (onComplete) onComplete(results);
           
-          // The LOS data is expected to be in this format by UI components
           return { 
             result: losData.stationLOSResult!, 
             profile: losData.profile || [] 
@@ -226,44 +278,13 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
         }
       },
 
-      // Flight path visibility analysis
+      // Flight path visibility analysis - update to use markers collection
       async runFlightPathVisibilityAnalysis(options = {}) {
         if (!flightPlan) {
           throw new Error('No flight plan available');
         }
         
         try {
-          // Get the available stations for analysis
-          const stations = [];
-          
-          if (gcsLocation) {
-            stations.push({
-              type: 'gcs' as const,
-              location: gcsLocation,
-              elevationOffset: gcsElevationOffset
-            });
-          }
-          
-          if (observerLocation) {
-            stations.push({
-              type: 'observer' as const,
-              location: observerLocation,
-              elevationOffset: observerElevationOffset
-            });
-          }
-          
-          if (repeaterLocation) {
-            stations.push({
-              type: 'repeater' as const,
-              location: repeaterLocation,
-              elevationOffset: repeaterElevationOffset
-            });
-          }
-          
-          if (stations.length === 0) {
-            throw new Error('At least one station (GCS, Observer, or Repeater) must be placed on the map');
-          }
-          
           setIsAnalyzing(true);
           
           // Remove previous visibility layer
@@ -273,11 +294,11 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
           const { analyzeFlightPathVisibility, addVisibilityLayer } = await import(
             '../../LOSAnalyses/Utils/FlightPathVisibilityEngine');
           
-          // Run the analysis
+          // Run the analysis with all markers
           const visibilityResults = await analyzeFlightPathVisibility(
             map!,
             flightPlan,
-            stations,
+            markers, // Pass all markers instead of filtered stations
             elevationService,
             {
               sampleInterval: options.sampleInterval || 10,
@@ -343,12 +364,7 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
       onComplete,
       onError,
       elevationService,
-      gcsLocation,
-      observerLocation,
-      repeaterLocation,
-      gcsElevationOffset,
-      observerElevationOffset,
-      repeaterElevationOffset
+      markers // Add markers to dependencies
     ]);
 
     // The controller doesn't render anything, it just manages state

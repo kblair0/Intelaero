@@ -23,17 +23,35 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
     setGridSize,
     setElosGridRange
   } = useLOSAnalysis();
-  const { 
-    gcsLocation, 
-    observerLocation, 
-    repeaterLocation,
-    gcsElevationOffset,
-    observerElevationOffset,
-    repeaterElevationOffset
-  } = useMarkersContext();
+  
+  // Use markers collection instead of individual references
+  const { markers } = useMarkersContext();
   const { elevationService, map } = useMapContext();
+  
   const [localError, setLocalError] = useState<string | null>(null);
   const [showVisibilityLayer, setShowVisibilityLayer] = useState<boolean>(true);
+  
+  // Keep track of which markers to include in visibility analysis
+  const [selectedMarkerIds, setSelectedMarkerIds] = useState<string[]>([]);
+
+  // Initialize selected markers when available markers change
+  useEffect(() => {
+    // Default to selecting all available markers
+    setSelectedMarkerIds(markers.map(marker => marker.id));
+  }, [markers]);
+
+  const handleMarkerSelectionChange = (markerId: string, isSelected: boolean) => {
+    if (isSelected) {
+      setSelectedMarkerIds(prev => [...prev, markerId]);
+    } else {
+      setSelectedMarkerIds(prev => prev.filter(id => id !== markerId));
+    }
+  };
+
+  // Get selected markers for analysis
+  const selectedMarkers = markers.filter(marker => 
+    selectedMarkerIds.includes(marker.id)
+  );
 
   // Track which analysis types are available
   const [analysisTypes, setAnalysisTypes] = useState({
@@ -92,37 +110,35 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
       return;
     }
 
-    // Verify we have at least one station placed
-    const availableStations = [
-      { type: 'gcs', location: gcsLocation, elevationOffset: gcsElevationOffset },
-      { type: 'observer', location: observerLocation, elevationOffset: observerElevationOffset },
-      { type: 'repeater', location: repeaterLocation, elevationOffset: repeaterElevationOffset }
-    ].filter(station => station.location !== null);
-
-    if (availableStations.length === 0) {
-      setError("At least one station (GCS, Observer, or Repeater) must be placed on the map");
-      setLocalError("At least one station (GCS, Observer, or Repeater) must be placed on the map");
+    // Verify we have at least one marker selected
+    if (selectedMarkers.length === 0) {
+      setError("At least one station (GCS, Observer, or Repeater) must be selected for analysis");
+      setLocalError("At least one station (GCS, Observer, or Repeater) must be selected for analysis");
       return;
     }
 
     try {
-      console.log(`[${new Date().toISOString()}] [flightpathanalysis] Setting isAnalyzing to true for visibility analysis`);
+      console.log(`[${new Date().toISOString()}] [flightpathanalysis] Running visibility analysis with ${selectedMarkers.length} markers`);
       
       setError(null);
       setLocalError(null);
       trackEvent("flight_path_visibility_analysis_start", {
-        stations: availableStations.length,
-        usingElevationService: !!elevationService,
+        markerCount: selectedMarkers.length,
+        markerIds: selectedMarkerIds,
+        usingElevationService: !!elevationService
       });
 
+      // Pass selected marker IDs to the analysis function
       await gridAnalysisRef.current.runFlightPathVisibilityAnalysis({
         sampleInterval: 10, // 10 meter intervals
-        showLayer: showVisibilityLayer
+        showLayer: showVisibilityLayer,
+        markerIds: selectedMarkerIds // Pass the selected marker IDs
       });
 
       trackEvent("flight_path_visibility_analysis_success", {
-        stations: availableStations.length,
-        usingElevationService: !!elevationService,
+        markerCount: selectedMarkers.length,
+        markerIds: selectedMarkerIds,
+        usingElevationService: !!elevationService
       });
     } catch (err: any) {
       setError(err.message || "Flight path visibility analysis failed");
@@ -130,12 +146,33 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
 
       trackEvent("flight_path_visibility_analysis_error", {
         error: err.message,
-        stations: availableStations.length,
-        usingElevationService: !!elevationService,
+        markerCount: selectedMarkers.length,
+        markerIds: selectedMarkerIds,
+        usingElevationService: !!elevationService
       });
     } finally {
       setIsAnalyzing(false);
     }
+  };
+
+  // Get display name for a marker, including index if multiple of same type exist
+  const getMarkerDisplayName = (marker: any) => {
+    const typeName = {
+      'gcs': 'GCS',
+      'observer': 'Observer',
+      'repeater': 'Repeater'
+    }[marker.type];
+    
+    // Count markers of this type
+    const typeMarkers = markers.filter(m => m.type === marker.type);
+    
+    // Add index if multiple markers of this type
+    if (typeMarkers.length > 1) {
+      const index = typeMarkers.findIndex(m => m.id === marker.id);
+      return `${typeName} #${index + 1}`;
+    }
+    
+    return typeName;
   };
 
   useEffect(() => {
@@ -240,14 +277,39 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
           </label>
         </div>
         <p className="text-xs mb-3">
-          This analysis shows which parts of the flight path are visible from ground stations.
+          This analysis shows which parts of the flight path are visible from selected stations.
           Green sections are visible, red dashed sections are not visible from any station.
         </p>
+        
+        {/* Marker selection for visibility analysis */}
+        {markers.length > 0 && (
+          <div className="mb-3 border rounded p-2 bg-gray-50">
+            <p className="text-xs font-medium mb-1">Select stations to include in analysis:</p>
+            {markers.map((marker) => (
+              <div key={marker.id} className="flex items-center mb-1">
+                <input
+                  type="checkbox"
+                  id={`vis-marker-${marker.id}`}
+                  checked={selectedMarkerIds.includes(marker.id)}
+                  onChange={(e) => handleMarkerSelectionChange(marker.id, e.target.checked)}
+                  className="mr-2"
+                  disabled={isAnalyzing}
+                />
+                <label htmlFor={`vis-marker-${marker.id}`} className="text-xs">
+                  {getMarkerDisplayName(marker)}
+                </label>
+              </div>
+            ))}
+          </div>
+        )}
+        
         <button
           onClick={handleRunVisibilityAnalysis}
-          disabled={isAnalyzing}
+          disabled={isAnalyzing || selectedMarkers.length === 0}
           className={`w-full py-1 rounded ${
-            isAnalyzing ? "bg-gray-300 cursor-not-allowed" : "bg-green-500 hover:bg-green-600 text-sm text-white"
+            isAnalyzing || selectedMarkers.length === 0 
+              ? "bg-gray-300 cursor-not-allowed" 
+              : "bg-green-500 hover:bg-green-600 text-sm text-white"
           }`}
         >
           {isAnalyzing ? "Analysing..." : "Run Path Visibility Analysis"}

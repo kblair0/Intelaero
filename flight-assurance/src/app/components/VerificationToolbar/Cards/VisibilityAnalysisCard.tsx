@@ -45,24 +45,27 @@ const LOSAnalysisCard: React.FC<VerificationCardProps> = ({
   onTogglePanel
 }) => {
   const { results, setError } = useLOSAnalysis();
-  const { 
-    gcsLocation, 
-    observerLocation, 
-    repeaterLocation
-  } = useMarkersContext();
   const { gridAnalysisRef } = useAnalysisController();
   
+  const { markers } = useMarkersContext();
+
+// Count markers by type
+const gcsMarkers = markers.filter(m => m.type === 'gcs');
+const observerMarkers = markers.filter(m => m.type === 'observer');
+const repeaterMarkers = markers.filter(m => m.type === 'repeater');
+
+// Available station types
+const availableStations = [
+  gcsMarkers.length > 0 && "GCS",
+  observerMarkers.length > 0 && "Observer",
+  repeaterMarkers.length > 0 && "Repeater"
+].filter(Boolean);
+
   // Local state
   const [stationLOSStatus, setStationLOSStatus] = useState<'success' | 'error' | 'pending'>('pending');
   const [flightCoverage, setFlightCoverage] = useState<number | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   
-  // Check available stations
-  const availableStations = [
-    gcsLocation && "GCS",
-    observerLocation && "Observer",
-    repeaterLocation && "Repeater"
-  ].filter(Boolean);
 
   // Update flight path coverage when results change
   useEffect(() => {
@@ -94,29 +97,42 @@ const LOSAnalysisCard: React.FC<VerificationCardProps> = ({
    * Quick-run station-to-station LOS check if appropriate
    */
   const handleQuickLOSCheck = async () => {
-    // Only run if exactly 2 stations are available and analysis controller is initialized
+    // Only run if exactly 2 station types are available
     if (availableStations.length !== 2 || !gridAnalysisRef.current) {
-      setLocalError("Need exactly 2 stations placed for quick LOS check");
+      setLocalError("Need exactly 2 types of stations placed for quick LOS check");
       return;
     }
     
     try {
-      // Determine which stations to check
-      const stationTypes = [];
-      if (gcsLocation) stationTypes.push("gcs");
-      if (observerLocation) stationTypes.push("observer");
-      if (repeaterLocation) stationTypes.push("repeater");
+      // Find one marker of each available type
+      const markersByType: Record<string, any> = {};
+      if (gcsMarkers.length > 0) markersByType.gcs = gcsMarkers[0];
+      if (observerMarkers.length > 0) markersByType.observer = observerMarkers[0];
+      if (repeaterMarkers.length > 0) markersByType.repeater = repeaterMarkers[0];
+      
+      const stationTypes = Object.keys(markersByType) as Array<"gcs" | "observer" | "repeater">;
       
       if (stationTypes.length !== 2) return;
       
-      const [source, target] = stationTypes as ["gcs" | "observer" | "repeater", "gcs" | "observer" | "repeater"];
+      const [sourceType, targetType] = stationTypes;
+      const sourceMarker = markersByType[sourceType];
+      const targetMarker = markersByType[targetType];
       
-      trackEvent("quick_station_los_check", { source, target });
+      trackEvent("quick_station_los_check", { 
+        sourceType, 
+        targetType,
+        sourceId: sourceMarker.id,
+        targetId: targetMarker.id
+      });
+      
       setLocalError(null);
       setError(null);
       
-      // Run the analysis
-      const losData = await gridAnalysisRef.current.checkStationToStationLOS(source, target);
+      // Run the analysis with marker IDs
+      const losData = await gridAnalysisRef.current.checkStationToStationLOS(
+        sourceMarker.id, 
+        targetMarker.id
+      );
       
       // Update status based on result
       setStationLOSStatus(losData.result.clear ? 'success' : 'error');

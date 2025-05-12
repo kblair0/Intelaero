@@ -1,36 +1,37 @@
 // src/app/hooks/useMarkers.ts
 "use client";
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useEffect } from 'react';
 import mapboxgl from 'mapbox-gl';
-import { useMarkersContext } from '../../../context/MarkerContext';
+import { useMarkersContext, MarkerType, Marker } from '../../../context/MarkerContext';
 import { LocationData } from '../../../types/LocationData';
 import { createMarkerPopup } from '../Utils/markerPopup';
 import { layerManager, MAP_LAYERS } from '../../../services/LayerManager';
-
-type MarkerType = 'gcs' | 'observer' | 'repeater';
+import { trackEventWithForm as trackEvent } from '../../tracking/tracking';
 
 interface UseMarkersProps {
   map: mapboxgl.Map | null;
   terrainLoaded: boolean;
 }
 
-export function useMarkers({ map, terrainLoaded }: UseMarkersProps) {
-  const {
-    gcsLocation,
-    setGcsLocation,
-    observerLocation,
-    setObserverLocation,
-    repeaterLocation,
-    setRepeaterLocation,
-    gcsElevationOffset,
-    observerElevationOffset,
-    repeaterElevationOffset,
-  } = useMarkersContext();
+// Interface for tracking marker references
+interface MarkerRef {
+  id: string;
+  marker: mapboxgl.Marker;
+  type: MarkerType;
+}
 
-  // Marker refs
-  const gcsMarkerRef = useRef<mapboxgl.Marker | null>(null);
-  const observerMarkerRef = useRef<mapboxgl.Marker | null>(null);
-  const repeaterMarkerRef = useRef<mapboxgl.Marker | null>(null);
+export function useMarkers({ map, terrainLoaded }: UseMarkersProps) {
+  // Store all marker references in a single collection
+  const markerRefs = useRef<MarkerRef[]>([]);
+  
+  const {
+    markers,
+    addMarker,
+    updateMarker,
+    removeMarker,
+    removeAllMarkers: contextRemoveAllMarkers,
+    defaultElevationOffsets
+  } = useMarkersContext();
 
   // Helper for querying terrain elevation
   const queryTerrainElevation = useCallback(
@@ -68,7 +69,7 @@ export function useMarkers({ map, terrainLoaded }: UseMarkersProps) {
     [map]
   );
 
-  // Fallback function for querying terrain elevation from Mapbox Terrain-RGB
+  // Fallback function for elevation queries
   const fetchTerrainElevation = async (
     lng: number,
     lat: number
@@ -113,288 +114,244 @@ export function useMarkers({ map, terrainLoaded }: UseMarkersProps) {
     }
   };
 
-  // ----------------------------
-  // Marker Creation Functions
-  // ----------------------------
+  // Helper to create a marker label element
+  const createMarkerLabel = useCallback((index: number, markerType: MarkerType): HTMLElement => {
+    const el = document.createElement('div');
+    el.className = 'marker-label';
+    el.textContent = `${index + 1}`;
+    
+    // Style the label based on marker type
+    el.style.cssText = `
+      position: absolute;
+      bottom: 0;
+      right: -5px;
+      width: 16px;
+      height: 16px;
+      background-color: white;
+      color: black;
+      border-radius: 50%;
+      text-align: center;
+      font-size: 10px;
+      font-weight: bold;
+      line-height: 16px;
+      border: 1px solid ${markerType === 'gcs' ? 'blue' : markerType === 'observer' ? 'green' : 'red'};
+    `;
+    
+    return el;
+  }, []);
 
-  // Add Ground Station
-  const addGroundStation = useCallback(async () => {
-    if (!map || !terrainLoaded) return;
-    const center = map.getCenter();
-    try {
-      const elevation = await queryTerrainElevation([center.lng, center.lat]);
-      const initialLocation: LocationData = {
-        lng: center.lng,
-        lat: center.lat,
-        elevation: elevation,
-      };
-      console.log("GCS Initial Location:", initialLocation);
-      setGcsLocation(initialLocation);
-
-      const gcsMarker = new mapboxgl.Marker({ color: "blue", draggable: true })
-        .setLngLat(center)
-        .addTo(map);
-      gcsMarkerRef.current = gcsMarker;
-
-      // Create and set popup using the popup utility,
-      // passing the appropriate elevation offset for GCS.
-      const popup = createMarkerPopup(
-        "gcs",
-        elevation,
-        gcsElevationOffset,
-        () => {
-          gcsMarker.remove();
-          setGcsLocation(null);
+  // Generic function to create a marker of any type
+  const createMarker = useCallback(
+    async (type: MarkerType): Promise<LocationData | undefined> => {
+      if (!map || !terrainLoaded) return;
+      
+      const center = map.getCenter();
+      try {
+        const elevation = await queryTerrainElevation([center.lng, center.lat]);
+        const initialLocation: LocationData = {
+          lng: center.lng,
+          lat: center.lat,
+          elevation: elevation,
+        };
+        
+        console.log(`${type.toUpperCase()} Initial Location:`, initialLocation);
+        
+        // Add marker to context and get ID
+        const markerId = addMarker(type, initialLocation);
+        
+        // Define colors for different marker types
+        const markerColors: Record<MarkerType, string> = {
+          gcs: "blue",
+          observer: "green",
+          repeater: "red"
+        };
+        
+        // Get markers of this type to determine index
+        const sameTypeMarkers = markers.filter(m => m.type === type);
+        const markerIndex = sameTypeMarkers.length; // This will be the index of the new marker
+        const hasMultiple = sameTypeMarkers.length > 0; // Will be true if there are already others
+        
+        // Create the default marker first with the appropriate color
+        const newMarker = new mapboxgl.Marker({ 
+          color: markerColors[type], 
+          draggable: true 
+        }).setLngLat(center).addTo(map);
+        
+        // Only add label if we have multiple markers of this type
+        if (hasMultiple || markerIndex > 0) {
+          // Create the label
+          const label = createMarkerLabel(markerIndex, type);
+          
+          // Get the marker element and append the label to it
+          const markerElement = newMarker.getElement();
+          markerElement.appendChild(label);
         }
-      );
-      gcsMarker.setPopup(popup).togglePopup();
+        
+        // Store reference to marker
+        markerRefs.current.push({
+          id: markerId,
+          marker: newMarker,
+          type
+        });
+        
+        // Create and set popup
+        const popup = createMarkerPopup(
+          type,
+          elevation,
+          defaultElevationOffsets[type],
+          () => {
+            // Delete marker callback
+            newMarker.remove();
+            removeMarker(markerId);
+            markerRefs.current = markerRefs.current.filter(ref => ref.id !== markerId);
+          },
+          markerId,
+          markerIndex,
+          hasMultiple
+        );
+        
+        newMarker.setPopup(popup).togglePopup();
+        
+        // Handle marker drag events
+        newMarker.on("dragend", async () => {
+          const lngLat = newMarker.getLngLat();
+          try {
+            const newElevation = await queryTerrainElevation([lngLat.lng, lngLat.lat]);
+            const location: LocationData = {
+              lng: lngLat.lng,
+              lat: lngLat.lat,
+              elevation: newElevation,
+            };
+            
+            // Update marker in context
+            updateMarker(markerId, { location });
+            
+            // Clean up outdated analysis layers
+            const layerPrefix = type === 'gcs' 
+              ? MAP_LAYERS.GCS_GRID 
+              : type === 'observer' 
+                ? MAP_LAYERS.OBSERVER_GRID 
+                : MAP_LAYERS.REPEATER_GRID;
+                
+            layerManager.removeLayer(MAP_LAYERS.MERGED_VISIBILITY);
+            layerManager.removeLayer(`${layerPrefix}-${markerId}`);
+            
+            // Get current markers of same type for indexing
+            const currentSameTypeMarkers = markers.filter(m => m.type === type);
+            const currentMarkerIndex = currentSameTypeMarkers.findIndex(m => m.id === markerId);
+            const hasMultipleNow = currentSameTypeMarkers.length > 1;
+            
+            // Recreate popup with updated elevation
+            const newPopup = createMarkerPopup(
+              type,
+              newElevation,
+              defaultElevationOffsets[type],
+              () => {
+                newMarker.remove();
+                removeMarker(markerId);
+                markerRefs.current = markerRefs.current.filter(ref => ref.id !== markerId);
+              },
+              markerId,
+              currentMarkerIndex,
+              hasMultipleNow
+            );
+            
+            newMarker.setPopup(newPopup).togglePopup();
+          } catch (error) {
+            console.error(`Error updating ${type.toUpperCase()} elevation:`, error);
+          }
+        });
+        
+        return initialLocation;
+      } catch (error) {
+        console.error(`Error initializing ${type.toUpperCase()}:`, error);
+      }
+    },
+    [map, terrainLoaded, queryTerrainElevation, addMarker, updateMarker, removeMarker, defaultElevationOffsets, markers, createMarkerLabel]
+  );
 
-      // Update marker on drag end
-      gcsMarker.on("dragend", async () => {
-        const lngLat = gcsMarker.getLngLat();
-        try {
-          const newElevation = await queryTerrainElevation([lngLat.lng, lngLat.lat]);
-          const location: LocationData = {
-            lng: lngLat.lng,
-            lat: lngLat.lat,
-            elevation: newElevation,
-          };
-          setGcsLocation(location);
-          // Clean up outdated analysis layers
-          layerManager.removeLayer(MAP_LAYERS.MERGED_VISIBILITY);
-          layerManager.removeLayer(MAP_LAYERS.GCS_GRID);
-          // Recreate popup with updated elevation
-          const newPopup = createMarkerPopup(
-            "gcs",
-            newElevation,
-            gcsElevationOffset,
-            () => {
-              gcsMarker.remove();
-              setGcsLocation(null);
-            }
-          );
-          gcsMarker.setPopup(newPopup).togglePopup();
-        } catch (error) {
-          console.error("Error updating GCS elevation:", error);
-        }
-      });
-    } catch (error) {
-      console.error("Error initializing GCS:", error);
-    }
-  }, [map, terrainLoaded, queryTerrainElevation, setGcsLocation, gcsElevationOffset]);
+  // Type-specific marker creation functions
+  const addGroundStation = useCallback(async (): Promise<LocationData | undefined> => {
+    trackEvent("add_ground_station_click", { panel: "map.tsx" });
+    return createMarker('gcs');
+  }, [createMarker]);
 
-  // Add Observer
-  const addObserver = useCallback(async () => {
-    if (!map || !terrainLoaded) return;
-    const center = map.getCenter();
-    try {
-      const elevation = await queryTerrainElevation([center.lng, center.lat]);
-      const initialLocation: LocationData = {
-        lng: center.lng,
-        lat: center.lat,
-        elevation: elevation,
-      };
-      console.log("Observer Initial Location:", initialLocation);
-      setObserverLocation(initialLocation);
+  const addObserver = useCallback(async (): Promise<LocationData | undefined> => {
+    trackEvent("add_observer_click", { panel: "map.tsx" });
+    return createMarker('observer');
+  }, [createMarker]);
 
-      const observerMarker = new mapboxgl.Marker({ color: "green", draggable: true })
-        .setLngLat(center)
-        .addTo(map);
-      observerMarkerRef.current = observerMarker;
-
-      const popup = createMarkerPopup(
-        "observer",
-        elevation,
-        observerElevationOffset,
-        () => {
-          observerMarker.remove();
-          setObserverLocation(null);
-        }
-      );
-      observerMarker.setPopup(popup).togglePopup();
-
-      observerMarker.on("dragend", async () => {
-        const lngLat = observerMarker.getLngLat();
-        try {
-          const newElevation = await queryTerrainElevation([lngLat.lng, lngLat.lat]);
-          const location: LocationData = {
-            lng: lngLat.lng,
-            lat: lngLat.lat,
-            elevation: newElevation,
-          };
-          setObserverLocation(location);
-          layerManager.removeLayer(MAP_LAYERS.MERGED_VISIBILITY);
-          layerManager.removeLayer(MAP_LAYERS.OBSERVER_GRID);
-          const newPopup = createMarkerPopup(
-            "observer",
-            newElevation,
-            observerElevationOffset,
-            () => {
-              observerMarker.remove();
-              setObserverLocation(null);
-            }
-          );
-          observerMarker.setPopup(newPopup).togglePopup();
-        } catch (error) {
-          console.error("Error updating Observer elevation:", error);
-        }
-      });
-    } catch (error) {
-      console.error("Error initializing Observer:", error);
-    }
-  }, [map, terrainLoaded, queryTerrainElevation, setObserverLocation, observerElevationOffset]);
-
-  // Add Repeater
-  const addRepeater = useCallback(async () => {
-    if (!map || !terrainLoaded) return;
-    const center = map.getCenter();
-    try {
-      const elevation = await queryTerrainElevation([center.lng, center.lat]);
-      const initialLocation: LocationData = {
-        lng: center.lng,
-        lat: center.lat,
-        elevation: elevation,
-      };
-      console.log("Repeater Initial Location:", initialLocation);
-      setRepeaterLocation(initialLocation);
-
-      const repeaterMarker = new mapboxgl.Marker({ color: "red", draggable: true })
-        .setLngLat(center)
-        .addTo(map);
-      repeaterMarkerRef.current = repeaterMarker;
-
-      const popup = createMarkerPopup(
-        "repeater",
-        elevation,
-        repeaterElevationOffset,
-        () => {
-          repeaterMarker.remove();
-          setRepeaterLocation(null);
-        }
-      );
-      repeaterMarker.setPopup(popup).togglePopup();
-
-      repeaterMarker.on("dragend", async () => {
-        const lngLat = repeaterMarker.getLngLat();
-        try {
-          const newElevation = await queryTerrainElevation([lngLat.lng, lngLat.lat]);
-          const location: LocationData = {
-            lng: lngLat.lng,
-            lat: lngLat.lat,
-            elevation: newElevation,
-          };
-          setRepeaterLocation(location);
-          layerManager.removeLayer(MAP_LAYERS.MERGED_VISIBILITY);
-          layerManager.removeLayer(MAP_LAYERS.REPEATER_GRID);
-          const newPopup = createMarkerPopup(
-            "repeater",
-            newElevation,
-            repeaterElevationOffset,
-            () => {
-              repeaterMarker.remove();
-              setRepeaterLocation(null);
-            }
-          );
-          repeaterMarker.setPopup(newPopup).togglePopup();
-        } catch (error) {
-          console.error("Error updating Repeater elevation:", error);
-        }
-      });
-    } catch (error) {
-      console.error("Error initializing Repeater:", error);
-    }
-  }, [map, terrainLoaded, queryTerrainElevation, setRepeaterLocation, repeaterElevationOffset]);
+  const addRepeater = useCallback(async (): Promise<LocationData | undefined> => {
+    trackEvent("add_repeater_click", { panel: "map.tsx" });
+    return createMarker('repeater');
+  }, [createMarker]);
 
   // Update marker popups when elevation offsets change
   const updateMarkerPopups = useCallback(() => {
-    if (gcsMarkerRef.current && gcsLocation && gcsLocation.elevation !== null) {
-      const updatedPopup = createMarkerPopup(
-        "gcs",
-        gcsLocation.elevation,
-        gcsElevationOffset,
-        () => {
-          gcsMarkerRef.current?.remove();
-          setGcsLocation(null);
+    markerRefs.current.forEach(ref => {
+      // Find marker data in context
+      const markerData = markers.find(m => m.id === ref.id);
+      
+      if (markerData && markerData.location.elevation !== null) {
+        // Get markers of same type to determine index
+        const sameTypeMarkers = markers.filter(m => m.type === markerData.type);
+        const markerIndex = sameTypeMarkers.findIndex(m => m.id === markerData.id);
+        const hasMultiple = sameTypeMarkers.length > 1;
+        
+        const updatedPopup = createMarkerPopup(
+          markerData.type,
+          markerData.location.elevation,
+          markerData.elevationOffset,
+          () => {
+            ref.marker.remove();
+            removeMarker(ref.id);
+            markerRefs.current = markerRefs.current.filter(item => item.id !== ref.id);
+          },
+          markerData.id,
+          markerIndex,
+          hasMultiple
+        );
+        
+        ref.marker.setPopup(updatedPopup);
+        if (ref.marker.getPopup()?.isOpen()) {
+          ref.marker.getPopup()?.setDOMContent(updatedPopup.getElement());
         }
-      );
-      gcsMarkerRef.current.setPopup(updatedPopup);
-      if (gcsMarkerRef.current.getPopup()?.isOpen()) {
-        gcsMarkerRef.current.getPopup()?.setDOMContent(updatedPopup.getElement());
       }
-    }
-    if (observerMarkerRef.current && observerLocation && observerLocation.elevation !== null) {
-      const updatedPopup = createMarkerPopup(
-        "observer",
-        observerLocation.elevation,
-        observerElevationOffset,
-        () => {
-          observerMarkerRef.current?.remove();
-          setObserverLocation(null);
-        }
-      );
-      observerMarkerRef.current.setPopup(updatedPopup);
-      if (observerMarkerRef.current.getPopup()?.isOpen()) {
-        observerMarkerRef.current.getPopup()?.setDOMContent(updatedPopup.getElement());
-      }
-    }
-    if (repeaterMarkerRef.current && repeaterLocation && repeaterLocation.elevation !== null) {
-      const updatedPopup = createMarkerPopup(
-        "repeater",
-        repeaterLocation.elevation,
-        repeaterElevationOffset,
-        () => {
-          repeaterMarkerRef.current?.remove();
-          setRepeaterLocation(null);
-        }
-      );
-      repeaterMarkerRef.current.setPopup(updatedPopup);
-      if (repeaterMarkerRef.current.getPopup()?.isOpen()) {
-        repeaterMarkerRef.current.getPopup()?.setDOMContent(updatedPopup.getElement());
-      }
-    }
-  }, [
-    gcsLocation,
-    observerLocation,
-    repeaterLocation,
-    setGcsLocation,
-    setObserverLocation,
-    setRepeaterLocation,
-    gcsElevationOffset,
-    observerElevationOffset,
-    repeaterElevationOffset,
-  ]);
+    });
+  }, [markers, removeMarker]);
 
-  // Remove all markers and clean up analysis layers
+  // Remove all markers
   const removeAllMarkers = useCallback(() => {
-    if (gcsMarkerRef.current) {
-      gcsMarkerRef.current.remove();
-      gcsMarkerRef.current = null;
-      setGcsLocation(null);
-    }
-    if (observerMarkerRef.current) {
-      observerMarkerRef.current.remove();
-      observerMarkerRef.current = null;
-      setObserverLocation(null);
-    }
-    if (repeaterMarkerRef.current) {
-      repeaterMarkerRef.current.remove();
-      repeaterMarkerRef.current = null;
-      setRepeaterLocation(null);
-    }
+    // Remove visual markers from the map
+    markerRefs.current.forEach(ref => {
+      ref.marker.remove();
+    });
+    
+    // Clear refs
+    markerRefs.current = [];
+    
+    // Remove from context
+    contextRemoveAllMarkers();
+    
+    // Clean up layers
     layerManager.removeLayer(MAP_LAYERS.ELOS_GRID);
     layerManager.removeLayer(MAP_LAYERS.GCS_GRID);
     layerManager.removeLayer(MAP_LAYERS.OBSERVER_GRID);
     layerManager.removeLayer(MAP_LAYERS.REPEATER_GRID);
     layerManager.removeLayer(MAP_LAYERS.MERGED_VISIBILITY);
-  }, [setGcsLocation, setObserverLocation, setRepeaterLocation]);
+  }, [contextRemoveAllMarkers]);
+  
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      markerRefs.current.forEach(ref => {
+        ref.marker.remove();
+      });
+    };
+  }, []);
 
   return {
-    gcsLocation,
-    observerLocation,
-    repeaterLocation,
-    gcsMarkerRef,
-    observerMarkerRef,
-    repeaterMarkerRef,
+    markers, // Provide access to all markers
     addGroundStation,
     addObserver,
     addRepeater,
@@ -402,10 +359,3 @@ export function useMarkers({ map, terrainLoaded }: UseMarkersProps) {
     removeAllMarkers,
   };
 }
-// Note: The above code assumes the existence of the following utility functions:
-// - createMarkerPopup: A utility function to create a popup for the marker.
-// - layerManager: A utility for managing layers on the map.
-// - MAP_LAYERS: An object containing the layer names used in the application.
-// - LocationData: A type definition for the location data structure.
-// - useMarkersContext: A custom hook to access the marker context.
-// - LocationData: A type definition for the location data structure.

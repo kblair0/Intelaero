@@ -20,6 +20,7 @@ import { LocationData } from '../../../../types/LocationData';
 import { layerManager, MAP_LAYERS } from '../../../../services/LayerManager';
 import { ElevationService } from '../../../../services/ElevationService';
 import { Coordinates2D, Coordinates3D } from '../../Types/GridAnalysisTypes';
+import { Marker } from '../../../../context/MarkerContext';
 
 // ======== Type Definitions ========
 
@@ -99,7 +100,7 @@ interface SamplePoint {
 export async function analyzeFlightPathVisibility(
   map: mapboxgl.Map,
   flightPlan: FlightPlanData,
-  stations: StationData[],
+  markers: Marker[], // Using correct Marker type from context
   elevationService: ElevationService | null,
   options: VisibilityAnalysisOptions = {}
 ): Promise<FlightPathVisibilityResult> {
@@ -115,11 +116,21 @@ export async function analyzeFlightPathVisibility(
     throw new Error('Invalid flight plan: must contain a LineString feature');
   }
   
+  // Convert markers to stations format for processing
+  const stations = markers.map(marker => ({
+    type: marker.type,
+    location: marker.location,
+    elevationOffset: marker.elevationOffset,
+    id: marker.id
+  }));
+  
   if (!stations.length) {
     throw new Error('At least one station is required for analysis');
   }
   
   onProgress(5);
+  
+  // Rest of the existing input validation...
   
   // 2. Prepare the flight path for analysis
   const flightPath = flightPlan.features[0] as GeoJSON.Feature<GeoJSON.LineString>;
