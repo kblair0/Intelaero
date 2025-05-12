@@ -8,7 +8,8 @@
  * This component:
  * - Provides direct button access to obstacle analysis features
  * - Integrates with the checklist system
- * - Focuses on three main obstacle analysis types
+ * - Manages the Area of Operations buffer distance
+ * - Includes terrain profile, powerline (HV and DBYD), and airspace analysis
  * - Uses a clear, non-collapsible section layout
  * 
  * Related Files:
@@ -16,6 +17,7 @@
  * - FlightPlanContext.tsx: Provides flight plan data
  * - AreaOfOpsContext.tsx: Provides area of operations data
  * - ObstacleAnalysisContext.tsx: Provides terrain analysis functionality
+ * - BYDAService.ts: Provides DBYD data fetching
  */
 
 import React, { useState, useEffect } from 'react';
@@ -33,7 +35,8 @@ import {
   AlertTriangle, 
   CheckCircle,
   Signal,
-  Loader
+  Loader,
+  Move
 } from 'lucide-react';
 
 interface TerrainAnalysisDashboardProps {
@@ -53,6 +56,25 @@ interface AnalysisSectionProps {
   prerequisitesMet: boolean;
   prerequisitesMessage?: string;
   isLoading?: boolean;
+}
+
+/**
+ * Powerline analysis section with two buttons (HV and DBYD)
+ */
+interface PowerlineAnalysisSectionProps {
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  hvButtonText: string;
+  localButtonText: string;
+  onHVButtonClick: () => void;
+  onLocalButtonClick: () => void;
+  hvChecklistGroupId: string;
+  localChecklistGroupId: string;
+  prerequisitesMet: boolean;
+  prerequisitesMessage?: string;
+  isHVLoading?: boolean;
+  isLocalLoading?: boolean;
 }
 
 const AnalysisSection: React.FC<AnalysisSectionProps> = ({
@@ -128,7 +150,7 @@ const AnalysisSection: React.FC<AnalysisSectionProps> = ({
           {isLoading ? (
             <span className="flex items-center justify-center">
               <Loader className="w-4 h-4 mr-2 animate-spin" />
-              Analyzing...
+              Loading...
             </span>
           ) : buttonText}
         </button>
@@ -137,11 +159,196 @@ const AnalysisSection: React.FC<AnalysisSectionProps> = ({
   );
 };
 
+const PowerlineAnalysisSection: React.FC<PowerlineAnalysisSectionProps> = ({
+  title,
+  description,
+  icon,
+  hvButtonText,
+  localButtonText,
+  onHVButtonClick,
+  onLocalButtonClick,
+  hvChecklistGroupId,
+  localChecklistGroupId,
+  prerequisitesMet,
+  prerequisitesMessage,
+  isHVLoading,
+  isLocalLoading
+}) => {
+  const { checks } = useChecklistContext();
+  
+  // Check if any checklist items for either HV or Local are pending
+  const hasPendingChecks = [hvChecklistGroupId, localChecklistGroupId].some(groupId =>
+    checks.some(check => check.group === groupId && check.status === 'pending')
+  );
+  
+  // Check if all checklist items for both HV and Local are completed
+  const isCompleted = [hvChecklistGroupId, localChecklistGroupId].every(groupId =>
+    checks.some(check => check.group === groupId) &&
+    !checks.some(check => check.group === groupId && check.status === 'pending')
+  );
+
+  return (
+    <div className={`
+      bg-white rounded-lg p-4 border border-gray-200
+      ${hasPendingChecks ? 'border-l-4 border-yellow-300' : ''}
+      ${isCompleted ? 'border-l-4 border-green-300' : ''}
+    `}>
+      <div className="flex items-start mb-3">
+        <div className={`
+          flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full mr-3
+          ${isCompleted ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600'}
+          ${hasPendingChecks ? 'bg-yellow-50 text-yellow-600' : ''}
+        `}>
+          {icon}
+        </div>
+        <div>
+          <div className="flex items-center">
+            <h3 className="font-medium text-sm text-gray-900">{title}</h3>
+            {isCompleted && <CheckCircle className="w-4 h-4 text-green-500 ml-2" />}
+          </div>
+          <p className="text-xs text-gray-500 mt-1">{description}</p>
+        </div>
+      </div>
+      
+      {!prerequisitesMet && prerequisitesMessage && (
+        <div className="mb-3 p-2 bg-yellow-50 rounded text-xs text-yellow-700">
+          <AlertTriangle className="inline-block w-4 h-4 mr-1" />
+          {prerequisitesMessage}
+        </div>
+      )}
+      
+      <div className="mt-3 flex flex-col gap-2">
+        <button 
+          className={`
+            py-2 px-4 rounded text-white text-xs font-medium
+            ${prerequisitesMet 
+              ? 'bg-blue-500 hover:bg-blue-600' 
+              : 'bg-gray-300 cursor-not-allowed'}
+          `}
+          onClick={onHVButtonClick}
+          disabled={!prerequisitesMet || isHVLoading}
+        >
+          {isHVLoading ? (
+            <span className="flex items-center justify-center">
+              <Loader className="w-4 h-4 mr-2 animate-spin" />
+              Loading...
+            </span>
+          ) : hvButtonText}
+        </button>
+        <button 
+          className={`
+            py-2 px-4 rounded text-white text-xs font-medium
+            ${prerequisitesMet 
+              ? 'bg-blue-500 hover:bg-blue-600' 
+              : 'bg-gray-300 cursor-not-allowed'}
+          `}
+          onClick={onLocalButtonClick}
+          disabled={!prerequisitesMet || isLocalLoading}
+        >
+          {isLocalLoading ? (
+            <span className="flex items-center justify-center">
+              <Loader className="w-4 h-4 mr-2 animate-spin" />
+              Loading...
+            </span>
+          ) : localButtonText}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * AO Buffer Section Component 
+ */
+interface AOBufferSectionProps {
+  bufferDistance: number;
+  onBufferDistanceChange: (distance: number) => void;
+  hasFlightPlan: boolean;
+  isAnalyzing: boolean;
+}
+
+const AOBufferSection: React.FC<AOBufferSectionProps> = ({
+  bufferDistance,
+  onBufferDistanceChange,
+  hasFlightPlan,
+  isAnalyzing
+}) => {
+  return (
+    <div className="bg-white rounded-lg p-4 border border-gray-200 mb-4">
+      <div className="flex items-start mb-3">
+        <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full mr-3 bg-blue-50 text-blue-600">
+          <Move className="w-4 h-4" />
+        </div>
+        <div>
+          <h3 className="font-medium text-sm text-gray-900">Area of Operations Buffer</h3>
+          <p className="text-xs text-gray-500 mt-1">
+            Adjust the safety margin around your flight path or operating area
+          </p>
+        </div>
+      </div>
+      
+      {!hasFlightPlan && (
+        <div className="mb-3 p-2 bg-yellow-50 rounded text-xs text-yellow-700">
+          <AlertTriangle className="inline-block w-4 h-4 mr-1" />
+          No flight plan loaded. Buffer will apply to manually defined areas.
+        </div>
+      )}
+      
+      <div className="mt-3">
+        <label htmlFor="ao-buffer-slider" className="text-sm text-gray-700 flex justify-between">
+          <span>Buffer Distance:</span>
+          <span className="font-medium">{bufferDistance}m</span>
+        </label>
+        <input
+          id="ao-buffer-slider"
+          type="range"
+          min="100"
+          max="2000"
+          step="50"
+          value={bufferDistance}
+          onChange={(e) => onBufferDistanceChange(Number(e.target.value))}
+          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer mt-2"
+          disabled={isAnalyzing}
+        />
+        <div className="flex justify-between text-xs text-gray-500 mt-1">
+          <span>100m</span>
+          <span>500m</span>
+          <span>1000m</span>
+          <span>2000m</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Simple info icon component
+const InfoIcon = ({ className }: { className?: string }) => (
+  <svg 
+    xmlns="http://www.w3.org/2000/svg" 
+    viewBox="0 0 24 24" 
+    fill="none" 
+    stroke="currentColor" 
+    strokeWidth="2" 
+    strokeLinecap="round" 
+    strokeLinejoin="round" 
+    className={className}
+  >
+    <circle cx="12" cy="12" r="10"></circle>
+    <line x1="12" y1="16" x2="12" y2="12"></line>
+    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+  </svg>
+);
+
 const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onClose }) => {
   // Track focused section (from checklist guidance)
   const [focusedSection, setFocusedSection] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isLoadingHV, setIsLoadingHV] = useState(false);
+  const [isLoadingDBYD, setIsLoadingDBYD] = useState(false);
+  const [isLoadingAirspace, setIsLoadingAirspace] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [localBufferDistance, setLocalBufferDistance] = useState<number>(500);
   
   const { 
     checks, 
@@ -150,10 +357,15 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
   } = useChecklistContext();
   
   const { flightPlan } = useFlightPlanContext();
-  const { aoGeometry, aoTerrainGrid } = useAreaOfOpsContext();
+  const { 
+    aoGeometry, 
+    aoTerrainGrid, 
+    bufferDistance, 
+    setBufferDistance 
+  } = useAreaOfOpsContext();
   const { runAOAnalysis, status: analysisStatus } = useObstacleAnalysis();
-  const { togglePowerlines } = useLayers();
-  const { generateTerrainGrid } = useAreaOpsProcessor();
+  const { togglePowerlines, toggleDBYDPowerlines, toggleAirspace } = useLayers();
+  const { generateTerrainGrid, generateAOFromFlightPlan } = useAreaOpsProcessor();
   
   // Update analyzing state based on analysis status
   useEffect(() => {
@@ -169,6 +381,7 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
       const actionToSection: Record<string, string> = {
         analyseTerrainInAO: 'terrainProfile',
         togglePowerlines: 'powerline',
+        toggleDBYDPowerlines: 'powerline',
         toggleAirspace: 'airspace'
       };
       
@@ -179,6 +392,39 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
     }
   }, [guidedTarget]);
 
+  // Sync local buffer distance with context
+  useEffect(() => {
+    setLocalBufferDistance(bufferDistance ?? 500);
+  }, [bufferDistance]);
+
+  // Clear success message after 3 seconds
+  useEffect(() => {
+    if (successMessage) {
+      const timer = setTimeout(() => {
+        setSuccessMessage(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMessage]);
+
+  /**
+   * Updates buffer distance and regenerates AO
+   * @param newDistance - New buffer distance in meters
+   */
+  const handleBufferDistanceChange = (newDistance: number) => {
+    setLocalBufferDistance(newDistance);
+    setBufferDistance(newDistance);
+    trackEvent("ao_buffer_distance_changed", { 
+      panel: "TerrainAnalysisDashboard.tsx", 
+      bufferDistance: newDistance 
+    });
+
+    if (flightPlan) {
+      console.log(`Regenerating AO with buffer distance: ${newDistance}m`);
+      generateAOFromFlightPlan(flightPlan, true);
+    }
+  };
+
   /**
    * Handles running terrain analysis for Area of Operations
    */
@@ -186,6 +432,7 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
     trackEvent("run_ao_terrain_analysis", { panel: "TerrainAnalysisDashboard.tsx" });
     setIsAnalyzing(true);
     setLocalError(null);
+    setSuccessMessage(null);
     
     try {
       let terrainGrid = aoTerrainGrid;
@@ -207,6 +454,7 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
         if (checkId) completeCheck(checkId);
         
         await runAOAnalysis(terrainGrid);
+        setSuccessMessage("Terrain analysis complete. Check results on the map.");
       } else {
         console.error("Failed to generate terrain grid:", terrainGrid);
         throw new Error("No terrain grid available for analysis");
@@ -220,21 +468,90 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
   };
 
   /**
-   * Handles toggling powerlines layer
+   * Handles toggling HV powerlines layer
    */
   const handleTogglePowerlines = () => {
     trackEvent("powerlines_add_overlay_click", { panel: "TerrainAnalysisDashboard.tsx" });
+    setIsLoadingHV(true);
+    setLocalError(null);
+    setSuccessMessage(null);
+    
+    try {
+      // Complete checklist item if available
+      const checkId = checks.find(c => 
+        c.group === 'hvPowerline' && 
+        c.status === 'pending'
+      )?.id;
+      
+      if (checkId) completeCheck(checkId);
+      
+      togglePowerlines();
+      setSuccessMessage("HV Powerlines toggled. Check map for visibility.");
+    } catch (error) {
+      console.error("HV powerlines toggle error:", error);
+      setLocalError(error instanceof Error ? error.message : "Unknown error");
+    } finally {
+      setIsLoadingHV(false);
+    }
+  };
+
+  /**
+   * Handles toggling DBYD powerlines layer
+   */
+  const handleToggleDBYDPowerlines = async () => {
     trackEvent("DYBDpowerlines_add_overlay_click", { panel: "TerrainAnalysisDashboard.tsx" });
+    setIsLoadingDBYD(true);
+    setLocalError(null);
+    setSuccessMessage(null);
     
-    // Complete checklist item if available
-    const checkId = checks.find(c => 
-      c.group === 'powerline' && 
-      c.status === 'pending'
-    )?.id;
+    try {
+      // Complete checklist item if available
+      const checkId = checks.find(c => 
+        c.group === 'localPowerline' && 
+        c.status === 'pending'
+      )?.id;
+      
+      if (checkId) completeCheck(checkId);
+      
+      const success = await toggleDBYDPowerlines();
+      if (!success) {
+        throw new Error("Failed to fetch or toggle DBYD powerlines");
+      }
+      setSuccessMessage("Local Powerlines toggled. Check map for visibility.");
+    } catch (error) {
+      console.error("DBYD powerlines toggle error:", error);
+      setLocalError(error instanceof Error ? error.message : "Unknown error");
+    } finally {
+      setIsLoadingDBYD(false);
+    }
+  };
+
+  /**
+   * Handles toggling airspace layers
+   */
+  const handleToggleAirspace = () => {
+    trackEvent("airspace_add_overlay_click", { panel: "TerrainAnalysisDashboard.tsx" });
+    setIsLoadingAirspace(true);
+    setLocalError(null);
+    setSuccessMessage(null);
     
-    if (checkId) completeCheck(checkId);
-    
-    togglePowerlines();
+    try {
+      // Complete checklist item if available
+      const checkId = checks.find(c => 
+        c.group === 'airspace' && 
+        c.status === 'pending'
+      )?.id;
+      
+      if (checkId) completeCheck(checkId);
+      
+      toggleAirspace();
+      setSuccessMessage("Airspace toggled. Check map for visibility.");
+    } catch (error) {
+      console.error("Airspace toggle error:", error);
+      setLocalError(error instanceof Error ? error.message : "Unknown error");
+    } finally {
+      setIsLoadingAirspace(false);
+    }
   };
 
   return (
@@ -260,6 +577,23 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
         </div>
       )}
       
+      {successMessage && (
+        <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700 mb-4">
+          <CheckCircle className="inline-block w-4 h-4 mr-1" />
+          {successMessage}
+        </div>
+      )}
+      
+      {/* Added AO Buffer Section */}
+      {flightPlan && (
+        <AOBufferSection 
+          bufferDistance={localBufferDistance}
+          onBufferDistanceChange={handleBufferDistanceChange}
+          hasFlightPlan={true}
+          isAnalyzing={isAnalyzing}
+        />
+      )}
+      
       <div className="space-y-4">
         {/* Terrain Profile Analysis Section */}
         <AnalysisSection
@@ -274,15 +608,21 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
           isLoading={isAnalyzing}
         />
         
-        {/* Powerline Analysis Section */}
-        <AnalysisSection
+        {/* Powerline Analysis Section with Two Buttons */}
+        <PowerlineAnalysisSection
           title="Powerline Analysis"
-          description="Show LV and HV powerlines in your operating area."
+          description="Show high-voltage (HV) or Dial Before You Dig (DBYD) powerlines in your operating area."
           icon={<Zap className="w-4 h-4" />}
-          buttonText="Show Powerlines"
-          onButtonClick={handleTogglePowerlines}
-          checklistGroupId="powerline"
-          prerequisitesMet={true} // Always available
+          hvButtonText="Show HV Powerlines"
+          localButtonText="Show Local Powerlines"
+          onHVButtonClick={handleTogglePowerlines}
+          onLocalButtonClick={handleToggleDBYDPowerlines}
+          hvChecklistGroupId="hvPowerline"
+          localChecklistGroupId="localPowerline"
+          prerequisitesMet={!!aoGeometry}
+          prerequisitesMessage={!aoGeometry ? "Please define an operating area first" : undefined}
+          isHVLoading={isLoadingHV}
+          isLocalLoading={isLoadingDBYD}
         />
         
         {/* Airspace Analysis Section */}
@@ -291,19 +631,10 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
           description="View airspace information in your operating area."
           icon={<Plane className="w-4 h-4" />}
           buttonText="Show Airspace"
-          onButtonClick={() => {
-            // Simulate completing a checklist item
-            const checkId = checks.find(c => 
-              c.group === 'airspace' && 
-              c.status === 'pending'
-            )?.id;
-            
-            if (checkId) completeCheck(checkId);
-            
-            console.log("Show airspace data");
-          }}
+          onButtonClick={handleToggleAirspace}
           checklistGroupId="airspace"
-          prerequisitesMet={true} // Always available
+          prerequisitesMet={true}
+          isLoading={isLoadingAirspace}
         />
       </div>
       

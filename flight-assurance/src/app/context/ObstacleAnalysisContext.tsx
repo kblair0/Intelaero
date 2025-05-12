@@ -614,13 +614,6 @@ const runAnalysis = useCallback(async (options?: Partial<AnalysisOptions>) => {
       setStatus('loading');
       setProgress(0);
       setError(null);
-
-      // Validate grid cell elevations
-      const invalidElevations = gridCells.filter(cell => cell.properties.elevation === 0);
-      if (invalidElevations.length > 0) {
-        console.warn(`⚠️ Found ${invalidElevations.length} grid cells with zero elevation - terrain data may be incomplete!`);
-        setError(`Warning: ${invalidElevations.length} grid cells have zero elevation, results may be inaccurate`);
-      }
       
       // Use the passed gridCells instead of accessing context directly
       const terrainElevations = gridCells.map(cell => cell.properties.elevation);

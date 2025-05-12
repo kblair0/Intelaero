@@ -10,6 +10,10 @@ import { useFlightConfiguration } from '../../context/FlightConfigurationContext
 const FLIGHT_SOURCE_ID = 'flightplan-data';
 const FLIGHT_LINE_LAYER_ID = 'flightplan-line';
 
+/**
+ * Displays the flight path, start/end markers, and (when re-enabled) the available range marker on the map.
+ * @component
+ */
 const FlightPathDisplay: React.FC = () => {
   const { flightPlan } = useFlightPlanContext();
   const { map, terrainLoaded } = useMapContext();
@@ -71,7 +75,11 @@ const FlightPathDisplay: React.FC = () => {
     }
   }, [map, terrainLoaded, flightPlan, addFlightPath]);
 
-  // —— Compute & display “available range” marker if battery runs out mid‑flight
+  /*
+   * —— Available Range Marker (TEMPORARILY DISABLED)
+   * This block computes and displays a marker indicating the point where the battery would run out.
+   * Disabled as per request on 2025-05-12 to stop displaying the marker until reimplementation.
+   * To re-enable, uncomment this useEffect block and ensure config and metrics are correctly provided.
   useEffect(() => {
     if (!map || !terrainLoaded || !flightPlan || !flightPlan.properties?.processed) {
       return;
@@ -112,6 +120,7 @@ const FlightPathDisplay: React.FC = () => {
       availableRangeMarkerRef.current.togglePopup();
     }
   }, [map, terrainLoaded, flightPlan, config, metrics]);
+  */
 
   // —— Clean up markers when this component unmounts
   useEffect(() => {

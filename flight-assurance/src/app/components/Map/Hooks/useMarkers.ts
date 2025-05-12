@@ -7,6 +7,7 @@ import { LocationData } from '../../../types/LocationData';
 import { createMarkerPopup } from '../Utils/markerPopup';
 import { layerManager, MAP_LAYERS } from '../../../services/LayerManager';
 import { trackEventWithForm as trackEvent } from '../../tracking/tracking';
+import { useAreaOfOpsContext } from '../../../context/AreaOfOpsContext';
 
 interface UseMarkersProps {
   map: mapboxgl.Map | null;
@@ -31,6 +32,8 @@ export function useMarkers({ map, terrainLoaded }: UseMarkersProps) {
     removeMarker,
     defaultElevationOffsets
   } = useMarkersContext();
+  //include Ao context clear for removing all analysis layers.
+  const { setAoTerrainGrid } = useAreaOfOpsContext();
 
   // Helper for querying terrain elevation
   const queryTerrainElevation = useCallback(
@@ -320,26 +323,30 @@ export function useMarkers({ map, terrainLoaded }: UseMarkersProps) {
   }, [markers, removeMarker]);
 
   // Remove all the analysis layers
-const removeAllAnalysisLayers = useCallback(() => {
-  layerManager.removeLayer(MAP_LAYERS.ELOS_GRID);
-  layerManager.removeLayer(MAP_LAYERS.FLIGHT_PATH_VISIBILITY);
-  layerManager.removeLayer(MAP_LAYERS.GCS_GRID);
-  layerManager.removeLayer(MAP_LAYERS.OBSERVER_GRID);
-  layerManager.removeLayer(MAP_LAYERS.REPEATER_GRID);
-  layerManager.removeLayer(MAP_LAYERS.MERGED_VISIBILITY);
-  layerManager.removeLayer(MAP_LAYERS.AOTERRAIN_GRID);
-  
-  // Also remove any marker-specific layers using marker IDs
-  markers.forEach(marker => {
-    const layerPrefix = marker.type === 'gcs' 
-      ? MAP_LAYERS.GCS_GRID 
-      : marker.type === 'observer' 
-        ? MAP_LAYERS.OBSERVER_GRID 
-        : MAP_LAYERS.REPEATER_GRID;
+  const removeAllAnalysisLayers = useCallback(() => {
+    // Remove the analysis layers
+    layerManager.removeLayer(MAP_LAYERS.ELOS_GRID);
+    layerManager.removeLayer(MAP_LAYERS.FLIGHT_PATH_VISIBILITY);
+    layerManager.removeLayer(MAP_LAYERS.GCS_GRID);
+    layerManager.removeLayer(MAP_LAYERS.OBSERVER_GRID);
+    layerManager.removeLayer(MAP_LAYERS.REPEATER_GRID);
+    layerManager.removeLayer(MAP_LAYERS.MERGED_VISIBILITY);
+    layerManager.removeLayer(MAP_LAYERS.AOTERRAIN_GRID);
     
-    layerManager.removeLayer(`${layerPrefix}-${marker.id}`);
-  });
-}, [markers]);
+    // Reset the grid state in context so it can be regenerated
+    setAoTerrainGrid(null);
+    
+    // Also remove any marker-specific layers using marker IDs
+    markers.forEach(marker => {
+      const layerPrefix = marker.type === 'gcs' 
+        ? MAP_LAYERS.GCS_GRID 
+        : marker.type === 'observer' 
+          ? MAP_LAYERS.OBSERVER_GRID 
+          : MAP_LAYERS.REPEATER_GRID;
+      
+      layerManager.removeLayer(`${layerPrefix}-${marker.id}`);
+    });
+  }, [markers, setAoTerrainGrid]);
 
   
   // Cleanup on unmount

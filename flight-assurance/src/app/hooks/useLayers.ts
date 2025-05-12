@@ -1,11 +1,16 @@
 import { useCallback } from 'react';
 import { useMapContext } from '../context/mapcontext';
 import { layerManager, MAP_LAYERS } from '../services/LayerManager';
+import { useAreaOfOpsContext } from '../context/AreaOfOpsContext';
+import { useAreaOpsProcessor } from '../components/AO/Hooks/useAreaOpsProcessor';
+import { fetchBYDALayers } from '../services/BYDAService';
 import type { GeoJSON } from 'geojson';
 import * as turf from '@turf/turf';
 
 export function useLayers() {
-  const { map, toggleLayer } = useMapContext();
+  const { map, toggleLayer, setLayerVisibility } = useMapContext();
+  const { aoGeometry } = useAreaOfOpsContext();
+  const { showAreaOfOperations } = useAreaOpsProcessor();
 
   /**
    * Add a flight plan to the map
@@ -172,11 +177,109 @@ export function useLayers() {
     [map]
   );
 
+  /**
+   * Toggle high-voltage powerlines layer
+   * @returns {boolean} Success status
+   */
   const togglePowerlines = useCallback(() => {
     toggleLayer(MAP_LAYERS.POWERLINES);
     toggleLayer(MAP_LAYERS.POWERLINES_HITBOX);
+    console.log('togglePowerlines: toggled', {
+      timestamp: new Date().toISOString(),
+      layers: [MAP_LAYERS.POWERLINES, MAP_LAYERS.POWERLINES_HITBOX],
+      message: 'HV powerlines layers toggled'
+    });
     return true;
   }, [toggleLayer]);
+
+  /**
+   * Toggle DBYD (Dial Before You Dig) powerlines layers
+   * @returns {Promise<boolean>} Success status
+   */
+  const toggleDBYDPowerlines = useCallback(async () => {
+    if (!map) {
+      console.warn('toggleDBYDPowerlines: Map not available', {
+        timestamp: new Date().toISOString(),
+        message: 'Cannot toggle DBYD powerlines'
+      });
+      return false;
+    }
+    if (!aoGeometry) {
+      console.warn('toggleDBYDPowerlines: AO geometry not available', {
+        timestamp: new Date().toISOString(),
+        message: 'Cannot fetch DBYD powerlines without AO'
+      });
+      return false;
+    }
+
+    try {
+      // Ensure AO is visible
+      showAreaOfOperations();
+
+      // Fetch and update DBYD layers
+      const success = await fetchBYDALayers(map, aoGeometry, setLayerVisibility);
+
+      if (success) {
+        console.log('toggleDBYDPowerlines: success', {
+          timestamp: new Date().toISOString(),
+          layers: [
+            MAP_LAYERS.BYDA_HV,
+            MAP_LAYERS.BYDA_LV,
+            MAP_LAYERS.BYDA_SWER,
+            MAP_LAYERS.BYDA_OTHER,
+            MAP_LAYERS.BYDA_DEVICE,
+          ],
+          message: 'DBYD powerlines layers toggled'
+        });
+      } else {
+        console.error('toggleDBYDPowerlines: failed to fetch layers', {
+          timestamp: new Date().toISOString(),
+          message: 'Failed to fetch DBYD powerlines data'
+        });
+      }
+
+      return success;
+    } catch (error) {
+      console.error('toggleDBYDPowerlines: error', {
+        timestamp: new Date().toISOString(),
+        error: error instanceof Error ? error.message : String(error),
+        message: 'Error toggling DBYD powerlines'
+      });
+      return false;
+    }
+  }, [map, aoGeometry, showAreaOfOperations, setLayerVisibility]);
+
+  /**
+   * Toggle airspace layers
+   * @returns {boolean} Success status
+   */
+  const toggleAirspace = useCallback(() => {
+    if (!map) {
+      console.warn('toggleAirspace: Map not available', {
+        timestamp: new Date().toISOString(),
+        message: 'Cannot toggle airspace layers'
+      });
+      return false;
+    }
+
+    try {
+      toggleLayer(MAP_LAYERS.AIRFIELDS);
+      toggleLayer(MAP_LAYERS.AIRFIELDS_LABELS);
+      console.log('toggleAirspace: toggled', {
+        timestamp: new Date().toISOString(),
+        layers: [MAP_LAYERS.AIRFIELDS, MAP_LAYERS.AIRFIELDS_LABELS],
+        message: 'Airspace layers toggled'
+      });
+      return true;
+    } catch (error) {
+      console.error('toggleAirspace: error', {
+        timestamp: new Date().toISOString(),
+        error: error instanceof Error ? error.message : String(error),
+        message: 'Error toggling airspace layers'
+      });
+      return false;
+    }
+  }, [map, toggleLayer]);
 
   /**
    * Reset all layers
@@ -197,5 +300,7 @@ export function useLayers() {
     resetLayers,
     toggleLayer,
     togglePowerlines,
+    toggleDBYDPowerlines,
+    toggleAirspace,
   };
 }
