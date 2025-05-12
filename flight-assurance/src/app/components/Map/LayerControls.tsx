@@ -97,7 +97,7 @@ const LayerControls: React.FC<LayerControlsProps> = ({
             }`}
           >
             <Mountain className="w-4 h-4" />
-            Terrain Tools
+            Terrain Analysis Tools
           </button>
           <button
             onClick={() => {
@@ -111,7 +111,7 @@ const LayerControls: React.FC<LayerControlsProps> = ({
             }`}
           >
             <Radio className="w-4 h-4" />
-            Visibility Tools
+            Visibility Analysis Tools
           </button>
           {flightPlan && (
             <button

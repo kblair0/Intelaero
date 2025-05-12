@@ -263,7 +263,7 @@ const TerrainAnalysisCard: React.FC<VerificationCardProps> = ({
           
           <div className="text-left">
             <div className="flex items-center gap-2">
-              <h3 className="font-medium text-gray-900">Terrain Tools</h3>
+              <h3 className="font-medium text-gray-900">Terrain Analysis Tools</h3>
               <a
                 href="https://youtu.be/H1JveIqB_v4"
                 target="_blank"

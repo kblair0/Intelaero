@@ -19,7 +19,7 @@
  */
 
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import FlightPathAnalysisCard from "./FlightPathAnalysisCard";
 import StationAnalysisCard from "./StationAnalysisCard";
 import MergedAnalysisCard from "./MergedAnalysisCard";
@@ -45,6 +45,13 @@ interface AnalysisSectionProps {
   children: React.ReactNode;
   isExpanded: boolean;
   onToggle: () => void;
+}
+
+/**
+ * Props for AnalysisDashboard
+ */
+interface AnalysisDashboardProps {
+  initialSection?: 'flight' | 'station' | 'merged' | 'stationLOS' | null;
 }
 
 /**
@@ -90,16 +97,28 @@ const AnalysisSection: React.FC<AnalysisSectionProps> = ({
 /**
  * Main LOS Analysis Dashboard component
  */
-const AnalysisDashboard: React.FC = () => {
+const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ initialSection = null }) => {
   // Track which sections are expanded
   const [expandedSections, setExpandedSections] = useState({
-    flight: true,
-    station: false,
-    merged: false,
-    stationLOS: false,
+    flight: initialSection === 'flight',
+    station: initialSection === 'station',
+    merged: initialSection === 'merged',
+    stationLOS: initialSection === 'stationLOS',
   });
   
   const { gridAnalysisRef } = useAnalysisController();
+
+  // Update expanded sections when initialSection changes
+  useEffect(() => {
+    if (initialSection) {
+      setExpandedSections({
+        flight: initialSection === 'flight',
+        station: initialSection === 'station',
+        merged: initialSection === 'merged',
+        stationLOS: initialSection === 'stationLOS',
+      });
+    }
+  }, [initialSection]);
 
   // Toggle a section's expanded state
   const toggleSection = (section: keyof typeof expandedSections) => {
@@ -121,7 +140,7 @@ const AnalysisDashboard: React.FC = () => {
           Verify communication coverage and visibility for your flight plan
         </p>
       </div>
-{/* Plan Flightpath Analysis Card removed for now. It's broken and not that useful TBH
+      {/* Plan Flightpath Analysis Card removed for now. It's broken and not that useful TBH
       <AnalysisSection
         title="Flight Path Analysis"
         description={descriptions.flight}
@@ -129,7 +148,7 @@ const AnalysisDashboard: React.FC = () => {
         isExpanded={expandedSections.flight}
         onToggle={() => toggleSection("flight")}
       >
-      <FlightPathAnalysisCard gridAnalysisRef={gridAnalysisRef} />
+        <FlightPathAnalysisCard gridAnalysisRef={gridAnalysisRef} />
       </AnalysisSection>  */}
       
       <AnalysisSection

@@ -29,7 +29,6 @@ export function useMarkers({ map, terrainLoaded }: UseMarkersProps) {
     addMarker,
     updateMarker,
     removeMarker,
-    removeAllMarkers: contextRemoveAllMarkers,
     defaultElevationOffsets
   } = useMarkersContext();
 
@@ -320,26 +319,28 @@ export function useMarkers({ map, terrainLoaded }: UseMarkersProps) {
     });
   }, [markers, removeMarker]);
 
-  // Remove all markers
-  const removeAllMarkers = useCallback(() => {
-    // Remove visual markers from the map
-    markerRefs.current.forEach(ref => {
-      ref.marker.remove();
-    });
+  // Remove all the analysis layers
+const removeAllAnalysisLayers = useCallback(() => {
+  layerManager.removeLayer(MAP_LAYERS.ELOS_GRID);
+  layerManager.removeLayer(MAP_LAYERS.FLIGHT_PATH_VISIBILITY);
+  layerManager.removeLayer(MAP_LAYERS.GCS_GRID);
+  layerManager.removeLayer(MAP_LAYERS.OBSERVER_GRID);
+  layerManager.removeLayer(MAP_LAYERS.REPEATER_GRID);
+  layerManager.removeLayer(MAP_LAYERS.MERGED_VISIBILITY);
+  layerManager.removeLayer(MAP_LAYERS.AOTERRAIN_GRID);
+  
+  // Also remove any marker-specific layers using marker IDs
+  markers.forEach(marker => {
+    const layerPrefix = marker.type === 'gcs' 
+      ? MAP_LAYERS.GCS_GRID 
+      : marker.type === 'observer' 
+        ? MAP_LAYERS.OBSERVER_GRID 
+        : MAP_LAYERS.REPEATER_GRID;
     
-    // Clear refs
-    markerRefs.current = [];
-    
-    // Remove from context
-    contextRemoveAllMarkers();
-    
-    // Clean up layers
-    layerManager.removeLayer(MAP_LAYERS.ELOS_GRID);
-    layerManager.removeLayer(MAP_LAYERS.GCS_GRID);
-    layerManager.removeLayer(MAP_LAYERS.OBSERVER_GRID);
-    layerManager.removeLayer(MAP_LAYERS.REPEATER_GRID);
-    layerManager.removeLayer(MAP_LAYERS.MERGED_VISIBILITY);
-  }, [contextRemoveAllMarkers]);
+    layerManager.removeLayer(`${layerPrefix}-${marker.id}`);
+  });
+}, [markers]);
+
   
   // Cleanup on unmount
   useEffect(() => {
@@ -356,6 +357,6 @@ export function useMarkers({ map, terrainLoaded }: UseMarkersProps) {
     addObserver,
     addRepeater,
     updateMarkerPopups,
-    removeAllMarkers,
+    removeAllAnalysisLayers
   };
 }

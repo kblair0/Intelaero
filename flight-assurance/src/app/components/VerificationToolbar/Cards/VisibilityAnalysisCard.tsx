@@ -278,7 +278,7 @@ const availableStations = [
           
           <div className="text-left">
             <div className="flex items-center gap-2">
-              <h3 className="font-medium text-gray-900">Visibility Tools</h3>
+              <h3 className="font-medium text-gray-900">Visibility Analysis Tools</h3>
               <a
                 href="https://youtu.be/u-WPwwh1tpA"
                 target="_blank"

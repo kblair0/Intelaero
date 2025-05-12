@@ -911,6 +911,7 @@ const checkStationToStationLOS = useCallback(
                 analysisTime: 0,
               },
               stationLOSResult: stationResult.result,
+              profile: stationResult.profile
             };
             break;
 

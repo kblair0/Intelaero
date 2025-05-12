@@ -179,6 +179,15 @@ const StationLOSAnalysisCard: React.FC<StationLOSAnalysisCardProps> = ({ gridAna
   // Determine if source and target are valid and different
   const isValidSelection = sourceMarker && targetMarker && sourceMarker.id !== targetMarker.id;
 
+  //debugging
+  useEffect(() => {
+    console.log('Profile data received:', {
+      hasData: !!losProfileData,
+      pointCount: losProfileData?.length,
+      samplePoints: losProfileData?.slice(0, 3)
+    });
+  }, [losProfileData]);
+
   return (
     <div className="bg-white rounded shadow p-3 mb-4">
       <p className="text-xs mb-2">Check the direct line of sight between any two stations.</p>

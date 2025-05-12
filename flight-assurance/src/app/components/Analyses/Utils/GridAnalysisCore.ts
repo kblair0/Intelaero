@@ -426,6 +426,13 @@ export async function getLOSProfile(
       isObstructed = true;
     }
   }
+
+  // debuggin Add at the end of the getLOSProfile function before returning
+  console.log('Generated profile:', {
+    pointCount: profile.length,
+    clear: !isObstructed,
+    samplePoints: profile.slice(0, 3)
+  });
   
   return { profile, clear: !isObstructed };
 }

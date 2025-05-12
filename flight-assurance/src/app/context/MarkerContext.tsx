@@ -24,7 +24,6 @@ interface MarkerContextType {
   addMarker: (type: MarkerType, location: LocationData) => string; // Returns ID
   updateMarker: (id: string, updates: Partial<Marker>) => void;
   removeMarker: (id: string) => void;
-  removeAllMarkers: (type?: MarkerType) => void;
   
   // Type-specific elevation offset defaults
   defaultElevationOffsets: Record<MarkerType, number>;
@@ -85,16 +84,6 @@ export function MarkerProvider({ children }: { children: ReactNode }) {
     setMarkers(prev => prev.filter(marker => marker.id !== id));
   };
 
-  /**
-   * Removes all markers, optionally filtered by type
-   */
-  const removeAllMarkers = (type?: MarkerType): void => {
-    if (type) {
-      setMarkers(prev => prev.filter(marker => marker.type !== type));
-    } else {
-      setMarkers([]);
-    }
-  };
 
   /**
    * Updates the default elevation offset for a marker type
@@ -127,7 +116,6 @@ export function MarkerProvider({ children }: { children: ReactNode }) {
         addMarker,
         updateMarker,
         removeMarker,
-        removeAllMarkers,
         defaultElevationOffsets,
         setDefaultElevationOffset,
         getMarkersByType

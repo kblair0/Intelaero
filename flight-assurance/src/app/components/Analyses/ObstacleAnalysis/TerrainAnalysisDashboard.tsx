@@ -266,7 +266,7 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
           title="Terrain Profile Analysis"
           description="Analyse terrain elevation across your operating area."
           icon={<Mountain className="w-4 h-4" />}
-          buttonText="Analyse Terrain in AO"
+          buttonText="Analyse Terrain Profile in AO"
           onButtonClick={handleRunAOAnalysis}
           checklistGroupId="terrainProfile"
           prerequisitesMet={!!aoGeometry}

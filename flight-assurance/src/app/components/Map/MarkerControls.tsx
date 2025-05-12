@@ -32,7 +32,7 @@ const MarkerControls: React.FC = () => {
     addGroundStation,
     addObserver,
     addRepeater,
-    removeAllMarkers
+    removeAllAnalysisLayers
   } = useMarkers({ 
     map, 
     terrainLoaded: terrainLoaded 
@@ -124,7 +124,7 @@ const MarkerControls: React.FC = () => {
 
   const handleResetAnalyses = () => {
     trackEvent("reset_los_analyses_click", { panel: "map.tsx" });
-    removeAllMarkers();
+    removeAllAnalysisLayers();
     
     // If analysis is in progress, abort it
     if (gridAnalysisRef.current) {
@@ -156,7 +156,7 @@ const MarkerControls: React.FC = () => {
         onClick={handleResetAnalyses}
         className="map-button"
       >
-        Reset LOS Analyses 🚫
+        Clear All Visibility Analyses 🚫
       </button>
     </div>
   );

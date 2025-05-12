@@ -10,6 +10,7 @@
  * - Added MapSidePanel for Terrain Analysis (ObstacleAnalysisDashboard).
  * - Ensured consistent z-index and styling with LOS and Energy panels.
  * - Passed togglePanel to ChecklistComponent for "Guide Me" functionality.
+ * - Added initialSection prop to AnalysisDashboard for section expansion.
  */
 
 "use client";
@@ -37,18 +38,19 @@ import { Battery, Radio, Mountain } from "lucide-react";
 import { trackEventWithForm as trackEvent } from "./components/tracking/tracking";
 import { MapProvider } from "./context/mapcontext";
 import { AnalysisControllerProvider } from "./context/AnalysisControllerContext";
-import AnalysisDashboard from "./components/Analyses/LOSAnalyses/UI/AnalysisDashboard";
 import AnalysisWizard from "./components/AnalysisWizard";
 import WelcomeMessage from "./components/WelcomeMessage";
 import ChecklistComponent from "./components/ChecklistComponent";
 import 'mapbox-gl/dist/mapbox-gl.css';
 import ObstacleAnalysisDashboard from "./components/Analyses/ObstacleAnalysis/TerrainAnalysisDashboard";
+import AnalysisDashboard from "./components/Analyses/LOSAnalyses/UI/AnalysisDashboard";
 
 /**
  * Main content component for the home page, managing UI layout and uploader/wizard overlays
  */
 const HomeContent = () => {
   const [activePanel, setActivePanel] = useState<"energy" | "los" | "terrain" | null>(null);
+  const [initialSection, setInitialSection] = useState<'flight' | 'station' | 'merged' | 'stationLOS' | null>(null);
   const [showUploader, setShowUploader] = useState(false);
   const [showAreaOpsUploader, setShowAreaOpsUploader] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
@@ -58,12 +60,14 @@ const HomeContent = () => {
   const { aoGeometry } = useAreaOfOpsContext();
 
   /**
-   * Toggles the active analysis panel
+   * Toggles the active analysis panel and sets initial section
    * @param panel - The panel to toggle
+   * @param section - Optional section to expand in AnalysisDashboard
    */
-  const togglePanel = (panel: "energy" | "los" | "terrain" | null) => {
+  const togglePanel = (panel: "energy" | "los" | "terrain" | null, section?: 'flight' | 'station' | 'merged' | 'stationLOS' | null) => {
     setActivePanel((prev) => (prev === panel ? null : panel));
-    trackEvent("toggle_analysis_panel", { panel });
+    setInitialSection(panel === 'los' ? section || null : null);
+    trackEvent("toggle_analysis_panel", { panel, section });
   };
 
   /**
@@ -195,13 +199,13 @@ const HomeContent = () => {
           </MapSidePanel>
 
           <MapSidePanel
-            title="Visibilty and Comms Tools"
+            title="Visibility and Comms Tools"
             icon={<Radio className="w-5 h-5" />}
             isExpanded={activePanel === "los"}
             onToggle={() => togglePanel("los")}
             className="z-30"
           >
-            <AnalysisDashboard />
+            <AnalysisDashboard initialSection={initialSection} />
           </MapSidePanel>
 
           <MapSidePanel
@@ -211,8 +215,7 @@ const HomeContent = () => {
             onToggle={() => togglePanel("terrain")}
             className="z-30"
           >
-              <ObstacleAnalysisDashboard />
-
+            <ObstacleAnalysisDashboard />
           </MapSidePanel>
         </div>
       </div>
