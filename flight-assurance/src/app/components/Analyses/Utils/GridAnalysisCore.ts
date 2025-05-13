@@ -20,6 +20,7 @@ import {
   StationLOSResult
 } from '../Types/GridAnalysisTypes';
 import { FlightPlanData } from '../../../context/FlightPlanContext';
+import { sampleFlightPath, SamplePoint } from '../../../hooks/useFlightPathSampling';
 
 // Type definitions for internal use
 type BBox = [number, number, number, number];
@@ -276,6 +277,46 @@ export async function generateGrid(
 }
 
 /**
+ * Processes the flight path with regular sampling
+ * @param map - Mapbox map instance
+ * @param flightPath - Flight path feature
+ * @param samplingResolution - Distance between samples in meters
+ * @param elevationService - Optional elevation service for terrain querying
+ * @param onProgress - Optional progress callback
+ * @returns Array of sampled points along the flight path
+ */
+export async function processFlightPath(
+  map: mapboxgl.Map,
+  flightPath: GeoJSON.Feature<GeoJSON.LineString>,
+  samplingResolution: number = 10,
+  elevationService?: any,
+  onProgress?: (progress: number) => void
+): Promise<[number, number, number][]> {
+  // Extract the LineString from the flight path feature
+  const lineString = flightPath.geometry;
+  
+  // Sample the flight path at the specified resolution
+  const sampledPoints = await sampleFlightPath(lineString, {
+    resolution: samplingResolution,
+    progressCallback: onProgress ? (progress) => {
+      onProgress(progress * 0.5); // Use half of progress for sampling
+      return false; // Never abort from here
+    } : undefined
+  });
+  
+  // Query terrain elevations for all sampled points if needed
+  if (onProgress) onProgress(50); // Mark sampling as complete
+  
+  // Extract and return the 3D coordinates
+  const sampledCoordinates: [number, number, number][] = sampledPoints.map(
+    point => point.position
+  );
+  
+  if (onProgress) onProgress(100); // Mark processing as complete
+  return sampledCoordinates;
+}
+
+/**
  * Checks line of sight between a source point and a target point.
  * Optimized version with early termination.
  */
@@ -439,6 +480,7 @@ export async function getLOSProfile(
 
 /**
  * Checks visibility along flight path from a single location
+ * Only considers flight path points within specified grid range
  */
 export async function checkFlightPathLOS(
   map: mapboxgl.Map,
@@ -449,24 +491,57 @@ export async function checkFlightPathLOS(
     minimumOffset?: number;
     altitudeMode?: "terrain" | "relative" | "absolute";
     elevationService?: any;
+    gridRange?: number; // Parameter to use the same range as grid generation
+    sampledCoordinates?: Coordinates3D[]; // New parameter for pre-sampled coordinates
   } = {}
 ): Promise<number> {
-  const { sampleCount = 20, minimumOffset = 1, altitudeMode = "absolute" } = options;
+  const { 
+    sampleCount = 20, 
+    minimumOffset = 1, 
+    altitudeMode = "absolute",
+    gridRange = 500, // Default to 500m if not provided
+    sampledCoordinates // This will be used if provided
+  } = options;
+  
+  // Use provided sampled coordinates if available, otherwise use raw coordinates
+  const coordinatesToCheck = sampledCoordinates || flightCoordinates;
   
   if (!Array.isArray(sourcePoint) || sourcePoint.length !== 3 || 
       sourcePoint.some(v => typeof v !== 'number' || isNaN(v))) {
     throw createError('Source point must be a valid [lon, lat, alt] array', 'INVALID_INPUT');
   }
   
-  if (!Array.isArray(flightCoordinates) || !flightCoordinates.every(point => 
+  if (!Array.isArray(coordinatesToCheck) || !coordinatesToCheck.every(point => 
       Array.isArray(point) && point.length === 3 && point.every(v => typeof v === 'number' && !isNaN(v)))) {
     throw createError('Flight coordinates must be an array of [lon, lat, alt] arrays', 'INVALID_INPUT');
   }
   
+  // Filter flight coordinates by distance to only check relevant ones
+  const relevantCoordinates: Coordinates3D[] = [];
+  
+  for (const fpPoint of coordinatesToCheck) {
+    // Calculate distance from cell to flight point
+    const distance = turf.distance(
+      [sourcePoint[0], sourcePoint[1]],
+      [fpPoint[0], fpPoint[1]],
+      { units: 'meters' }
+    );
+    
+    // Only consider points within the grid range
+    if (distance <= gridRange) {
+      relevantCoordinates.push(fpPoint);
+    }
+  }
+  
+  // If no relevant flight coordinates, cell is not visible
+  if (relevantCoordinates.length === 0) {
+    return 0;
+  }
+  
   let visibleCount = 0;
   
-  // Check visibility for each flight coordinate
-  for (const targetPoint of flightCoordinates) {
+  // Check visibility only for relevant coordinates
+  for (const targetPoint of relevantCoordinates) {
     try {
       if (altitudeMode === "terrain" || altitudeMode === "relative") {
         const terrainElevation = await queryElevation(
@@ -513,8 +588,8 @@ export async function checkFlightPathLOS(
     }
   }
   
-  const visibilityPercentage = flightCoordinates.length > 0 ? 
-    (visibleCount / flightCoordinates.length) * 100 : 0;
+  const visibilityPercentage = relevantCoordinates.length > 0 ? 
+    (visibleCount / relevantCoordinates.length) * 100 : 0;
   
   return visibilityPercentage;
 }

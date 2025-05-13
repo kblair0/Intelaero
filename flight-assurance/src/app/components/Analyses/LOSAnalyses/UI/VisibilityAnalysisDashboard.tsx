@@ -140,16 +140,6 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ initialSection = 
           Verify communication coverage and visibility for your flight plan
         </p>
       </div>
-      {/* Plan Flightpath Analysis Card removed for now. It's broken and not that useful TBH
-      <AnalysisSection
-        title="Flight Path Analysis"
-        description={descriptions.flight}
-        icon={<Plane className="w-4 h-4" />}
-        isExpanded={expandedSections.flight}
-        onToggle={() => toggleSection("flight")}
-      >
-        <FlightPathAnalysisCard gridAnalysisRef={gridAnalysisRef} />
-      </AnalysisSection>  */}
       
       <AnalysisSection
         title="Observer/Comms Visibility Analysis"
@@ -192,6 +182,17 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ initialSection = 
         onToggle={() => toggleSection("stationLOS")}
       >
         <StationLOSAnalysisCard gridAnalysisRef={gridAnalysisRef} />
+      </AnalysisSection>
+
+
+      <AnalysisSection
+        title="Flight Path Analysis"
+        description={descriptions.flight}
+        icon={<Plane className="w-4 h-4" />}
+        isExpanded={expandedSections.flight}
+        onToggle={() => toggleSection("flight")}
+      >
+        <FlightPathAnalysisCard gridAnalysisRef={gridAnalysisRef} />
       </AnalysisSection>
       
       <div className="mt-6 p-3 bg-gray-50 rounded-lg border border-gray-200 text-xs text-gray-600">

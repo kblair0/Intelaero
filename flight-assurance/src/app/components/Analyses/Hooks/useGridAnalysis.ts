@@ -25,8 +25,9 @@ import {
   getLOSProfile,
   checkStationToStationLOS as coreCheckStationToStationLOS,
   generateCombinedBoundingBox,
-  createError
+  createError,
 } from '../Utils/GridAnalysisCore';
+import { useFlightPathSampling } from '../../../hooks/useFlightPathSampling';
 
 import {
   AnalysisResults,
@@ -47,6 +48,7 @@ interface UseGridAnalysisOptions {
 
 export function useGridAnalysis(options: UseGridAnalysisOptions = {}) {
   const { map, elevationService } = useMapContext();
+  const { sampleFlightPath } = useFlightPathSampling();
   const { 
     gcsLocation, 
     observerLocation, 
@@ -231,146 +233,199 @@ export function useGridAnalysis(options: UseGridAnalysisOptions = {}) {
     [map, elosGridRange]
   );
 
-  /**
-   * Optimized flight path analysis implementation
-   */
-  const analyzeFlightPath = useCallback(
-    async (flightPlan: FlightPlanData): Promise<AnalysisResults> => {
-      if (!map) {
-        throw createError('Map not initialized', 'MAP_INTERACTION');
-      }
-      
-      setIsAnalyzing(true);
-      const startTime = performance.now();
-      setAnalysisInProgress(AnalysisType.FLIGHT_PATH);
-      abortControllerRef.current = new AbortController();
+/**
+ * Optimized flight path visibility analysis implementation
+ */
+const analyzeFlightPath = useCallback(
+  async (flightPlan: FlightPlanData, options?: { samplingResolution?: number }): Promise<AnalysisResults> => {
+    if (!map) {
+      throw createError('Map not initialized', 'MAP_INTERACTION');
+    }
+    
+    setIsAnalyzing(true);
+    const startTime = performance.now();
+    setAnalysisInProgress(AnalysisType.FLIGHT_PATH);
+    abortControllerRef.current = new AbortController();
 
-      try {
-        updateProgress(5);
+    try {
+      updateProgress(5);
 
-        // Validate flight plan
-        if (!flightPlan || !flightPlan.features || !flightPlan.features[0] || 
-            flightPlan.features[0].geometry.type !== 'LineString') {
-          const error = new Error('Invalid flight plan geometry');
-          throw error;
-        }
-
-        // Extract and validate 3D coordinates
-        const flightPath = flightPlan.features[0];
-        const flightCoordinates = flightPath.geometry.coordinates as [number, number, number][];
-
-        // Determine altitude mode
-        const waypoints = flightPath.properties?.waypoints || [];
-        const altitudeMode = waypoints.length > 0 ? 
-          waypoints[0].altitudeMode : 
-          "absolute"; // Default
-
-        updateProgress(10);
-
-        // Generate grid using optimized core function
-        const cells = await generateGrid(map, {
-          flightPath,
-          elosGridRange,
-          gridSize,
-          elevationService
-        });
-
-        if (!cells || !cells.length) {
-          throw new Error('Generated grid is empty');
-        }
-
-        updateProgress(40);
-
-        // Process cells in optimized batches
-        const chunkSize = 100; // Larger batch size for efficiency
-        const results: GridCell[] = [];
-        let visibleCellCount = 0;
-        let totalVisibility = 0;
-
-        for (let i = 0; i < cells.length; i += chunkSize) {
-          if (abortControllerRef.current?.signal.aborted) {
-            throw createError('Analysis aborted', 'VISIBILITY_ANALYSIS');
-          }
-
-          const chunk = cells.slice(i, i + chunkSize);
-          
-          // Process chunk in parallel
-          const processedChunk = await Promise.all(
-            chunk.map(async (cell) => {
-              try {
-                const center = [
-                  (cell.geometry.coordinates[0][0][0] + cell.geometry.coordinates[0][2][0]) / 2,
-                  (cell.geometry.coordinates[0][0][1] + cell.geometry.coordinates[0][2][1]) / 2
-                ] as Coordinates2D;
-                
-                const visibility = await checkFlightPathLOS(
-                  map,
-                  [center[0], center[1], cell.properties.elevation || 0],
-                  flightCoordinates,
-                  { altitudeMode, elevationService }
-                );
-
-                if (visibility > 0) visibleCellCount++;
-                totalVisibility += visibility;
-          
-                return {
-                  ...cell,
-                  properties: {
-                    ...cell.properties,
-                    visibility,
-                    fullyVisible: visibility === 100,
-                    lastAnalyzed: Date.now(),
-                  },
-                };
-              } catch (e) {
-                console.warn('Error processing cell:', e);
-                return cell; // Return unmodified on error
-              }
-            })
-          );
-
-          results.push(...processedChunk);
-          const progressValue = 40 + Math.min(50, ((i + chunkSize) / cells.length) * 50);
-          updateProgress(progressValue);
-          await new Promise(resolve => setTimeout(resolve, 0)); // Let UI breathe
-        }
-
-        updateProgress(95);
-
-        const analysisTime = performance.now() - startTime;
-        const analysisResults: AnalysisResults = {
-          cells: results,
-          stats: {
-            totalCells: cells.length,
-            visibleCells: visibleCellCount,
-            averageVisibility: totalVisibility / cells.length,
-            analysisTime,
-          },
-        };
-
-        visualizeGrid(analysisResults, MAP_LAYERS.ELOS_GRID);
-        updateProgress(100);
-        setLastAnalysisTime(Date.now());
-        return analysisResults;
-      } catch (error) {
-        console.error(`Flight path analysis error:`, error);
+      // Validate flight plan
+      if (!flightPlan || !flightPlan.features || !flightPlan.features[0] || 
+          flightPlan.features[0].geometry.type !== 'LineString') {
+        const error = new Error('Invalid flight plan geometry');
         throw error;
-      } finally {
-        cleanupAnalysis();
-        setIsAnalyzing(false);
       }
-    },
-    [
-      map,
-      gridSize,
-      elosGridRange,
-      updateProgress,
-      visualizeGrid,
-      cleanupAnalysis,
-      setIsAnalyzing,
-      elevationService
-    ]
-  );
+
+      // Extract flight path feature
+      const flightPath = flightPlan.features[0];
+      
+      // Get the original coordinates (we'll still need these for other operations)
+      const originalCoordinates = flightPath.geometry.coordinates as [number, number, number][];
+
+      // Determine altitude mode
+      const waypoints = flightPath.properties?.waypoints || [];
+      const altitudeMode = waypoints.length > 0 ? 
+        waypoints[0].altitudeMode : 
+        "absolute"; // Default
+
+      updateProgress(10);
+
+      // Generate sampled points at the specified resolution using your hook's sampleFlightPath
+      console.log(`[Flight Path Analysis] Sampling flight path at ${options?.samplingResolution || 10}m intervals`);
+      
+      // Extract lineString directly
+      const lineString = flightPath.geometry;
+      const sampledPoints = await sampleFlightPath(lineString, {
+        resolution: options?.samplingResolution || 10,
+        progressCallback: (progress) => {
+          updateProgress(10 + progress * 0.1);
+          return false; // Don't abort
+        }
+      });
+
+      // Extract coordinates from the sampled points
+      const sampledCoordinates: [number, number, number][] = sampledPoints.map(
+        point => point.position
+      );
+      
+      console.log(`[Flight Path Analysis] Generated ${sampledCoordinates.length} sample points from ${originalCoordinates.length} original waypoints`);
+      
+      updateProgress(20);
+
+      // Generate grid using optimized core function
+      const cells = await generateGrid(map, {
+        flightPath,
+        elosGridRange,
+        gridSize,
+        elevationService
+      });
+
+      if (!cells || !cells.length) {
+        throw new Error('Generated grid is empty');
+      }
+
+      updateProgress(40);
+
+      // Process cells in optimized batches
+      const chunkSize = 100; // Larger batch size for efficiency
+      const results: GridCell[] = [];
+      let visibleCellCount = 0;
+      let totalVisibility = 0;
+
+      for (let i = 0; i < cells.length; i += chunkSize) {
+        if (abortControllerRef.current?.signal.aborted) {
+          throw createError('Analysis aborted', 'VISIBILITY_ANALYSIS');
+        }
+
+        const chunk = cells.slice(i, i + chunkSize);
+        
+        // Process chunk in parallel
+        const processedChunk = await Promise.all(
+          chunk.map(async (cell) => {
+            try {
+              const center = [
+                (cell.geometry.coordinates[0][0][0] + cell.geometry.coordinates[0][2][0]) / 2,
+                (cell.geometry.coordinates[0][0][1] + cell.geometry.coordinates[0][2][1]) / 2
+              ] as Coordinates2D;
+              
+              // IMPORTANT CHANGE: Pass sampled coordinates instead of original coordinates
+              const visibility = await checkFlightPathLOS(
+                map,
+                [center[0], center[1], cell.properties.elevation || 0],
+                originalCoordinates, // We still need to pass these for backward compatibility
+                { 
+                  altitudeMode, 
+                  elevationService,
+                  gridRange: elosGridRange,
+                  sampledCoordinates // Pass the sampled coordinates here
+                }
+              );
+
+              if (visibility > 0) visibleCellCount++;
+              totalVisibility += visibility;
+        
+              return {
+                ...cell,
+                properties: {
+                  ...cell.properties,
+                  visibility,
+                  fullyVisible: visibility === 100,
+                  lastAnalyzed: Date.now(),
+                },
+              };
+            } catch (e) {
+              console.warn('Error processing cell:', e);
+              return cell; // Return unmodified on error
+            }
+          })
+        );
+
+        results.push(...processedChunk);
+        const progressValue = 40 + Math.min(50, ((i + chunkSize) / cells.length) * 50);
+        updateProgress(progressValue);
+        await new Promise(resolve => setTimeout(resolve, 0)); // Let UI breathe
+      }
+
+      updateProgress(95);
+
+      const analysisTime = performance.now() - startTime;
+      const analysisResults: AnalysisResults = {
+        cells: results,
+        stats: {
+          totalCells: cells.length,
+          visibleCells: visibleCellCount,
+          averageVisibility: totalVisibility / cells.length,
+          analysisTime,
+        },
+      };
+
+      visualizeGrid(analysisResults, MAP_LAYERS.ELOS_GRID);
+      updateProgress(100);
+      setLastAnalysisTime(Date.now());
+
+      // Log visibility distribution
+      const visibilityBuckets = {
+        'zero': 0,
+        '1-25': 0,
+        '26-50': 0,
+        '51-75': 0,
+        '76-99': 0,
+        'hundred': 0
+      };
+
+      results.forEach(cell => {
+        const vis = cell.properties.visibility;
+        if (vis === 0) visibilityBuckets.zero++;
+        else if (vis <= 25) visibilityBuckets['1-25']++;
+        else if (vis <= 50) visibilityBuckets['26-50']++;
+        else if (vis <= 75) visibilityBuckets['51-75']++;
+        else if (vis < 100) visibilityBuckets['76-99']++;
+        else visibilityBuckets.hundred++;
+      });
+
+      console.log(`[Debug] Final visibility distribution:`, visibilityBuckets);
+
+      return analysisResults;
+    } catch (error) {
+      console.error(`Flight path analysis error:`, error);
+      throw error;
+    } finally {
+      cleanupAnalysis();
+      setIsAnalyzing(false);
+    }
+  },
+  [
+    map,
+    gridSize,
+    elosGridRange,
+    updateProgress,
+    visualizeGrid,
+    cleanupAnalysis,
+    setIsAnalyzing,
+    elevationService
+  ]
+);
 
   /**
    * Analyzes visibility from a single station
@@ -870,7 +925,9 @@ const checkStationToStationLOS = useCallback(
             if (!options?.flightPlan) {
               throw createError('Flight plan is required', 'INVALID_INPUT');
             }
-            result = await analyzeFlightPath(options.flightPlan);
+            result = await analyzeFlightPath(options.flightPlan, {
+              samplingResolution: options.samplingResolution
+            });
             break;
 
           case AnalysisType.STATION:

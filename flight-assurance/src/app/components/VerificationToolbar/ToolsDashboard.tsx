@@ -30,8 +30,8 @@ import { trackEventWithForm as trackEvent } from "../tracking/tracking";
 import { 
   BasicChecksCard, 
   EnergyAnalysisCard, 
-  TerrainAnalysisCard, 
-  LOSAnalysisCard 
+  TerrainAnalysisCard,
+  VisibilityAnalysisCard 
 } from "./Cards";
 import { useChecklistContext } from "../../context/ChecklistContext";
 
@@ -196,7 +196,7 @@ const PlanVerificationDashboard: React.FC<PlanVerificationDashboardProps & { act
         <BYDALayerHandler map={map || null} />
       </div>
 
-      <LOSAnalysisCard
+      <VisibilityAnalysisCard
         isExpanded={expandedSection === 'los'}
         onToggleExpanded={() => setExpandedSection(expandedSection === 'los' ? null : 'los')}
         flightPlan={flightPlan}

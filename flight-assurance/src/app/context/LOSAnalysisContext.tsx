@@ -60,12 +60,14 @@ interface LOSAnalysisContextType {
   gridSize: number;
   elosGridRange: number;
   markerConfigs: MarkerConfigs;
+  // New sampling resolution state
+  samplingResolution: number;
   
   // Analysis State
   isAnalyzing: boolean;
   results: AnalysisResults | null;
   error: string | null;
-  progress: number; // Added
+  progress: number;
   
   // Configuration Actions
   setGridSize: (size: number) => void;
@@ -74,12 +76,14 @@ interface LOSAnalysisContextType {
     markerType: keyof MarkerConfigs,
     config: Partial<MarkerConfig>
   ) => void;
+  // New setter for sampling resolution
+  setSamplingResolution: (resolution: number) => void;
 
   // Analysis Actions
   setResults: (results: AnalysisResults | null) => void;
   setIsAnalyzing: (analyzing: boolean) => void;
   setError: (error: string | null) => void;
-  setProgress: (progress: number) => void; // Added
+  setProgress: (progress: number) => void;
   resetAnalysis: () => void;
 }
 
@@ -94,6 +98,9 @@ const DEFAULT_MARKER_CONFIGS: MarkerConfigs = {
   repeater: { ...DEFAULT_MARKER_CONFIG },
 };
 
+// Default sampling resolution (10 meters)
+const DEFAULT_SAMPLING_RESOLUTION = 10;
+
 // ======== Context Creation ========
 const LOSAnalysisContext = createContext<LOSAnalysisContextType | undefined>(undefined);
 
@@ -103,6 +110,8 @@ export function LOSAnalysisProvider({ children }: { children: ReactNode }) {
   const [gridSize, setGridSize] = useState<number>(30);
   const [elosGridRange, setElosGridRange] = useState<number>(1000);
   const [markerConfigs, setMarkerConfigs] = useState<MarkerConfigs>(DEFAULT_MARKER_CONFIGS);
+  // Add sampling resolution state
+  const [samplingResolution, setSamplingResolution] = useState<number>(DEFAULT_SAMPLING_RESOLUTION);
   
   // Analysis State
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
@@ -137,6 +146,7 @@ export function LOSAnalysisProvider({ children }: { children: ReactNode }) {
     gridSize,
     elosGridRange,
     markerConfigs,
+    samplingResolution, // Add to context value
     
     // Analysis State
     isAnalyzing,
@@ -149,6 +159,7 @@ export function LOSAnalysisProvider({ children }: { children: ReactNode }) {
     setGridSize,
     setElosGridRange,
     setMarkerConfig: handleMarkerConfigUpdate,
+    setSamplingResolution, // Add to context value
 
     // Analysis Actions
     setResults,

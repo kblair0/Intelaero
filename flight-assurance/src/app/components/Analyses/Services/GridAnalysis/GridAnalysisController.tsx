@@ -64,7 +64,13 @@ interface GridAnalysisControllerProps {
 const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControllerProps>(
   ({ flightPlan, onProgress, onError, onComplete }, ref) => {
     const { map, elevationService } = useMapContext();
-    const { setResults, setError, setProgress, setIsAnalyzing } = useLOSAnalysis();
+    const { 
+      setResults, 
+      setError, 
+      setProgress, 
+      setIsAnalyzing,
+      samplingResolution 
+    } = useLOSAnalysis();
     const [internalProgress, setInternalProgress] = useState(0);
     
     // Use the markers collection instead of individual locations
@@ -87,8 +93,13 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
     const cleanup = useCallback(() => {
       if (!map) return;
       
+      // Define which layer types to clean up (exclude FLIGHT_PATH)
+      const layersToClean = Object.values(MAP_LAYERS).filter(
+        layerId => layerId !== MAP_LAYERS.FLIGHT_PATH
+      );
+      
       // Clean up analysis layers - now need to find layers with dynamic prefixes
-      Object.values(MAP_LAYERS).forEach(layerId => {
+      layersToClean.forEach(layerId => {
         // Remove exact matches
         if (map.getLayer(layerId)) {
           layerManager.removeLayer(layerId);
@@ -107,6 +118,7 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
 
     // Expose methods through the ref
     useImperativeHandle(ref, () => ({
+      
       // Flight path analysis
       async runFlightPathAnalysis() {
         if (!flightPlan) {
@@ -117,8 +129,11 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
           setIsAnalyzing(true);
           cleanup();
           
-          // Perform analysis
-          const results = await runAnalysis(AnalysisType.FLIGHT_PATH, { flightPlan });
+          // Pass sampling resolution to analysis function
+          const results = await runAnalysis(AnalysisType.FLIGHT_PATH, { 
+            flightPlan,
+            samplingResolution
+          });
 
           setResults(results);
           if (onComplete) onComplete(results);
@@ -132,6 +147,12 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
           setIsAnalyzing(false);
         }
       },
+
+
+
+
+
+
       
       // Station analysis
       async runStationAnalysis(options) {
@@ -364,7 +385,8 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
       onComplete,
       onError,
       elevationService,
-      markers // Add markers to dependencies
+      markers,
+      samplingResolution,
     ]);
 
     // The controller doesn't render anything, it just manages state

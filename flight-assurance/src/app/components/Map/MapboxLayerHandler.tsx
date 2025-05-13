@@ -143,10 +143,17 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
       };
 
       const handleMapMouseMove = (e: mapboxgl.MapMouseEvent) => {
-        const features = map.queryRenderedFeatures(e.point, {
-          layers: ["Electricity Transmission Lines Hitbox"],
-        });
-        if (features.length === 0 && currentFeatureRef.current !== null) {
+        // Check if the layer exists AND is visible before querying
+        if (map.getLayer("Electricity Transmission Lines Hitbox") &&
+            map.getLayoutProperty("Electricity Transmission Lines Hitbox", "visibility") === "visible") {
+          const features = map.queryRenderedFeatures(e.point, {
+            layers: ["Electricity Transmission Lines Hitbox"],
+          });
+          if (features.length === 0 && currentFeatureRef.current !== null) {
+            handlePowerlineMouseLeave();
+          }
+        } else if (currentFeatureRef.current !== null) {
+          // If layer is not visible but we have a current feature, clean up
           handlePowerlineMouseLeave();
         }
       };
