@@ -45,6 +45,10 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
   const [selectedMarkerId, setSelectedMarkerId] = useState<string>('');
   const [localError, setLocalError] = useState<string | null>(null);
   
+  // State for editing default elevation offset
+  const [isEditingDefault, setIsEditingDefault] = useState(false);
+  const [tempDefaultOffset, setTempDefaultOffset] = useState(defaultElevationOffsets[stationType]);
+  
   // Set initial selected marker when markers change
   useEffect(() => {
     if (typeMarkers.length > 0 && (!selectedMarkerId || !typeMarkers.some(m => m.id === selectedMarkerId))) {
@@ -53,6 +57,11 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
       setSelectedMarkerId('');
     }
   }, [typeMarkers, selectedMarkerId]);
+  
+  // Update temp default offset when the actual default changes
+  useEffect(() => {
+    setTempDefaultOffset(defaultElevationOffsets[stationType]);
+  }, [defaultElevationOffsets, stationType]);
   
   // Get the selected marker object
   const selectedMarker = typeMarkers.find(m => m.id === selectedMarkerId);
@@ -119,6 +128,18 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
     }
   };
 
+  // Handle saving the default elevation offset
+  const saveDefaultElevationOffset = () => {
+    if (tempDefaultOffset >= 0 && tempDefaultOffset <= 100) {
+      setDefaultElevationOffset(stationType, tempDefaultOffset);
+      setIsEditingDefault(false);
+      trackEvent("default_elevation_updated", {
+        stationType,
+        newValue: tempDefaultOffset
+      });
+    }
+  };
+
   const getStationDisplayName = () => {
     switch (stationType) {
       case "gcs":
@@ -136,7 +157,7 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
     // Add index if there are multiple markers of this type
     const indexLabel = typeMarkers.length > 1 ? ` #${index + 1}` : '';
     
-    return `${displayName}${indexLabel} (${marker.location.lat.toFixed(3)}, ${marker.location.lng.toFixed(3)})`;
+    return `${displayName}${indexLabel} (${marker.location.lat.toFixed(3)}, ${marker.location.lng.toFixed(3)}, ${marker.elevationOffset}m above ground)`;
   };
 
   const [, forceUpdate] = React.useReducer((x) => x + 1, 0);
@@ -203,6 +224,58 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
           )}
           
           <div className="space-y-3">
+            {/* Default Elevation Offset Control - New Section */}
+            <div className="p-2 bg-blue-50 border border-blue-100 rounded-md mb-3">
+              <div className="flex justify-between items-center mb-1">
+                <label className="text-xs font-medium text-gray-700">Default {getStationDisplayName()} Height</label>
+                {!isEditingDefault ? (
+                  <div className="flex items-center">
+                    <span className="text-xs text-blue-600 mr-2">{defaultElevationOffsets[stationType]}m</span>
+                    <button
+                      onClick={() => setIsEditingDefault(true)}
+                      className="text-xs text-blue-600 hover:underline"
+                      disabled={isAnalyzing}
+                    >
+                      Edit
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      value={tempDefaultOffset}
+                      onChange={(e) => setTempDefaultOffset(Number(e.target.value))}
+                      className="w-16 h-6 p-1 border rounded text-sm"
+                      disabled={isAnalyzing}
+                    />
+                    <button
+                      onClick={saveDefaultElevationOffset}
+                      className="text-xs text-green-600 hover:underline"
+                      disabled={isAnalyzing}
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsEditingDefault(false);
+                        setTempDefaultOffset(defaultElevationOffsets[stationType]);
+                      }}
+                      className="text-xs text-red-600 hover:underline"
+                      disabled={isAnalyzing}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-gray-600">
+                This default height will be applied to all new {stationType === 'observer' ? 'observers' : stationType === 'gcs' ? 'GCS stations' : 'repeaters'}.
+              </p>
+            </div>
+            
             <div>
               <div className="flex justify-between items-center mb-1">
                 <label className="block text-xs text-gray-600">Adjust Grid Range (m):</label>
@@ -249,28 +322,51 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
             </div>
             
             <div>
-              <div className="flex items-center space-x-2">
-                <label className="text-xs text-gray-600">Elevation Offset (m)</label>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  value={selectedMarker ? selectedMarker.elevationOffset : defaultElevationOffsets[stationType]}
-                  onChange={(e) => {
-                    const newOffset = Number(e.target.value);
-                    if (selectedMarker) {
-                      updateMarker(selectedMarker.id, { elevationOffset: newOffset });
-                    } else {
-                      setDefaultElevationOffset(stationType, newOffset);
-                    }
-                  }}
-                  className="w-16 h-6 p-1 border rounded text-sm"
-                  disabled={isAnalyzing}
-                />
+              <div className="flex justify-between items-center mb-1">
+                <label className="text-xs text-gray-600">This Marker's Height (m)</label>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    value={selectedMarker ? selectedMarker.elevationOffset : defaultElevationOffsets[stationType]}
+                    onChange={(e) => {
+                      const newOffset = Number(e.target.value);
+                      if (selectedMarker) {
+                        updateMarker(selectedMarker.id, { elevationOffset: newOffset });
+                        trackEvent("marker_elevation_updated", {
+                          stationType,
+                          markerId: selectedMarker.id,
+                          newValue: newOffset
+                        });
+                      }
+                    }}
+                    className="w-16 h-6 p-1 border rounded text-sm"
+                    disabled={isAnalyzing || !selectedMarker}
+                  />
+                  <button
+                    onClick={() => {
+                      if (selectedMarker) {
+                        updateMarker(selectedMarker.id, { 
+                          elevationOffset: defaultElevationOffsets[stationType] 
+                        });
+                        trackEvent("marker_elevation_reset", {
+                          stationType,
+                          markerId: selectedMarker.id,
+                          newValue: defaultElevationOffsets[stationType]
+                        });
+                      }
+                    }}
+                    className="text-xs text-blue-600 hover:underline"
+                    disabled={isAnalyzing || !selectedMarker}
+                  >
+                    Reset to Default
+                  </button>
+                </div>
               </div>
               <p className="text-xs text-gray-500 mt-1">
-                Height of the station above ground (0-100m)
+                Height above ground for this specific marker (0-100m).
               </p>
             </div>
           </div>

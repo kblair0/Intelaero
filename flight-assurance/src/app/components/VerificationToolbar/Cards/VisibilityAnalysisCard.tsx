@@ -56,29 +56,10 @@ const VisibilityAnalysisCard: React.FC<VerificationCardProps> = ({
             <div className="flex items-center gap-2">
               <h3 className="font-medium text-gray-900">Visibility Analysis Tools</h3>
               </div>
-            <p className="text-sm text-gray-500">Analyze terrain visibility and signal coverage</p>
+            <p className="text-sm text-gray-500">Analyse terrain visibility and signal coverage</p>
           </div>
         </div>
       </div>
-
-      {isExpanded && (
-        <div className="px-4 py-3 bg-gray-50 border-t">
-          <div className="text-sm text-gray-600">
-            <p className="mb-2">
-              <strong>What visibility analysis can help you with:</strong>
-            </p>
-            <ul className="list-disc pl-5 space-y-1.5">
-              <li>Identify terrain obstacles that might block communication</li>
-              <li>Analyze radio coverage across your planned flight path</li>
-              <li>Visualize line-of-sight between any two points on the map</li>
-              <li>Optimize placement of communication relays and observers</li>
-            </ul>
-            <p className="mt-3 italic text-blue-600">
-              Click anywhere on this card to open the full visibility analysis tools
-            </p>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

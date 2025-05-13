@@ -76,10 +76,8 @@ const FlightPathDisplay: React.FC = () => {
   }, [map, terrainLoaded, flightPlan, addFlightPath]);
 
   /*
-   * —— Available Range Marker (TEMPORARILY DISABLED)
+   * —— Available Range Marker (DISABLED)
    * This block computes and displays a marker indicating the point where the battery would run out.
-   * Disabled as per request on 2025-05-12 to stop displaying the marker until reimplementation.
-   * To re-enable, uncomment this useEffect block and ensure config and metrics are correctly provided.
   useEffect(() => {
     if (!map || !terrainLoaded || !flightPlan || !flightPlan.properties?.processed) {
       return;

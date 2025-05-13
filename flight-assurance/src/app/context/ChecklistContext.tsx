@@ -80,13 +80,6 @@ const analysisToChecklistSteps: Record<string, ChecklistStep[]> = {
       target: { component: 'AnalysisDashboard', action: 'analyseGCSRepeaterVsTerrain' },
     },
   ],
-  flightPathVsTerrain: [
-    {
-      label: 'Run Flight Path vs Terrain Analysis',
-      action: 'Click the "Analyse Terrain Obstacles" button under Visibility Analysis Tools',
-      target: { component: 'AnalysisDashboard', action: 'analyseFlightPathVsTerrain' },
-    },
-  ],
   powerline: [
     {
       label: 'Toggle Powerlines',
@@ -158,10 +151,9 @@ const actionToPanelMap: Record<string, 'terrain' | 'los' | 'energy' | null> = {
   analyseTerrainInAO: 'terrain',
   analyseObserverVsTerrain: 'los',
   analyseGCSRepeaterVsTerrain: 'los',
-  analyseFlightPathVsTerrain: 'los',
   togglePowerlines: 'terrain',
-  addObserver: 'terrain',
-  addGCSorRepeater: 'terrain',
+  addObserver: null,
+  addGCSorRepeater: null,
   uploadFlightPlan: 'terrain',
   openLayerControls: null,
   toggleAirspace: 'terrain',

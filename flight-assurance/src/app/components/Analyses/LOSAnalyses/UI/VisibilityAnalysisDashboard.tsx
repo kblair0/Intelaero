@@ -1,5 +1,5 @@
 /**
- * AnalysisDashboard.tsx
+ * VisibilityAnalysisDashboard.tsx
  * 
  * Purpose:
  * Main dashboard component for Line of Sight (LOS) analysis.
@@ -128,9 +128,9 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ initialSection = 
   // Section descriptions
   const descriptions = {
     flight: "Analyse visibility along the flight path",
-    station: "Analyse visibility from observers and comms infrastructure",
-    merged: "Analyse combined visibility from all multiple comms/observer points",
-    stationLOS: "Check line of sight between infrastructure/observers"
+    station: "Analyse visibility from individual stations",
+    merged: "Analyse combined visibility from selected stations",
+    stationLOS: "Check line of sight between selected observer and comms stations"
   };
 
   return (
@@ -152,7 +152,7 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ initialSection = 
       </AnalysisSection>  */}
       
       <AnalysisSection
-        title="Observer/Comms Visibility"
+        title="Observer/Comms Visibility Analysis"
         description={descriptions.station}
         icon={<RadioTower className="w-4 h-4" />}
         isExpanded={expandedSections.station}
@@ -162,7 +162,7 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ initialSection = 
           <div className="flex items-start gap-2">
             <Signal className="w-4 h-4 text-blue-500 mt-0.5" />
             <p className="text-xs text-blue-700">
-              This analysis shows the ground features visible to each point. Place markers on the map and configure their parameters.
+              This analysis shows the ground features visible to each station. Place stations on the map and configure their parameters.
             </p>
           </div>
         </div>
@@ -185,7 +185,7 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ initialSection = 
       </AnalysisSection>
       
       <AnalysisSection
-        title="Line of Sight Check"
+        title="Observer/Comms Line of Sight Analysis"
         description={descriptions.stationLOS}
         icon={<Link className="w-4 h-4" />}
         isExpanded={expandedSections.stationLOS}

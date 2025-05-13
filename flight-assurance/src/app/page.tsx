@@ -43,7 +43,7 @@ import WelcomeMessage from "./components/WelcomeMessage";
 import ChecklistComponent from "./components/ChecklistComponent";
 import 'mapbox-gl/dist/mapbox-gl.css';
 import ObstacleAnalysisDashboard from "./components/Analyses/ObstacleAnalysis/TerrainAnalysisDashboard";
-import AnalysisDashboard from "./components/Analyses/LOSAnalyses/UI/AnalysisDashboard";
+import AnalysisDashboard from "./components/Analyses/LOSAnalyses/UI/VisibilityAnalysisDashboard";
 
 /**
  * Main content component for the home page, managing UI layout and uploader/wizard overlays

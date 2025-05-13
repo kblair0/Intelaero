@@ -194,7 +194,7 @@ const StationLOSAnalysisCard: React.FC<StationLOSAnalysisCardProps> = ({ gridAna
       
       {!hasEnoughMarkers ? (
         <div className="p-3 bg-yellow-100 border border-yellow-400 text-xs text-yellow-700 rounded mb-2">
-          ⚠️ Please place at least two markers on the map to enable station-to-station LOS analysis.
+          ⚠️ Please place at least two markers on the map to enable line of sight analysis.
         </div>
       ) : (
         <div className="mb-2">

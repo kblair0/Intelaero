@@ -1,7 +1,8 @@
+// src/components/AnalysisWizard.tsx
 "use client";
 import React, { useState, useCallback, useMemo } from "react";
 import { 
-  X, Eye, Radio, Link as LinkIcon, User, MapPin, Zap, Plane, 
+  X, Eye, Radio, Link as LinkIcon, User, MapPin, Zap, Plane, PlaneTakeoff, 
   ChevronRight, ChevronLeft, CheckCircle, Settings
 } from "lucide-react";
 import { trackEventWithForm as trackEvent } from "../components/tracking/tracking";
@@ -239,11 +240,16 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
   // State for parameters
   const [gridSize, setGridSize] = useState<number>(30);
   const [bufferDistance, setBufferDistance] = useState<number>(500);
-  const [antennaHeight, setAntennaHeight] = useState<number>(2);
-  const [observerHeight, setObserverHeight] = useState<number>(2);
+  
+  // Combined antennaHeight for both GCS/Repeater and Observer (using a common height value)
+  const [commsAntennaHeight, setCommsAntennaHeight] = useState<number>(2);
 
   // Access context values
-  const { setGcsElevationOffset, setRepeaterElevationOffset } = useMarkersContext();
+  const { 
+    defaultElevationOffsets,
+    setDefaultElevationOffset
+  } = useMarkersContext();
+  
   const { setGridSize: setContextGridSize } = useLOSAnalysis();
   const { flightPlan, setFlightPlan } = useFlightPlanContext();
   const { aoGeometry, setAoGeometry, setBufferDistance: setContextBufferDistance } = useAreaOfOpsContext();
@@ -275,25 +281,28 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
     setSelectedAnalyses([]);
     setGridSize(30);
     setBufferDistance(500);
-    setAntennaHeight(2);
-    setObserverHeight(2);
-    setGcsElevationOffset(2);
-    setRepeaterElevationOffset(2);
-    setContextGridSize(30);
+    setCommsAntennaHeight(2);
     setCurrentStep(WizardStep.AnalysisType);
     trackEvent("wizard_reset", {});
-  }, [setGcsElevationOffset, setRepeaterElevationOffset, setContextGridSize]);
+  }, []);
 
   /**
-   * Handles Antenna Height changes, updating both GCS and Repeater elevation offsets
+   * Updates all antenna height values (GCS, Observer, and Repeater)
+   * using a single common value for simplicity
    */
-  const handleAntennaHeightChange = useCallback(
+  const handleCommsAntennaHeightChange = useCallback(
     (value: number) => {
-      setAntennaHeight(value);
-      setGcsElevationOffset(value);
-      setRepeaterElevationOffset(value);
+      console.log(`[AnalysisWizard] Updating all antenna heights to ${value}m`);
+      setCommsAntennaHeight(value);
+      
+      // Update all default elevation offsets with the same value
+      setDefaultElevationOffset('gcs', value);
+      setDefaultElevationOffset('repeater', value);
+      setDefaultElevationOffset('observer', value);
+      
+      trackEvent("antenna_height_changed", { value });
     },
-    [setGcsElevationOffset, setRepeaterElevationOffset]
+    [setDefaultElevationOffset]
   );
 
   /**
@@ -400,42 +409,35 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
       label: "Terrain Profile",
       icon: <Mountain className="w-4 h-4 text-green-600" />,
       iconBg: "bg-green-100",
-      description: "Creates a cross-sectional view of terrain elevation along a specified path. Useful for understanding height variations and identifying potential obstacles."
+      description: "Shows a terrain height map of your operating area. Helpful for understanding the topography of the area and selecting vanatge points."
     },
     {
       id: "observerVsTerrain",
       label: "Observer Vs Terrain",
       icon: <User className="w-4 h-4 text-gray-600" />,
       iconBg: "bg-gray-100",
-      description: "Analyses the height relationship between observer position and surrounding terrain, helping identify optimal observation points with clear views."
+      description: "Evaluates where observers can see in the surrounding terrain, helping identify and test optimal observation points with clear views."
     },
     {
       id: "gcsRepeaterVsTerrain",
       label: "GCS/Repeater vs Terrain",
       icon: <Radio className="w-4 h-4 text-yellow-600" />,
       iconBg: "bg-yellow-100",
-      description: "Evaluates ground control station or signal repeater positioning relative to terrain features to optimise communication range and reliability."
-    },
-    {
-      id: "flightPathVsTerrain",
-      label: "Flight Path vs Terrain",
-      icon: <MapPin className="w-4 h-4 text-indigo-600" />,
-      iconBg: "bg-indigo-100",
-      description: "Measures the clearance between planned flight paths and terrain elevation to ensure safe operations and identify potential collision risks."
+      description: "Evaluates ground control station or signal repeater positioning and line of sight relative to terrain. Helpful for optimising communication range and reliability."
     },
     {
       id: "powerline",
       label: "Powerlines",
       icon: <Zap className="w-4 h-4 text-red-600" />,
       iconBg: "bg-red-100",
-      description: "Detects and displays known powerline infrastructure in the operating area to help prevent collisions with these critical hazards."
+      description: "Shows known local HV and LV powerline infrastructure in the operating area to help prevent collisions with these critical hazards."
     },
     {
       id: "airspace",
-      label: "Airspace",
+      label: "Airports",
       icon: <Plane className="w-4 h-4 text-red-600" />,
       iconBg: "bg-red-100",
-      description: "Shows controlled, restricted, and special use airspace boundaries to ensure compliance with aviation regulations and avoid restricted areas."
+      description: "Shows aerodromes and landing areas to ensure compliance with aviation regulations and avoid restricted areas."
     },
   ], []);
 
@@ -448,7 +450,7 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
       label: "Observer to Drone",
       icon: <Eye className="w-4 h-4 text-blue-600" />,
       iconBg: "bg-blue-100",
-      description: "Maps areas where the drone will be visible to the observer, accounting for terrain and obstacles. Essential for maintaining visual line of sight (VLOS) operations."
+      description: "Shows segments along the flight path where the drone will be visible to the observer, accounting for terrain and obstacles. Essential for maintaining visual line of sight (VLOS) operations."
     },
     {
       id: "antennaToDrone",
@@ -462,14 +464,14 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
       label: "Drone to Ground",
       icon: <DroneIcon />,
       iconBg: "bg-orange-100",
-      description: "Analyses what areas of the ground will be visible from the drone's perspective at various altitudes, important for survey and monitoring missions."
+      description: "Analyses what areas of the ground will be visible from the drone's perspective at the flight planned altitudes, important for survey and monitoring missions."
     },
     {
       id: "antennaToAntenna",
-      label: "Antenna to Antenna",
+      label: "Antenna to Antenna/Observer",
       icon: <LinkIcon className="w-4 h-4 text-teal-600" />,
       iconBg: "bg-teal-100",
-      description: "Evaluates line of sight between multiple communication antennas or relays to optimise positioning for maximum coverage and signal redundancy."
+      description: "Evaluates line of sight between multiple communication antennas/observers or relays to optimise positioning for maximum coverage and signal redundancy."
     },
   ], []);
 
@@ -491,7 +493,6 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
       { value: "custom", label: "Custom", tooltip: "Enter a custom distance" },
     ],
     height: [
-      { value: 1.5, label: "1.5m", tooltip: "Seated/low height" },
       { value: 2, label: "2m", tooltip: "Standard standing height" },
       { value: 5, label: "5m", tooltip: "Elevated position" },
       { value: 10, label: "10m", tooltip: "Tall structure" },
@@ -555,8 +556,8 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
                   <MapPin className="w-6 h-6 text-green-600" />
                 </div>
                 <div className="ml-4">
-                  <h3 className="text-lg font-medium text-gray-800">Operating Area Analysis</h3>
-                  <p className="text-sm text-gray-600 mt-1">Analyse a defined area for VLOS operations</p>
+                  <h3 className="text-lg text-left font-medium text-gray-800">Operating Area Analysis</h3>
+                  <p className="text-sm text-gray-600 text-left mt-1">Analyse a defined area for VLOS operations</p>
                   <ul className="mt-2 space-y-1 text-sm text-gray-500">
                     <li className="flex items-center">
                       <CheckCircle className="w-3.5 h-3.5 mr-2 text-green-500" />
@@ -584,11 +585,11 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
             >
               <div className="flex items-start">
                 <div className="p-2 bg-blue-100 rounded-full">
-                  <DroneIcon className="w-6 h-6 text-blue-600" />
+                  <PlaneTakeoff className="w-6 h-6 text-blue-600" />
                 </div>
                 <div className="ml-4">
-                  <h3 className="text-lg font-medium text-gray-800">Flight Plan Analysis</h3>
-                  <p className="text-sm text-gray-600 mt-1">Upload and analyse detailed flight paths</p>
+                  <h3 className="text-lg font-medium text-left text-gray-800">Flight Plan Analysis</h3>
+                  <p className="text-sm text-gray-600 text-left mt-1">Upload and analyse detailed flight paths</p>
                   <ul className="mt-2 space-y-1 text-sm text-gray-500">
                     <li className="flex items-center">
                       <CheckCircle className="w-3.5 h-3.5 mr-2 text-green-500" />
@@ -673,67 +674,64 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
             </div>
             
             <div className="space-y-6">
-            {selectedAnalysisType === "flightPlan" ? (
-              <div className="grid grid-cols-1 gap-6">
-                <ButtonGroup
-                  label="Analysis Fidelity (Grid Size)"
-                  options={parameterOptions.gridSize}
-                  selectedValue={gridSize}
-                  onChange={handleGridSizeChange}
-                  ariaLabel="Analysis Fidelity"
-                  unit="m"
-                  min={1}
-                  max={100}
-                  showWarning={(value: number) => value < 30}
-                  warningMessage="Fidelity less than 30m may affect accuracy"
-                />
-                
-                <ButtonGroup
-                  label="Area Analysis Distance from Flight Plan"
-                  options={parameterOptions.bufferDistance}
-                  selectedValue={bufferDistance}
-                  onChange={handleBufferDistanceChange}
-                  ariaLabel="Area Analysis Distance"
-                  unit="m"
-                  min={0}
-                  max={5000}
-                />
-                
-                <ButtonGroup
-                  label="Default Antenna Height"
-                  options={parameterOptions.height}
-                  selectedValue={antennaHeight}
-                  onChange={handleAntennaHeightChange}
-                  ariaLabel="Antenna Height"
-                  unit="m"
-                  min={1}
-                  max={50}
-                />
-              </div>
-            ) : selectedAnalysisType === "operatingArea" ? (
+              {selectedAnalysisType === "flightPlan" ? (
                 <div className="grid grid-cols-1 gap-6">
                   <ButtonGroup
-                    label="Observer Height Above Ground"
-                    options={parameterOptions.height}
-                    selectedValue={observerHeight}
-                    onChange={setObserverHeight}
-                    ariaLabel="Observer Height Above Ground"
-                    unit="m"
-                    min={0}
-                    max={20}
-                  />
-                  
-                  <ButtonGroup
-                    label="Analysis Fidelity (Grid Size)"
+                    label="Terrain Height Resolution"
                     options={parameterOptions.gridSize}
                     selectedValue={gridSize}
                     onChange={handleGridSizeChange}
-                    ariaLabel="Analysis Fidelity"
+                    ariaLabel="Terrain Height Resolution (DEM)"
                     unit="m"
                     min={1}
                     max={100}
                     showWarning={(value: number) => value < 30}
-                    warningMessage="Fidelity less than 30m may affect accuracy"
+                    warningMessage="Resolution less than 30m may affect accuracy unless using high-res DEM"
+                  />
+                  <ButtonGroup
+                    label="Area Analysis Distance from Flight Plan"
+                    options={parameterOptions.bufferDistance}
+                    selectedValue={bufferDistance}
+                    onChange={handleBufferDistanceChange}
+                    ariaLabel="Area Analysis Distance"
+                    unit="m"
+                    min={0}
+                    max={5000}
+                  />
+                  <ButtonGroup
+                    label="Observer/Comms Antenna Height Above Ground"
+                    options={parameterOptions.height}
+                    selectedValue={commsAntennaHeight}
+                    onChange={handleCommsAntennaHeightChange}
+                    ariaLabel="Observer/Comms Antenna Height"
+                    unit="m"
+                    min={1}
+                    max={50}
+                  />
+                </div>
+              ) : selectedAnalysisType === "operatingArea" ? (
+                <div className="grid grid-cols-1 gap-6">
+                  <ButtonGroup
+                    label="Observer/Comms Antenna Height Above Ground"
+                    options={parameterOptions.height}
+                    selectedValue={commsAntennaHeight}
+                    onChange={handleCommsAntennaHeightChange}
+                    ariaLabel="Observer/Comms Antenna Height"
+                    unit="m"
+                    min={0}
+                    max={20}
+                  />
+                  <ButtonGroup
+                    label="Terrain Height Resolution"
+                    options={parameterOptions.gridSize}
+                    selectedValue={gridSize}
+                    onChange={handleGridSizeChange}
+                    ariaLabel="Terrain Height Resolution (DEM)"
+                    unit="m"
+                    min={1}
+                    max={100}
+                    showWarning={(value: number) => value < 30}
+                    warningMessage="Fidelity less than 30m may affect accuracy unless using high-res DEM"
                   />
                 </div>
               ) : (
@@ -768,7 +766,7 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
   return (
     <div className="h-full w-full flex flex-col">
       {/* Header */}
-      <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-white rounded-t-lg">
+      <div className="p-4 border-b border-gray-200 flex justify-between bg-white rounded-t-lg">
         <h2 className="text-xl font-semibold text-gray-800">{getStepTitle}</h2>
         <button
           onClick={onClose}

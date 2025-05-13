@@ -25,7 +25,7 @@ interface Station {
 
 const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef }) => {
   // Use markers collection instead of individual references
-  const { markers } = useMarkersContext();
+  const { markers, defaultElevationOffsets } = useMarkersContext();
   const { markerConfigs, isAnalyzing, setError, setIsAnalyzing, results, setResults } = useLOSAnalysis();
   const { elevationService } = useMapContext();
 
@@ -190,7 +190,7 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
       </p>
       {availableStations.length < 2 ? (
         <div className="p-2 bg-yellow-100 border border-yellow-400 text-xs text-yellow-700 rounded">
-          ⚠️ Please place at least two station markers (GCS, Observer, or Repeater) on the map to enable merged analysis.
+          ⚠️ Please place at least two markers (GCS, Observer, or Repeater) on the map to enable merged analysis.
           {availableStations.length === 1 && (
             <p className="mt-1">
               Currently placed: {getStationDisplayName(availableStations[0])}
@@ -227,6 +227,7 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
                 - {getStationDisplayName(station)}: (
                 {station.location.lat.toFixed(3)}, {station.location.lng.toFixed(3)}, {(station.location.elevation ?? 0).toFixed(1)}m)
                 , Range: {station.range}m, Elevation Offset: {station.elevationOffset}m
+                {station.elevationOffset === defaultElevationOffsets[station.type] ? ' (default)' : ''}
               </p>
             ))}
           </div>

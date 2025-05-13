@@ -44,9 +44,9 @@ export function MarkerProvider({ children }: { children: ReactNode }) {
   
   // Default elevation offsets for each marker type
   const [defaultElevationOffsets, setDefaultElevationOffsets] = useState<Record<MarkerType, number>>({
-    gcs: 3,
-    observer: 3,
-    repeater: 3
+    gcs: 2,
+    observer: 2,
+    repeater: 2
   });
 
   /**

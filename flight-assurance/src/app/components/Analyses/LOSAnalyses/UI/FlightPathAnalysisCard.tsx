@@ -198,7 +198,7 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
       <div className="mb-3">
         <h3 className="font-medium text-gray-900 mb-2">Flight Path Analysis</h3>
         <p className="text-xs text-gray-600 mb-3">
-          Analyze visibility along the flight path and identify areas with potential communication issues.
+          Analyse visibility along the flight path and identify areas with potential communication issues.
         </p>
       </div>
 
