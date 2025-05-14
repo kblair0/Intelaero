@@ -26,6 +26,7 @@ import {
   checkStationToStationLOS as coreCheckStationToStationLOS,
   generateCombinedBoundingBox,
   createError,
+  analyzeTerrainGrid as coreAnalyzeTerrainGrid  // Rename to avoid conflicts
 } from '../Utils/GridAnalysisCore';
 import { useFlightPathSampling } from '../../../hooks/useFlightPathSampling';
 
@@ -905,98 +906,161 @@ const checkStationToStationLOS = useCallback(
     setIsAnalyzing
   ]
 );
-  /**
-   * Main analysis function that handles all analysis types
-   */
-  const runAnalysis = useCallback(
-    async (type: AnalysisType, options?: any): Promise<AnalysisResults> => {
-      if (isAnalyzing) {
-        throw createError('Analysis already in progress', 'INVALID_INPUT');
+/**
+ * Main analysis function that handles all analysis types
+ */
+const runAnalysis = useCallback(
+  async (type: AnalysisType, options?: any): Promise<AnalysisResults> => {
+    if (isAnalyzing) {
+      throw createError('Analysis already in progress', 'INVALID_INPUT');
+    }
+
+    try {
+      setIsAnalyzing(true);
+      setError(null);
+
+      let result: AnalysisResults;
+
+      switch (type) {
+        case AnalysisType.FLIGHT_PATH:
+          if (!options?.flightPlan) {
+            throw createError('Flight plan is required', 'INVALID_INPUT');
+          }
+          result = await analyzeFlightPath(options.flightPlan, {
+            samplingResolution: options.samplingResolution
+          });
+          break;
+
+        case AnalysisType.STATION:
+          if (!options?.stationType || !options?.location || !options?.range) {
+            throw createError('Station type, location, and range are required', 'INVALID_INPUT');
+          }
+          
+          result = await analyzeStation({
+            stationType: options.stationType,
+            location: options.location,
+            range: options.range,
+            elevationOffset: options.elevationOffset || 0
+          });
+          break;
+
+        case AnalysisType.MERGED:
+          if (!options?.stations || options.stations.length < 2) {
+            throw createError('At least two stations are required', 'INVALID_INPUT');
+          }
+          result = await analyzeMerged({ stations: options.stations });
+          break;
+
+        case AnalysisType.STATION_TO_STATION:
+          if (!options?.sourceStation || !options?.targetStation) {
+            throw createError('Source and target stations are required', 'INVALID_INPUT');
+          }
+          // Pass the station data objects directly to checkStationToStationLOS
+          const stationResult = await checkStationToStationLOS(
+            options.sourceStation,
+            options.targetStation
+          );
+          result = {
+            cells: [],
+            stats: {
+              visibleCells: 0,
+              totalCells: 0,
+              averageVisibility: stationResult.result.clear ? 100 : 0,
+              analysisTime: 0,
+            },
+            stationLOSResult: stationResult.result,
+            profile: stationResult.profile
+          };
+          break;
+
+        default:
+          throw createError(`Unsupported analysis type: ${type}`, 'INVALID_INPUT');
       }
-  
-      try {
-        setIsAnalyzing(true);
-        setError(null);
-  
-        let result: AnalysisResults;
 
-        switch (type) {
-          case AnalysisType.FLIGHT_PATH:
-            if (!options?.flightPlan) {
-              throw createError('Flight plan is required', 'INVALID_INPUT');
-            }
-            result = await analyzeFlightPath(options.flightPlan, {
-              samplingResolution: options.samplingResolution
-            });
-            break;
+      setResults(result);
+      return result;
+    } catch (error) {
+      console.error(`Analysis error, type: ${type}:`, error);
+      setError(error.message || 'Analysis failed');
+      throw error;
+    } finally {
+      setIsAnalyzing(false);
+    }
+  },
+  [
+    isAnalyzing,
+    setIsAnalyzing,
+    setError,
+    setResults,
+    analyzeFlightPath,
+    analyzeStation,
+    analyzeMerged,
+    checkStationToStationLOS
+  ]
+);
 
-          case AnalysisType.STATION:
-            if (!options?.stationType || !options?.location || !options?.range) {
-              throw createError('Station type, location, and range are required', 'INVALID_INPUT');
-            }
-           
-            result = await analyzeStation({
-              stationType: options.stationType,
-              location: options.location,
-              range: options.range,
-              elevationOffset: options.elevationOffset || 0
-            });
-            break;
-
-          case AnalysisType.MERGED:
-            if (!options?.stations || options.stations.length < 2) {
-              throw createError('At least two stations are required', 'INVALID_INPUT');
-            }
-            result = await analyzeMerged({ stations: options.stations });
-            break;
-
-          case AnalysisType.STATION_TO_STATION:
-            if (!options?.sourceStation || !options?.targetStation) {
-              throw createError('Source and target stations are required', 'INVALID_INPUT');
-            }
-            // Pass the station data objects directly to checkStationToStationLOS
-            const stationResult = await checkStationToStationLOS(
-              options.sourceStation,
-              options.targetStation
-            );
-            result = {
-              cells: [],
-              stats: {
-                visibleCells: 0,
-                totalCells: 0,
-                averageVisibility: stationResult.result.clear ? 100 : 0,
-                analysisTime: 0,
-              },
-              stationLOSResult: stationResult.result,
-              profile: stationResult.profile
-            };
-            break;
-
-          default:
-            throw createError(`Unsupported analysis type: ${type}`, 'INVALID_INPUT');
+/**
+ * Analyzes terrain grid with optimized performance
+ */
+const analyzeTerrainGrid = useCallback(
+  async (gridCells: GridCell[], referenceAltitude: number = 120): Promise<AnalysisResults> => {
+    if (!map) {
+      throw createError('Map not initialized', 'MAP_INTERACTION');
+    }
+    
+    if (isAnalyzing) {
+      throw createError('Analysis already in progress', 'INVALID_INPUT');
+    }
+    
+    try {
+      setIsAnalyzing(true);
+      setAnalysisInProgress(AnalysisType.TERRAIN);
+      abortControllerRef.current = new AbortController();
+      
+      const startTime = performance.now();
+      
+      // Use the renamed core implementation
+      const result = await coreAnalyzeTerrainGrid(gridCells, {
+        batchSize: 1000,
+        referenceAltitude,
+        onProgress: (progress) => {
+          updateProgress(progress);
+          return abortControllerRef.current?.signal.aborted || false;
         }
-
-        setResults(result);
-        return result;
-      } catch (error) {
-        console.error(`Analysis error, type: ${type}:`, error);
-        setError(error.message || 'Analysis failed');
-        throw error;
-      } finally {
-        setIsAnalyzing(false);
+      });
+      
+      if (abortControllerRef.current?.signal.aborted) {
+        throw createError('Analysis aborted', 'USER_ABORT');
       }
-    },
-    [
-      isAnalyzing,
-      setIsAnalyzing,
-      setError,
-      setResults,
-      analyzeFlightPath,
-      analyzeStation,
-      analyzeMerged,
-      checkStationToStationLOS
-    ]
-  );
+      
+      // Create analysis results in compatible format
+      const analysisResults: AnalysisResults = {
+        cells: gridCells,
+        stats: {
+          visibleCells: gridCells.length, // All cells are "visible" in this context
+          totalCells: gridCells.length,
+          averageVisibility: 100, // Not applicable for terrain analysis
+          analysisTime: performance.now() - startTime,
+          terrainStats: {
+            highestElevation: result.highestElevation,
+            lowestElevation: result.lowestElevation,
+            averageElevation: result.averageElevation,
+            elevationDistribution: result.elevationDistribution
+          }
+        }
+      };
+      
+      return analysisResults;
+    } catch (error) {
+      console.error(`Terrain grid analysis error:`, error);
+      throw error;
+    } finally {
+      cleanupAnalysis();
+      setIsAnalyzing(false);
+    }
+  },
+  [map, isAnalyzing, updateProgress, cleanupAnalysis, setIsAnalyzing]
+);
 
   // Return the same interface for backward compatibility
   return {
@@ -1010,6 +1074,7 @@ const checkStationToStationLOS = useCallback(
     analyzeMerged,
     checkStationToStationLOS,
     abortAnalysis,
-    visualizeGrid
+    visualizeGrid,
+    analyzeTerrainGrid
   };
 }

@@ -24,10 +24,10 @@ import React, { useState, useEffect } from 'react';
 import { useChecklistContext } from '../../../context/ChecklistContext';
 import { useFlightPlanContext } from '../../../context/FlightPlanContext';
 import { useAreaOfOpsContext } from '../../../context/AreaOfOpsContext';
-import { useObstacleAnalysis } from '../../../context/ObstacleAnalysisContext';
 import { useLayers } from '../../../hooks/useLayers';
 import { useAreaOpsProcessor } from '../../AO/Hooks/useAreaOpsProcessor';
 import { trackEventWithForm as trackEvent } from '../../tracking/tracking';
+import { useAnalysisController } from "../../../context/AnalysisControllerContext";
 import { 
   Mountain, 
   Plane, 
@@ -342,14 +342,14 @@ const InfoIcon = ({ className }: { className?: string }) => (
 const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onClose }) => {
   // Track focused section (from checklist guidance)
   const [focusedSection, setFocusedSection] = useState<string | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isLoadingHV, setIsLoadingHV] = useState(false);
   const [isLoadingDBYD, setIsLoadingDBYD] = useState(false);
   const [isLoadingAirspace, setIsLoadingAirspace] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [localBufferDistance, setLocalBufferDistance] = useState<number>(500);
-  
+  const { gridAnalysisRef } = useAnalysisController();
+ 
   const { 
     checks, 
     guidedTarget, 
@@ -361,16 +361,20 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
     aoGeometry, 
     aoTerrainGrid, 
     bufferDistance, 
-    setBufferDistance 
+    setBufferDistance,
+    analyzeTerrainElevation, 
+    isAnalyzing: aoIsAnalyzing,
+    analysisProgress: aoAnalysisProgress,
+    analysisError: aoAnalysisError,
+    terrainAnalysisResult
   } = useAreaOfOpsContext();
-  const { runAOAnalysis, status: analysisStatus } = useObstacleAnalysis();
+
   const { togglePowerlines, toggleDBYDPowerlines, toggleAirspace } = useLayers();
   const { generateTerrainGrid, generateAOFromFlightPlan } = useAreaOpsProcessor();
-  
-  // Update analyzing state based on analysis status
-  useEffect(() => {
-    setIsAnalyzing(analysisStatus === 'loading');
-  }, [analysisStatus]);
+
+  const [localAnalyzing, setLocalAnalyzing] = useState(false);
+  // Combine context analyzing state with local analyzing state
+  const isAnalyzing = aoIsAnalyzing || localAnalyzing;
   
   // Track which checklist actions should focus sections
   useEffect(() => {
@@ -427,43 +431,65 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
 
   /**
    * Handles running terrain analysis for Area of Operations
+   * Uses GridAnalysisController when available, falls back to context method
    */
   const handleRunAOAnalysis = async () => {
     trackEvent("run_ao_terrain_analysis", { panel: "TerrainAnalysisDashboard.tsx" });
-    setIsAnalyzing(true);
     setLocalError(null);
     setSuccessMessage(null);
+    setLocalAnalyzing(true);
     
     try {
+      // Generate grid if needed (keep this part)
       let terrainGrid = aoTerrainGrid;
-      
       if (!terrainGrid || terrainGrid.length === 0) {
-        console.log("Generating AO terrain grid before analysis");
         terrainGrid = await generateTerrainGrid();
       }
       
-      if (terrainGrid && terrainGrid.length > 0) {
-        console.log("Running AO analysis with grid:", terrainGrid.length, "cells");
-        
-        // Complete checklist item if available
-        const checkId = checks.find(c => 
-          c.group === 'terrainProfile' && 
-          c.status === 'pending'
-        )?.id;
-        
-        if (checkId) completeCheck(checkId);
-        
-        await runAOAnalysis(terrainGrid);
-        setSuccessMessage("Terrain analysis complete. Check results on the map.");
+      if (!terrainGrid || terrainGrid.length === 0) {
+        throw new Error("Failed to generate terrain grid");
+      }
+      
+      // Complete checklist item
+      const checkId = checks.find(c => c.group === 'terrainProfile' && c.status === 'pending')?.id;
+      if (checkId) completeCheck(checkId);
+      
+      // Prioritize using the GridAnalysisController if available
+      if (gridAnalysisRef.current) {
+        console.log("Using GridAnalysisController for terrain analysis");
+        await gridAnalysisRef.current.analyzeTerrainGrid(
+          terrainGrid,
+          {
+            referenceAltitude: 120, // Default value - could be configurable
+            onProgress: (progress) => {
+              // Handle progress updates if needed
+            }
+          }
+        );
+        setSuccessMessage("Terrain analysis complete");
+        return true;
       } else {
-        console.error("Failed to generate terrain grid:", terrainGrid);
-        throw new Error("No terrain grid available for analysis");
+        console.log("GridAnalysisController not available, using context method");
+        // Fall back to the AreaOfOpsContext method if controller not available
+        const result = await analyzeTerrainElevation(120);
+        
+        // Set appropriate success message
+        if (result) {
+          setSuccessMessage("Terrain analysis complete");
+        } else if (aoGeometry) {
+          // If visualization worked but detailed analysis failed
+          setSuccessMessage("Terrain visualization complete");
+        } else {
+          throw new Error("Analysis failed to produce results");
+        }
+        
+        return true;
       }
     } catch (error) {
-      console.error("AO terrain analysis error:", error);
       setLocalError(error instanceof Error ? error.message : "Unknown error");
+      return false;
     } finally {
-      setIsAnalyzing(false);
+      setLocalAnalyzing(false);
     }
   };
 

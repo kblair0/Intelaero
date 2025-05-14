@@ -17,7 +17,7 @@ import { AnalysisResults, useLOSAnalysis } from '../../../../context/LOSAnalysis
 import { useMapContext } from '../../../../context/mapcontext';
 import { layerManager, MAP_LAYERS } from '../../../../services/LayerManager';
 import { FlightPlanData } from '../../../../context/FlightPlanContext';
-import { LocationData, AnalysisType, StationLOSResult, LOSProfilePoint } from '../../Types/GridAnalysisTypes';
+import { LocationData, AnalysisType, StationLOSResult, LOSProfilePoint, GridCell } from '../../Types/GridAnalysisTypes';
 import { useMarkersContext } from '../../../../context/MarkerContext';
 
 // Interface for the controller's public methods
@@ -48,8 +48,11 @@ export interface GridAnalysisRef {
     minimumOffset?: number;
     showLayer?: boolean;
   }) => Promise<AnalysisResults>;
+  analyzeTerrainGrid: (gridCells: GridCell[]) => Promise<AnalysisResults>;
+
   abortAnalysis: () => void;
 }
+
 
 interface GridAnalysisControllerProps {
   flightPlan?: FlightPlanData;
@@ -81,6 +84,7 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
       runAnalysis,
       abortAnalysis,
       progress,
+      analyzeTerrainGrid,
     } = useGridAnalysis({
       onProgress: (value) => {
         setInternalProgress(value);
@@ -147,13 +151,6 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
           setIsAnalyzing(false);
         }
       },
-
-
-
-
-
-
-      
       // Station analysis
       async runStationAnalysis(options) {
         try {
@@ -368,6 +365,79 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
           setProgress(0);
         }
       },
+      // Analyze a grid of terrain cells
+// In GridAnalysisController.tsx
+// Find the analyzeTerrainGrid method and replace it with this enhanced version:
+
+/**
+ * Analyzes a grid of terrain cells to generate elevation statistics
+ * @param gridCells - The grid cells to analyze
+ * @param options - Analysis options including reference altitude and progress tracking
+ * @returns Analysis results with terrain statistics
+ */
+async analyzeTerrainGrid(
+  gridCells: GridCell[], 
+  options?: { 
+    referenceAltitude?: number;
+    onProgress?: (progress: number) => boolean | void;
+  }
+): Promise<AnalysisResults> {
+  try {
+    setIsAnalyzing(true);
+    
+    const startTime = performance.now();
+    
+    // Run the terrain analysis with proper options
+    const result = await analyzeTerrainGrid(
+      gridCells, 
+      {
+        batchSize: 1000,
+        referenceAltitude: options?.referenceAltitude || 120,
+        onProgress: (progress) => {
+          // Update internal progress
+          if (options?.onProgress) {
+            return options.onProgress(progress) || false;
+          }
+          if (onProgress) {
+            onProgress(progress);
+          }
+          return false;
+        }
+      }
+    );
+    
+    // Create consistent results format
+    const analysisResults: AnalysisResults = {
+      cells: gridCells,
+      stats: {
+        visibleCells: gridCells.length,
+        totalCells: gridCells.length,
+        averageVisibility: 100, // Not directly applicable for terrain analysis
+        analysisTime: performance.now() - startTime,
+        terrainStats: {
+          highestElevation: result.highestElevation,
+          lowestElevation: result.lowestElevation,
+          averageElevation: result.averageElevation,
+          elevationDistribution: result.elevationDistribution,
+          sampleElevations: result.elevations // Include sample elevations
+        }
+      }
+    };
+    
+    // Set results and notify completion
+    setResults(analysisResults);
+    if (onComplete) onComplete(analysisResults);
+    
+    return analysisResults;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    setError(message);
+    if (onError) onError(error instanceof Error ? error : new Error(message));
+    throw error;
+  } finally {
+    setIsAnalyzing(false);
+  }
+},
 
       // Abort any running analysis
       abortAnalysis() {

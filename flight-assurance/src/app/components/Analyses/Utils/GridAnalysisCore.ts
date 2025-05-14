@@ -784,3 +784,103 @@ export async function checkStationToStationLOS(
   
   return { result, profile };
 }
+
+/**
+ * Analyzes a terrain grid efficiently for elevation statistics
+ * Uses a batched approach to prevent call stack overflow with large areas
+ */
+export async function analyzeTerrainGrid(
+  gridCells: GridCell[],
+  options: {
+    batchSize?: number;
+    referenceAltitude?: number;
+    onProgress?: (progress: number) => boolean;
+  } = {}
+): Promise<{
+  highestElevation: number;
+  lowestElevation: number;
+  averageElevation: number;
+  elevationDistribution: Record<string, number>;
+  elevations: number[];
+}> {
+  const { 
+    batchSize = 1000,
+    onProgress
+  } = options;
+  
+  if (!gridCells || gridCells.length === 0) {
+    throw createError('No grid cells provided for analysis', 'INVALID_INPUT');
+  }
+  
+  console.log(`Analyzing terrain grid with ${gridCells.length} cells`);
+  
+  // For very large datasets, use a reduced set of elevation points for statistics
+  // to prevent memory issues, but still analyze all points for highest/lowest
+  const totalCells = gridCells.length;
+  const useReducedSet = totalCells > 10000;
+  const sampleInterval = useReducedSet ? Math.ceil(totalCells / 10000) : 1;
+  
+  let highestElevation = -Infinity;
+  let lowestElevation = Infinity;
+  let elevationSum = 0;
+  const elevationCounts: Record<string, number> = {};
+  const sampleElevations: number[] = [];
+  
+  // Process in batches to prevent stack overflow
+  for (let i = 0; i < totalCells; i += batchSize) {
+    // Check for abort if callback provided
+    if (onProgress) {
+      const progressValue = Math.round((i / totalCells) * 100);
+      const shouldAbort = onProgress(progressValue);
+      if (shouldAbort) {
+        throw createError('Analysis aborted by user', 'USER_ABORT');
+      }
+    }
+    
+    // Process current batch
+    const endIndex = Math.min(i + batchSize, totalCells);
+    const batchCells = gridCells.slice(i, endIndex);
+    
+    for (let j = 0; j < batchCells.length; j++) {
+      const elevation = batchCells[j].properties.elevation;
+      
+      // Update highest and lowest
+      highestElevation = Math.max(highestElevation, elevation);
+      lowestElevation = Math.min(lowestElevation, elevation);
+      
+      // Only include in average and distribution if part of reduced set or using full set
+      if (!useReducedSet || (i + j) % sampleInterval === 0) {
+        elevationSum += elevation;
+        
+        // Add to sample array
+        sampleElevations.push(elevation);
+        
+        // Update distribution count
+        // Round to nearest 10m for reasonable histogram
+        const elevationBucket = Math.round(elevation / 10) * 10;
+        const bucketKey = elevationBucket.toString();
+        elevationCounts[bucketKey] = (elevationCounts[bucketKey] || 0) + 1;
+      }
+    }
+    
+    // Yield to event loop to prevent stack overflow and UI freezing
+    await new Promise(resolve => setTimeout(resolve, 0));
+  }
+  
+  // Calculate averages based on the sample set
+  const averageElevation = sampleElevations.length > 0 ? 
+    elevationSum / sampleElevations.length : 0;
+  
+  // Report completion
+  if (onProgress) {
+    onProgress(100);
+  }
+  
+  return {
+    highestElevation,
+    lowestElevation,
+    averageElevation,
+    elevationDistribution: elevationCounts,
+    elevations: sampleElevations
+  };
+}

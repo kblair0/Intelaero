@@ -296,23 +296,23 @@ const handleMapSelectionCancel = () => {
 export default function Home() {
   return (
     <MapProvider>
-      <AreaOfOpsProvider>
-        <FlightPlanProvider>
-          <FlightConfigurationProvider>
-            <MarkerProvider>
-              <LOSAnalysisProvider>
-                <ObstacleAnalysisProvider>
-                  <AnalysisControllerProvider>
+      <AnalysisControllerProvider> 
+        <AreaOfOpsProvider>
+          <FlightPlanProvider>
+            <FlightConfigurationProvider>
+              <MarkerProvider>
+                <LOSAnalysisProvider>
+                  <ObstacleAnalysisProvider>
                     <ChecklistProvider>
                       <HomeContent />
                     </ChecklistProvider>
-                  </AnalysisControllerProvider>
-                </ObstacleAnalysisProvider>
-              </LOSAnalysisProvider>
-            </MarkerProvider>
-          </FlightConfigurationProvider>
-        </FlightPlanProvider>
-      </AreaOfOpsProvider>
+                  </ObstacleAnalysisProvider>
+                </LOSAnalysisProvider>
+              </MarkerProvider>
+            </FlightConfigurationProvider>
+          </FlightPlanProvider>
+        </AreaOfOpsProvider>
+      </AnalysisControllerProvider>
     </MapProvider>
   );
 }

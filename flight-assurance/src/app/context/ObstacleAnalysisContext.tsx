@@ -110,7 +110,6 @@ interface ObstacleAnalysisContextProps {
   results: ObstacleAnalysisResult | null;
   chartData: TerrainChartData | null;
   runAnalysis: (options?: Partial<AnalysisOptions>) => Promise<void>;
-  runAOAnalysis: (gridCells: GridCell[]) => Promise<void>; 
   cancelAnalysis: () => void;
   clearResults: () => void;
 }
@@ -592,77 +591,6 @@ const runAnalysis = useCallback(async (options?: Partial<AnalysisOptions>) => {
     setStatus('error');
   }
 }, [map, flightPlan, isProcessed, analysisOptions, setError, setStatus, setProgress, setFlightPlan, generateChartData]);
-
-  const runAOAnalysis = useCallback(async (gridCells: GridCell[]) => {
-    console.log('Running AO terrain analysis');
-
-    if (!map || !elevationService) {
-      const errorMessage = "Map or elevation service not available";
-      setError(errorMessage);
-      setStatus('error');
-      return;
-    }
-    
-    if (!gridCells || gridCells.length === 0) {
-      const errorMessage = "No terrain grid available for AO analysis";
-      setError(errorMessage);
-      setStatus('error');
-      return;
-    }
-    
-    try {
-      setStatus('loading');
-      setProgress(0);
-      setError(null);
-      
-      // Use the passed gridCells instead of accessing context directly
-      const terrainElevations = gridCells.map(cell => cell.properties.elevation);
-      const highestObstacle = Math.max(...terrainElevations);
-        
-        // Use flight configuration for reference altitude if available
-        // or default to 120m AGL
-        const referenceAltitude = 120; // This could come from settings
-        
-        const minimumClearance = referenceAltitude - highestObstacle;
-        
-        // Create result object compatible with existing UI
-        const result: ObstacleAnalysisResult = {
-          samplePoints: [], // Not applicable for AO
-          minimumClearance,
-          criticalPointDistance: null, // Not applicable for AO
-          highestObstacle,
-          flightAltitudes: [referenceAltitude], // Single reference value
-          terrainElevations,
-          distances: Array(terrainElevations.length).fill(0), // Placeholder
-          pointsOfInterest: [],
-        };
-        
-        // Set results
-        setResults(result);
-        
-        // Set chart data (simplified for AO case)
-        setChartData({
-          distances: [0, 1], // Placeholder
-          terrainElevations: [highestObstacle, highestObstacle],
-          flightAltitudes: [referenceAltitude, referenceAltitude],
-          minimumClearance,
-          criticalPointDistance: null,
-          highestPoint: {
-            terrain: highestObstacle,
-            flight: referenceAltitude
-          },
-          waypoints: [],
-          pointsOfInterest: []
-        });
-        
-        setStatus('success');
-      } catch (err: any) {
-        console.error("AO terrain analysis error:", err);
-        setError(err instanceof Error ? err.message : String(err));
-        setStatus('error');
-      }
-    }, [map, elevationService, aoTerrainGrid, setError, setStatus, setProgress, setResults, setChartData]);
-
 /**
  * Cancels the ongoing analysis
  */
@@ -690,7 +618,6 @@ const value = {
   results,
   chartData,
   runAnalysis,
-  runAOAnalysis,
   cancelAnalysis,
   clearResults,
 };
