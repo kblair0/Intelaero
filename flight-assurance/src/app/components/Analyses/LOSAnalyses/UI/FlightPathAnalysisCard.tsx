@@ -50,6 +50,13 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
   // Keep track of which markers to include in visibility analysis
   const [selectedMarkerIds, setSelectedMarkerIds] = useState<string[]>([]);
 
+  useEffect(() => {
+    // Update toggle state when new results arrive
+    if (results?.flightPathVisibility) {
+      setShowVisibilityLayer(layerManager.isLayerVisible(MAP_LAYERS.FLIGHT_PATH_VISIBILITY));
+    }
+  }, [results]);
+
   // Initialize selected markers when available markers change
   useEffect(() => {
     // Default to selecting all available markers
@@ -198,9 +205,15 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
     layerManager.toggleLayerVisibility(MAP_LAYERS.ELOS_GRID);
   }, []);
 
-  const toggleVisibilityLayerVisibility = useCallback(() => {
-    layerManager.toggleLayerVisibility(MAP_LAYERS.FLIGHT_PATH_VISIBILITY);
-  }, []);
+const toggleVisibilityLayerVisibility = useCallback(() => {
+  const newVisibility = !showVisibilityLayer;
+  setShowVisibilityLayer(newVisibility);
+  
+  // Ensure layer exists before trying to toggle it
+  if (hasVisibilityResults) {
+    layerManager.setLayerVisibility(MAP_LAYERS.FLIGHT_PATH_VISIBILITY, newVisibility);
+  }
+}, [showVisibilityLayer, results]);
 
   // Listen for layer visibility changes
   useEffect(() => {

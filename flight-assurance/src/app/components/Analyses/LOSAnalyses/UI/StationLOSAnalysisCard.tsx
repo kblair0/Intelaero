@@ -1,3 +1,21 @@
+/**
+ * StationLOSAnalysisCard.tsx
+ * 
+ * Purpose: Provides a UI component for analyzing line-of-sight (LOS) between two stations on a map.
+ * 
+ * This component:
+ * - Allows users to select source and target stations from available markers
+ * - Performs LOS analysis between selected stations
+ * - Displays results including whether LOS is clear or obstructed
+ * - Shows a profile graph of terrain elevation and LOS path
+ * 
+ * Related components:
+ * - GridAnalysisController: Performs the actual LOS calculations
+ * - MarkerContext: Provides access to available markers
+ * - LOSAnalysisContext: Manages analysis state
+ * - MapContext: Provides access to map services including elevation
+ */
+
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -54,6 +72,10 @@ const StationLOSAnalysisCard: React.FC<StationLOSAnalysisCardProps> = ({ gridAna
     }
   }, [availableMarkers]);
 
+  /**
+   * Runs the station-to-station line of sight analysis
+   * Fetches LOS data from the grid analysis controller and updates state with results
+   */
   const handleRunStationLOS = async () => {
     if (!gridAnalysisRef.current) {
       setError("Analysis controller not initialized");
@@ -92,7 +114,8 @@ const StationLOSAnalysisCard: React.FC<StationLOSAnalysisCardProps> = ({ gridAna
       setStationLOSResult(losData.result);
       setLosProfileData(losData.profile);
 
-      if (!losData.result.clear && losData.profile?.length) {
+      // Always show graph if profile data is available, regardless of LOS result
+      if (losData.profile?.length) {
         setIsGraphEnlarged(true);
       }
     } catch (err: any) {
@@ -106,13 +129,18 @@ const StationLOSAnalysisCard: React.FC<StationLOSAnalysisCardProps> = ({ gridAna
     }
   };
 
+  /**
+   * Returns display information for different station types
+   */
   const getStationDisplay = (stationType: "gcs" | "observer" | "repeater") => {
     const emojis = { gcs: "📡", observer: "🔭", repeater: "⚡️" };
     const names = { gcs: "GCS Station", observer: "Observer Station", repeater: "Repeater Station" };
     return { emoji: emojis[stationType], name: names[stationType] };
   };
 
-  // Get a descriptive name for a marker, including its index if there are multiples of same type
+  /**
+   * Generates a descriptive name for a marker, including its index if there are multiples of same type
+   */
   const getMarkerDisplayName = (marker: any) => {
     const { emoji, name } = getStationDisplay(marker.type);
     const markersOfSameType = markersByType[marker.type];
@@ -124,6 +152,7 @@ const StationLOSAnalysisCard: React.FC<StationLOSAnalysisCardProps> = ({ gridAna
     return `${emoji} ${name}${indexLabel}`;
   };
 
+  // Prepare chart data if profile data is available
   const chartData = losProfileData
     ? {
         labels: losProfileData.map(pt => pt.distance.toFixed(0)),
@@ -152,6 +181,7 @@ const StationLOSAnalysisCard: React.FC<StationLOSAnalysisCardProps> = ({ gridAna
       }
     : null;
 
+  // Chart configuration options
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
@@ -261,7 +291,17 @@ const StationLOSAnalysisCard: React.FC<StationLOSAnalysisCardProps> = ({ gridAna
       {stationLOSResult && (
         <div className="mt-4">
           {stationLOSResult.clear ? (
-            <p className="text-green-600 text-xs">✅ Clear line of sight between stations.</p>
+            <div>
+              <p className="text-green-600 text-xs">✅ Clear line of sight between stations.</p>
+              <div className="mt-2">
+                <button
+                  onClick={() => setIsGraphEnlarged(true)}
+                  className="py-1 px-2 bg-indigo-500 text-white rounded text-xs"
+                >
+                  Show LOS Graph
+                </button>
+              </div>
+            </div>
           ) : (
             <div className="p-2 bg-yellow-100 border border-yellow-400 text-xs text-yellow-700 rounded">
               ⚠️ LOS obstructed. Obstruction at <strong>{stationLOSResult.obstructionDistance?.toFixed(1)} m</strong> (

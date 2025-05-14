@@ -328,9 +328,19 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
             }
           );
           
-          // Add the visibility layer to the map if requested
-          if (options.showLayer !== false && map) {
+          // Always add the visibility layer when analysis completes
+          if (map) {
+            // First ensure any old layer is removed
+            layerManager.removeLayer(MAP_LAYERS.FLIGHT_PATH_VISIBILITY);
+            
+            // Add the new visibility layer
             addVisibilityLayer(map, visibilityResults.segments);
+            
+            // Apply visibility based on option (visible by default)
+            layerManager.setLayerVisibility(
+              MAP_LAYERS.FLIGHT_PATH_VISIBILITY, 
+              options.showLayer !== false
+            );
           }
           
           // Create the analysis results object

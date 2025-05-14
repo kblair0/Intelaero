@@ -151,6 +151,7 @@ export async function analyzeFlightPathVisibility(
     sampleInterval,
     elevationService
   );
+
   
   onProgress(20);
   
@@ -219,81 +220,111 @@ async function sampleFlightPath(
 ): Promise<SamplePoint[]> {
   const coordinates = flightPath.geometry.coordinates as [number, number, number][];
   
-  // Create a line geometry for distance calculations
-  const line = turf.lineString(coordinates.map(coord => [coord[0], coord[1]]));
-  const totalPathLength = turf.length(line, { units: 'meters' });
+  // Validate all coordinates
+  const validatedCoordinates: [number, number, number][] = [];
   
-  // Calculate number of sample points based on interval
-  const sampleCount = Math.max(coordinates.length, Math.ceil(totalPathLength / sampleInterval));
-  const samples: SamplePoint[] = [];
-  
-  // Add original waypoints as samples to ensure accuracy
-  coordinates.forEach((coord, index) => {
-    // Calculate distance from start for each original waypoint
-    const segmentLine = turf.lineSlice(
-      turf.point([coordinates[0][0], coordinates[0][1]]),
-      turf.point([coord[0], coord[1]]),
-      line
-    );
-    const distance = turf.length(segmentLine, { units: 'meters' });
-    
-    samples.push({
-      position: [coord[0], coord[1], coord[2]],
-      distanceFromStart: distance
-    });
-  });
-  
-  // Add intermediate points if needed
-  if (sampleCount > coordinates.length) {
-    // Add intermediate points along each segment
-    for (let i = 0; i < coordinates.length - 1; i++) {
-      const startCoord = coordinates[i];
-      const endCoord = coordinates[i + 1];
-      
-      // Create a line segment
-      const segment = turf.lineString([
-        [startCoord[0], startCoord[1]],
-        [endCoord[0], endCoord[1]]
-      ]);
-      
-      // Calculate segment length and number of points needed
-      const segmentLength = turf.length(segment, { units: 'meters' });
-      const pointsNeeded = Math.max(0, Math.ceil(segmentLength / sampleInterval) - 1);
-      
-      // Calculate the start distance
-      const segmentStart = turf.lineSlice(
-        turf.point([coordinates[0][0], coordinates[0][1]]),
-        turf.point([startCoord[0], startCoord[1]]),
-        line
-      );
-      const startDistance = turf.length(segmentStart, { units: 'meters' });
-      
-      // Add intermediate points
-      for (let j = 1; j <= pointsNeeded; j++) {
-        const fraction = j / (pointsNeeded + 1);
-        
-        // Interpolate position
-        const lng = startCoord[0] + fraction * (endCoord[0] - startCoord[0]);
-        const lat = startCoord[1] + fraction * (endCoord[1] - startCoord[1]);
-        const alt = startCoord[2] + fraction * (endCoord[2] - startCoord[2]);
-        
-        // Calculate distance along path
-        const distance = startDistance + fraction * segmentLength;
-        
-        samples.push({
-          position: [lng, lat, alt],
-          distanceFromStart: distance
-        });
-      }
+  for (const coord of coordinates) {
+    if (!Array.isArray(coord) || coord.length < 3) {
+      console.warn("Invalid coordinate format:", coord);
+      continue;
     }
     
-    // Sort samples by distance from start
-    samples.sort((a, b) => a.distanceFromStart - b.distanceFromStart);
+    const [lng, lat, alt] = coord;
+    if (typeof lng !== 'number' || isNaN(lng) ||
+        typeof lat !== 'number' || isNaN(lat) ||
+        typeof alt !== 'number' || isNaN(alt)) {
+      console.warn("Invalid coordinate values:", coord);
+      continue;
+    }
+    
+    validatedCoordinates.push([lng, lat, alt]);
   }
+  
+  if (validatedCoordinates.length < 2) {
+    throw new Error(`Not enough valid coordinates: found ${validatedCoordinates.length}, need at least 2`);
+  }
+  
+  console.log("Using validated coordinates:", {
+    original: coordinates.length,
+    valid: validatedCoordinates.length,
+    first: validatedCoordinates[0],
+    last: validatedCoordinates[validatedCoordinates.length - 1]
+  });
+  
+  // SIMPLER APPROACH: Calculate distances directly without turf.lineSlice
+  const samples: SamplePoint[] = [];
+  let cumulativeDistance = 0;
+  
+  // Add the first point at distance 0
+  samples.push({
+    position: validatedCoordinates[0],
+    distanceFromStart: 0
+  });
+  
+  // Process remaining waypoints
+  for (let i = 1; i < validatedCoordinates.length; i++) {
+    try {
+      const prevCoord = validatedCoordinates[i - 1];
+      const currentCoord = validatedCoordinates[i];
+      
+      // Calculate segment distance using turf.distance
+      const segmentDistance = turf.distance(
+        [prevCoord[0], prevCoord[1]],
+        [currentCoord[0], currentCoord[1]],
+        { units: 'meters' }
+      );
+      
+      // Add cumulative distance
+      cumulativeDistance += segmentDistance;
+      
+      // Add waypoint to samples
+      samples.push({
+        position: currentCoord,
+        distanceFromStart: cumulativeDistance
+      });
+      
+      // If segment is longer than sampling interval, add intermediate points
+      if (segmentDistance > sampleInterval) {
+        const pointsNeeded = Math.floor(segmentDistance / sampleInterval);
+        
+        for (let j = 1; j <= pointsNeeded; j++) {
+          const fraction = j / (pointsNeeded + 1);
+          
+          // Interpolate position
+          const lng = prevCoord[0] + fraction * (currentCoord[0] - prevCoord[0]);
+          const lat = prevCoord[1] + fraction * (currentCoord[1] - prevCoord[1]);
+          const alt = prevCoord[2] + fraction * (currentCoord[2] - prevCoord[2]);
+          
+          // Calculate distance along path (proportional within segment)
+          const pointDistance = cumulativeDistance - segmentDistance + (fraction * segmentDistance);
+          
+          samples.push({
+            position: [lng, lat, alt],
+            distanceFromStart: pointDistance
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error processing segment:", error, {
+        index: i,
+        from: validatedCoordinates[i - 1],
+        to: validatedCoordinates[i]
+      });
+      // Continue to next segment
+    }
+  }
+  
+  // Sort by distance (intermediate points may be out of order)
+  samples.sort((a, b) => a.distanceFromStart - b.distanceFromStart);
+  
+  console.log("Sampling complete:", {
+    originalCoordinates: validatedCoordinates.length,
+    sampledPoints: samples.length,
+    totalDistance: samples.length > 0 ? samples[samples.length - 1].distanceFromStart : 0
+  });
   
   return samples;
 }
-
 /**
  * Efficiently processes terrain elevations for all sample points
  */
@@ -643,9 +674,18 @@ export function addVisibilityLayer(
   map: mapboxgl.Map, 
   segments: VisibilitySegment[],
   layerId: string = MAP_LAYERS.FLIGHT_PATH_VISIBILITY
-): void {
-  // Remove existing layer and source
-  layerManager.removeLayer(layerId);
+): void { 
+  // Ensure the layer is properly removed first
+  try {
+    if (map.getLayer(layerId)) {
+      map.removeLayer(layerId);
+    }
+    if (map.getSource(layerId)) {
+      map.removeSource(layerId);
+    }
+  } catch (error) {
+    console.warn(`Error cleaning up previous layer ${layerId}:`, error);
+  }
   
   // Create features with 2D coordinates for the layer
   const features: GeoJSON.Feature[] = segments
