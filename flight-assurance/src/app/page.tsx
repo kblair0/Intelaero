@@ -34,7 +34,7 @@ import PlanVerificationDashboard from "./components/VerificationToolbar/ToolsDas
 import Card from "./components/UI/Card";
 import { ObstacleAnalysisProvider } from "./context/ObstacleAnalysisContext";
 import MapSidePanel from "./components/UI/MapSidePanel";
-import { Battery, Radio, Mountain } from "lucide-react";
+import { Battery, Radio, Mountain, MapPin, Search } from "lucide-react";
 import { trackEventWithForm as trackEvent } from "./components/tracking/tracking";
 import { MapProvider } from "./context/mapcontext";
 import { AnalysisControllerProvider } from "./context/AnalysisControllerContext";
@@ -44,6 +44,8 @@ import ChecklistComponent from "./components/ChecklistComponent";
 import 'mapbox-gl/dist/mapbox-gl.css';
 import ObstacleAnalysisDashboard from "./components/Analyses/ObstacleAnalysis/TerrainAnalysisDashboard";
 import AnalysisDashboard from "./components/Analyses/LOSAnalyses/UI/VisibilityAnalysisDashboard";
+import MapSelectionPanel from "./components/AO/MapSelectionPanel";
+
 
 /**
  * Main content component for the home page, managing UI layout and uploader/wizard overlays
@@ -58,6 +60,9 @@ const HomeContent = () => {
   const [showChecklist, setShowChecklist] = useState(false);
   const { flightPlan, setFlightPlan } = useFlightPlanContext();
   const { aoGeometry } = useAreaOfOpsContext();
+
+  const [isMapSelectionMode, setIsMapSelectionMode] = useState<boolean>(false);
+  const [mapSelectionMode, setMapSelectionMode] = useState<"map" | "search">("map");
 
   /**
    * Toggles the active analysis panel and sets initial section
@@ -105,6 +110,34 @@ const HomeContent = () => {
     }
   }, [flightPlan, aoGeometry, showWizard, showUploader, showAreaOpsUploader]);
 
+  // Add handlers for map selection
+/**
+ * Starts map selection mode
+ */
+const handleStartMapSelection = (mode: "map" | "search") => {
+  setIsMapSelectionMode(true);
+  setMapSelectionMode(mode);
+  setShowWizard(false);
+  trackEvent('map_selection_started', { mode });
+};
+
+/**
+ * Completes map selection
+ */
+const handleMapSelectionComplete = () => {
+  setIsMapSelectionMode(false);
+  trackEvent('map_selection_completed', {});
+};
+
+/**
+ * Cancels map selection
+ */
+const handleMapSelectionCancel = () => {
+  setIsMapSelectionMode(false);
+  setShowWizard(true);
+  trackEvent('map_selection_cancelled', {});
+};
+
   return (
     <div className="min-h-screen flex flex-col bg-white overflow-x-hidden">
 
@@ -134,7 +167,11 @@ const HomeContent = () => {
                 <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20 p-4">
                   <div className="bg-white p-2 rounded-lg shadow-lg w-full max-w-3xl">
                     <h3 className="text-2xl font-semibold mx-4 mt-4 mb-2">Start Your Analysis</h3>
-                    <AnalysisWizard onClose={() => setShowWizard(false)} />
+                    <AnalysisWizard 
+                      onClose={() => setShowWizard(false)} 
+                      onStartMapSelection={handleStartMapSelection}
+                      onShowAreaOpsUploader={() => setShowAreaOpsUploader(true)}
+                    />
                   </div>
                 </div>
               )}
@@ -178,6 +215,36 @@ const HomeContent = () => {
                 </div>
               </Card>
             </div>
+
+            {/* Map Selection Panel - Only shown when in map selection mode */}
+            {isMapSelectionMode && (
+              <div className="w-full z-10">
+                <Card className="w-full rounded-l-xl">
+                  <div className="space-y-3 h-full flex flex-col">
+                    <h3 className="text-lg font-medium text-gray-900 flex items-center gap-2">
+                      {mapSelectionMode === "map" ? (
+                        <>
+                          <MapPin className="w-5 h-5 text-blue-600" />
+                          Select Area on Map
+                        </>
+                      ) : (
+                        <>
+                          <Search className="w-5 h-5 text-blue-600" />
+                          Search Location
+                        </>
+                      )}
+                    </h3>
+                    <div className="flex-1 overflow-y-auto">
+                      <MapSelectionPanel 
+                        mode={mapSelectionMode}
+                        onComplete={handleMapSelectionComplete}
+                        onCancel={handleMapSelectionCancel}
+                      />
+                    </div>
+                  </div>
+                </Card>
+              </div>
+            )}
 
             {/* Checklist Section */}
             {(flightPlan || aoGeometry) && !showWizard && !showUploader && !showAreaOpsUploader && (

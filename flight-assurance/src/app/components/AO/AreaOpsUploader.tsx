@@ -12,6 +12,19 @@ import {
   Map
 } from "lucide-react";
 
+/**
+ * AreaOpsUploader Component
+ * 
+ * Enables users to upload KML files to define Areas of Operation.
+ * The map selection and location search functionality has been moved
+ * to the standalone MapSelectionPanel component.
+ * 
+ * Features:
+ * - KML file upload with drag-and-drop support
+ * - Example area loading
+ * - Status feedback during processing
+ * - Error handling
+ */
 interface AreaOpsUploaderProps {
   onClose?: () => void;
   onAOUploaded?: (aoData: GeoJSON.FeatureCollection) => void;
@@ -27,12 +40,17 @@ const FileBadge = ({ type }: { type: string }) => (
 );
 
 const AreaOpsUploader: React.FC<AreaOpsUploaderProps> = ({ onClose, onAOUploaded }) => {
+  // Get KML processor from hook
+  const { processKML } = useAreaOpsProcessor();
+  
+  // File upload state
   const [fileUploadStatus, setFileUploadStatus] = useState<"idle" | "uploading" | "processed" | "error">("idle");
   const [fileName, setFileName] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const { processKML } = useAreaOpsProcessor();
-
-  // onDrop handler for drag & drop.
+  
+  /**
+   * Handles file drop for KML upload
+   */
   const onDrop = async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
     setFileName(file.name);
@@ -79,6 +97,9 @@ const AreaOpsUploader: React.FC<AreaOpsUploaderProps> = ({ onClose, onAOUploaded
     }
   };
 
+  /**
+   * Setup dropzone for file uploads
+   */
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: {
       "application/vnd.google-earth.kml+xml": [".kml"],
@@ -86,6 +107,9 @@ const AreaOpsUploader: React.FC<AreaOpsUploaderProps> = ({ onClose, onAOUploaded
     onDrop,
   });
 
+  /**
+   * Handle loading an example AO from file
+   */
   const loadExampleAOFromFile = async () => {
     setFileUploadStatus("uploading");
     setErrorMessage(null);
@@ -119,26 +143,11 @@ const AreaOpsUploader: React.FC<AreaOpsUploaderProps> = ({ onClose, onAOUploaded
     }
   };
 
-  return (
-    <div className="w-full bg-white py-2">
-      {/* Header section */}
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-gray-800">Define Area of Operations</h3>
-          <p className="text-sm text-gray-600">Upload a KML file to outline your operational area</p>
-        </div>
-        <div className="flex items-center space-x-1">
-          <FileBadge type=".kml" />
-          <button 
-            className="ml-2 text-blue-600 hover:text-blue-800" 
-            aria-label="File format information"
-          >
-            <Info className="h-5 w-5" />
-          </button>
-        </div>
-      </div>
-
-      {/* Improved drop zone with better states */}
+  /**
+   * Renders file upload content
+   */
+  const renderFileUploadContent = () => (
+    <>
       <div
         {...getRootProps()}
         className={`
@@ -216,7 +225,7 @@ const AreaOpsUploader: React.FC<AreaOpsUploaderProps> = ({ onClose, onAOUploaded
         )}
       </div>
 
-      {/* Better action button */}
+      {/* Action button for loading example */}
       <div className="mt-5 flex justify-center">
         <button
           onClick={loadExampleAOFromFile}
@@ -227,6 +236,30 @@ const AreaOpsUploader: React.FC<AreaOpsUploaderProps> = ({ onClose, onAOUploaded
           <span>Load Example Area</span>
         </button>
       </div>
+    </>
+  );
+
+  return (
+    <div className="w-full bg-white py-2">
+      {/* Header section */}
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-800">Upload Area of Operations</h3>
+          <p className="text-sm text-gray-600">Upload a KML file to define your operational area</p>
+        </div>
+        <div className="flex items-center space-x-1">
+          <FileBadge type=".kml" />
+          <button 
+            className="ml-2 text-blue-600 hover:text-blue-800" 
+            aria-label="File format information"
+          >
+            <Info className="h-5 w-5" />
+          </button>
+        </div>
+      </div>
+
+      {/* File upload content */}
+      {renderFileUploadContent()}
     </div>
   );
 };

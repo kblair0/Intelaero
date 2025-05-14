@@ -2,7 +2,7 @@
 "use client";
 import React, { useState, useCallback, useMemo } from "react";
 import { 
-  X, Eye, Radio, Link as LinkIcon, User, MapPin, Zap, Plane, PlaneTakeoff, 
+  X, Eye, Radio, Link as LinkIcon, User, MapPin, FileUp, Search, Zap, Plane, PlaneTakeoff, 
   ChevronRight, ChevronLeft, CheckCircle, Settings
 } from "lucide-react";
 import { trackEventWithForm as trackEvent } from "../components/tracking/tracking";
@@ -14,11 +14,15 @@ import { useFlightPlanContext } from "../context/FlightPlanContext";
 import { useAreaOfOpsContext } from "../context/AreaOfOpsContext";
 import { useChecklistContext } from "../context/ChecklistContext";
 
+
+
 /**
  * Props for AnalysisWizard component
  */
 interface AnalysisWizardProps {
   onClose: () => void;
+  onStartMapSelection?: (mode: "map" | "search") => void;
+  onShowAreaOpsUploader?: () => void; // Add this prop
 }
 
 /**
@@ -226,10 +230,14 @@ enum WizardStep {
   UploadData = 3
 }
 
+
 /**
  * Improved AnalysisWizard component with a multi-step flow
  */
-const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
+const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ 
+  onClose, 
+  onStartMapSelection 
+}) => {
   // State for wizard progression
   const [currentStep, setCurrentStep] = useState<WizardStep>(WizardStep.AnalysisType);
   
@@ -254,6 +262,9 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
   const { flightPlan, setFlightPlan } = useFlightPlanContext();
   const { aoGeometry, setAoGeometry, setBufferDistance: setContextBufferDistance } = useAreaOfOpsContext();
   const { addChecks } = useChecklistContext();
+
+
+  const [showKmlUploader, setShowKmlUploader] = useState(false);
 
   /**
    * Toggles the analysis type selection
@@ -350,16 +361,17 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
   /**
    * Move to the next step if possible
    */
-  const goToNextStep = useCallback(() => {
-    if (
-      (currentStep === WizardStep.AnalysisType && selectedAnalysisType) ||
-      (currentStep === WizardStep.SelectAnalyses && selectedAnalyses.length > 0) ||
-      currentStep === WizardStep.ConfigureParameters
-    ) {
-      setCurrentStep((prev) => prev + 1);
-      trackEvent("wizard_next_step", { from: currentStep, to: currentStep + 1 });
-    }
-  }, [currentStep, selectedAnalysisType, selectedAnalyses.length]);
+const goToNextStep = useCallback(() => {
+  if (
+    (currentStep === WizardStep.AnalysisType && selectedAnalysisType) ||
+    (currentStep === WizardStep.SelectAnalyses && selectedAnalyses.length > 0) ||
+    currentStep === WizardStep.ConfigureParameters
+  ) {
+    // Just proceed to the next step without special handling
+    setCurrentStep((prev) => prev + 1);
+    trackEvent("wizard_next_step", { from: currentStep, to: currentStep + 1 });
+  }
+}, [currentStep, selectedAnalysisType, selectedAnalyses.length, trackEvent]);
 
   /**
    * Move to the previous step
@@ -741,22 +753,103 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ onClose }) => {
           </div>
         );
 
-      case WizardStep.UploadData:
-        return (
-          <div className="w-full">
-            {selectedAnalysisType === "flightPlan" ? (
-              <FlightPlanUploader
-                onClose={onClose}
-                onPlanUploaded={handleFlightPlanUploaded}
-              />
-            ) : (
+      case WizardStep.UploadData:            
+  return (
+    <div className="w-full">
+      {selectedAnalysisType === "flightPlan" ? (
+        <FlightPlanUploader
+          onClose={onClose}
+          onPlanUploaded={handleFlightPlanUploaded}
+        />
+      ) : (
+        <div>
+          {/* Only show the header when not showing KML uploader */}
+          {!showKmlUploader && (
+            <div className="mb-4">
+              <h3 className="text-lg font-medium text-gray-800 mb-2">Define Area of Operations</h3>
+              <p className="text-sm text-gray-600">
+                Choose a method to define your operational area
+              </p>
+            </div>
+          )}
+          
+          {/* Only show the grid when not showing KML uploader */}
+          {!showKmlUploader ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* File Upload Option */}
+              <button
+                onClick={() => {
+                  // Show the KML uploader component directly in the wizard
+                  setShowKmlUploader(true);
+                }}
+                className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-blue-200 transition-all flex flex-col items-center text-center"
+              >
+                <div className="p-3 bg-blue-100 rounded-full mb-3">
+                  <FileUp className="w-6 h-6 text-blue-600" />
+                </div>
+                <h4 className="font-medium text-gray-800 mb-1">Upload KML File</h4>
+                <p className="text-sm text-gray-600">
+                  Upload a KML file containing your operation area
+                </p>
+              </button>
+              
+              {/* Map Selection Option */}
+              <button
+                onClick={() => {
+                  if (onStartMapSelection) {
+                    trackEvent("wizard_start_map_selection", { analyses: selectedAnalyses });
+                    onStartMapSelection("map");
+                  }
+                }}
+                className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-green-200 transition-all flex flex-col items-center text-center"
+              >
+                <div className="p-3 bg-green-100 rounded-full mb-3">
+                  <MapPin className="w-6 h-6 text-green-600" />
+                </div>
+                <h4 className="font-medium text-gray-800 mb-1">Select on Map</h4>
+                <p className="text-sm text-gray-600">
+                  Click on the map to define a circular operational area
+                </p>
+              </button>
+              
+              {/* Location Search Option */}
+              <button
+                onClick={() => {
+                  if (onStartMapSelection) {
+                    trackEvent("wizard_start_map_selection", { analyses: selectedAnalyses });
+                    onStartMapSelection("search");
+                  }
+                }}
+                className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-purple-200 transition-all flex flex-col items-center text-center"
+              >
+                <div className="p-3 bg-purple-100 rounded-full mb-3">
+                  <Search className="w-6 h-6 text-purple-600" />
+                </div>
+                <h4 className="font-medium text-gray-800 mb-1">Search Location</h4>
+                <p className="text-sm text-gray-600">
+                  Search for an address or location to use as center point
+                </p>
+              </button>
+            </div>
+          ) : (
+            <div>
+              <button 
+                onClick={() => setShowKmlUploader(false)} 
+                className="mb-4 flex items-center text-sm text-blue-600 hover:text-blue-800"
+              >
+                <ChevronLeft className="w-4 h-4 mr-1" />
+                Back to selection methods
+              </button>
               <AreaOpsUploader
                 onClose={onClose}
                 onAOUploaded={handleAOUploaded}
               />
-            )}
-          </div>
-        );
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 
       default:
         return null;
