@@ -860,7 +860,7 @@ const goToNextStep = useCallback(() => {
     <div className="h-full w-full flex flex-col">
       {/* Header */}
       <div className="p-4 border-b border-gray-200 flex justify-between bg-white rounded-t-lg">
-        <h2 className="text-xl font-semibold text-gray-800">{getStepTitle}</h2>
+        <h2 className="text-lg font-semibold text-gray-800">{getStepTitle}</h2>
         <button
           onClick={onClose}
           className="p-1 rounded-full hover:bg-gray-100"

@@ -1,6 +1,6 @@
 "use client";
 import React from "react";
-import Image from "next/image"; // Import Image component
+import Image from "next/image";
 import { X } from "lucide-react";
 import { trackEventWithForm as trackEvent } from "./tracking/tracking";
 
@@ -13,7 +13,7 @@ interface WelcomeMessageProps {
 }
 
 /**
- * WelcomeMessage component displaying the Intel.Aero DroneView branding and guiding users to start
+ * WelcomeMessage component displaying the Intel.Aero branding and guiding users to start
  */
 const WelcomeMessage: React.FC<WelcomeMessageProps> = ({ onGetStarted, onClose }) => {
   /**
@@ -24,55 +24,170 @@ const WelcomeMessage: React.FC<WelcomeMessageProps> = ({ onGetStarted, onClose }
     onGetStarted();
   };
 
-
   return (
-    <div className="bg-white rounded-lg shadow-lg p-6 max-w-4xl mx-auto">
-
+    <div className="bg-white rounded-lg shadow-lg p-6 max-w-3xl mx-auto">
       {/* Header */}
       <div className="flex flex-col items-center text-center">
         <Image
           src="/Logototonobakgrnd.png"
-          alt="Intel.Aero DroneView Name Logo"
-          width={200}
-          height={40}
-          className="mb-4"
+          alt="Intel.Aero Name Logo"
+          width={180}
+          height={36}
+          className="mb-3"
           style={{ objectFit: "contain" }}
         />
-
-      <h1 className="text-3xl font-bold">
-          Welcome to DroneView
-        </h1>
-        <p className="text-xl mb-1 font-bold text-gray-700 mt-2">
+        <h1 className="text-2xl font-bold">Welcome to DroneView</h1>
+        <p className="text-lg font-bold text-gray-700 mt-1 mb-1">
           Unmatched Visibility and Communications Coverage Analysis
         </p>
       </div>
 
       {/* Body */}
-      <div className="mt-3 text-center">
-  <p className="text-md mb-2 text-gray-600 max-w-2xl mx-auto">
-    DroneView empowers drone pilots, from hobbyists to commercial operators, with clear insights into visibility and/or connectivity over any terrain.
-  </p>
-  <p className="text-md mb-2 text-gray-600 max-w-2xl mx-auto">
-    Fly worry-free, knowing you’ll maintain visual contact and reliable connectivity e.g GCS/LTE with your drone.
-  </p>
-  <p className="text-lg font-bold text-gray-800 max-w-2xl mx-auto">
-    Plan smarter, fly farther—never let complexity ground your drones.
-  </p>
-  <p className="mt-3 max-w-2xl mx-auto">
-  <em>'Your software has literally turned my planning from days into hours!'</em> - Surveying Customer
-</p>
-</div>
+      <div className="mt-2 text-center">
+        <p className="text-md mb-1 text-gray-600 max-w-xl mx-auto">
+          Intel.Aero empowers drone pilots, from hobbyists to commercial operators, with clear insights into visibility and connectivity over any terrain.
+        </p>
+        <p className="text-md mb-1 text-gray-600 max-w-xl mx-auto">
+          Fly worry-free, knowing you’ll maintain visual contact and reliable connectivity (e.g., GCS/LTE) with your drone.
+        </p>
+        <p className="mt-2 max-w-xl mx-auto mt-4 text-md">
+          <em>'Your software has literally turned my planning from days into hours!'</em> - Industry Partner
+        </p>
+      </div>
+
+      {/* Social Proof Section */}
+      <div className="mt-4">
+        <p className="text-center text-bold mb-2 text-md">
+          Powered and Compatible with
+        </p>
+        <div className="flex justify-center gap-4 flex-wrap">
+          <div className="flex flex-col items-center relative group">
+            <Image
+              src="/logos/ugcs-logo.png"
+              alt="UgCS Logo"
+              width={100}
+              height={50}
+              style={{ objectFit: "contain" }}
+              aria-label="UgCS provides versatile ground control. Intel.Aero’s integration with UgCS ensures reliable visibility and connectivity across terrains."
+            />
+            <span className="mt-1 text-gray-600 text-xs">UgCS</span>
+            <div className="absolute bottom-full mb-1 hidden group-hover:block bg-gray-800 text-white text-xs rounded-lg p-1 w-56 text-center z-10">
+              UgCS provides versatile ground control. Intel.Aero’s integration ensures reliable visibility and connectivity across terrains.
+            </div>
+          </div>
+          <div className="flex flex-col items-center relative group">
+            <Image
+              src="/logos/ardupilot-logo.webp"
+              alt="ArduPilot Logo"
+              width={100}
+              height={50}
+              style={{ objectFit: "contain" }}
+              aria-label="ArduPilot’s open-source autopilot software powers many professional drones. Intel.Aero’s compatibility with ArduPilot ensures seamless integration."
+            />
+            <span className="mt-1 text-gray-600 text-xs">ArduPilot</span>
+            <div className="absolute bottom-full mb-1 hidden group-hover:block bg-gray-800 text-white text-xs rounded-lg p-1 w-56 text-center z-10">
+              ArduPilot’s open-source autopilot powers professional drones. Intel.Aero’s compatibility ensures seamless integration.
+            </div>
+          </div>
+          <div className="flex flex-col items-center relative group">
+            <Image
+              src="/logos/dji-logo.png"
+              alt="DJI Logo"
+              width={100}
+              height={50}
+              style={{ objectFit: "contain" }}
+              aria-label="DJI, the global leader in drone manufacturing, sets the standard for drones. Intel.Aero’s support for the DJI SDK enables use with DJI’s popular hardware."
+            />
+            <span className="mt-1 text-gray-600 text-xs">DJI</span>
+            <div className="absolute bottom-full mb-1 hidden group-hover:block bg-gray-800 text-white text-xs rounded-lg p-1 w-56 text-center z-10">
+              DJI, the global leader in drones, sets the standard. Intel.Aero’s DJI SDK support enables use with popular hardware.
+            </div>
+          </div>
+          <div className="flex flex-col items-center relative group">
+            <Image
+              src="/logos/dronedeploy-logo.png"
+              alt="DroneDeploy Logo"
+              width={100}
+              height={50}
+              style={{ objectFit: "contain" }}
+              aria-label="DroneDeploy is a leading platform for drone mapping. Intel.Aero’s compatibility with DroneDeploy enhances mapping with visibility insights."
+            />
+            <span className="mt-1 text-gray-600 text-xs">DroneDeploy</span>
+            <div className="absolute bottom-full mb-1 hidden group-hover:block bg-gray-800 text-white text-xs rounded-lg p-1 w-56 text-center z-10">
+              DroneDeploy is a leading platform for drone mapping. Intel.Aero’s compatibility enhances mapping with visibility insights.
+            </div>
+          </div>
+          <div className="flex flex-col items-center relative group">
+            <Image
+              src="/logos/mavlink-logo.png.webp"
+              alt="MAVLink Logo"
+              width={100}
+              height={50}
+              style={{ objectFit: "contain" }}
+              aria-label="MAVLink, the industry-standard protocol, enables Intel.Aero to integrate with open-source autopilots for reliable waypoint navigation."
+            />
+            <span className="mt-1 text-gray-600 text-xs">MAVLink</span>
+            <div className="absolute bottom-full mb-1 hidden group-hover:block bg-gray-800 text-white text-xs rounded-lg p-1 w-56 text-center z-10">
+              MAVLink, the industry-standard protocol, enables Intel.Aero to integrate with autopilots for waypoint navigation.
+            </div>
+          </div>
+          <div className="flex flex-col items-center relative group">
+            <Image
+              src="/logos/skydio-logo.jpeg"
+              alt="Skydio Logo"
+              width={100}
+              height={50}
+              style={{ objectFit: "contain" }}
+              aria-label="Skydio, a leader in autonomous drones, is AI-driven. Intel.Aero’s support for Skydio enhances autonomous missions with connectivity analysis."
+            />
+            <span className="mt-1 text-gray-600 text-xs">Skydio</span>
+            <div className="absolute bottom-full mb-1 hidden group-hover:block bg-gray-800 text-white text-xs rounded-lg p-1 w-56 text-center z-10">
+              Skydio, a leader in autonomous drones, is AI-driven. Intel.Aero’s support enhances autonomous missions with connectivity analysis.
+            </div>
+          </div>
+          <div className="flex flex-col items-center relative group">
+            <Image
+              src="/logos/PX4-Logo-Black.png"
+              alt="PX4 Logo"
+              width={100}
+              height={50}
+              style={{ objectFit: "contain" }}
+              aria-label="PX4, a leading open-source autopilot, powers advanced drones. Intel.Aero’s PX4 compatibility ensures confident mission planning."
+            />
+            <span className="mt-1 text-gray-600 text-xs">PX4</span>
+            <div className="absolute bottom-full mb-1 hidden group-hover:block bg-gray-800 text-white text-xs rounded-lg p-1 w-56 text-center z-10">
+              PX4, a leading open-source autopilot, powers advanced drones. Intel.Aero’s compatibility ensures confident planning.
+            </div>
+          </div>
+
+          <div className="flex flex-col items-center relative group">
+            <Image
+              src="/logos/pix4d-logo.png"
+              alt="Pix4D Logo"
+              width={100}
+              height={50}
+              style={{ objectFit: "contain" }}
+              aria-label="Pix4D is renowned for photogrammetry. Intel.Aero’s compatibility with Pix4D combines visibility analysis with high-precision mapping."
+            />
+            <span className="mt-1 text-gray-600 text-xs">Pix4D</span>
+            <div className="absolute bottom-full mb-1 hidden group-hover:block bg-gray-800 text-white text-xs rounded-lg p-1 w-56 text-center z-10">
+              Pix4D is renowned for photogrammetry. Intel.Aero’s compatibility combines visibility analysis with high-precision mapping.
+            </div>
+          </div>
+          
+
+        </div>
+      </div>
 
       {/* Call to Action */}
-      <div className="mt-8 flex justify-center gap-4">
+      <div className="mt-6 flex justify-center gap-4">
         <button
           onClick={handleGetStarted}
-          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          aria-label="Get Started with DroneView"
+          className="px-4 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-d"
+          aria-label="Get Started with Intel.Aero"
         >
           Get Started
         </button>
-       
       </div>
     </div>
   );

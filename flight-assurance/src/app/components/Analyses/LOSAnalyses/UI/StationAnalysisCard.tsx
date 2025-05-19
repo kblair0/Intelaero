@@ -224,57 +224,7 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
           )}
           
           <div className="space-y-3">
-            {/* Default Elevation Offset Control - New Section */}
-            <div className="p-2 bg-blue-50 border border-blue-100 rounded-md mb-3">
-              <div className="flex justify-between items-center mb-1">
-                <label className="text-xs font-medium text-gray-700">Default {getStationDisplayName()} Height</label>
-                {!isEditingDefault ? (
-                  <div className="flex items-center">
-                    <span className="text-xs text-blue-600 mr-2">{defaultElevationOffsets[stationType]}m</span>
-                    <button
-                      onClick={() => setIsEditingDefault(true)}
-                      className="text-xs text-blue-600 hover:underline"
-                      disabled={isAnalyzing}
-                    >
-                      Edit
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.1"
-                      value={tempDefaultOffset}
-                      onChange={(e) => setTempDefaultOffset(Number(e.target.value))}
-                      className="w-16 h-6 p-1 border rounded text-sm"
-                      disabled={isAnalyzing}
-                    />
-                    <button
-                      onClick={saveDefaultElevationOffset}
-                      className="text-xs text-green-600 hover:underline"
-                      disabled={isAnalyzing}
-                    >
-                      Save
-                    </button>
-                    <button
-                      onClick={() => {
-                        setIsEditingDefault(false);
-                        setTempDefaultOffset(defaultElevationOffsets[stationType]);
-                      }}
-                      className="text-xs text-red-600 hover:underline"
-                      disabled={isAnalyzing}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                )}
-              </div>
-              <p className="text-xs text-gray-600">
-                This default height will be applied to all new {stationType === 'observer' ? 'observers' : stationType === 'gcs' ? 'GCS stations' : 'repeaters'}.
-              </p>
-            </div>
+
             
             <div>
               <div className="flex justify-between items-center mb-1">
@@ -323,7 +273,7 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
             
             <div>
               <div className="flex justify-between items-center mb-1">
-                <label className="text-xs text-gray-600">This Marker's Height (m)</label>
+                <label className="text-xs text-gray-600">This Observers' Height (m)</label>
                 <div className="flex items-center space-x-2">
                   <input
                     type="number"
@@ -345,29 +295,8 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
                     className="w-16 h-6 p-1 border rounded text-sm"
                     disabled={isAnalyzing || !selectedMarker}
                   />
-                  <button
-                    onClick={() => {
-                      if (selectedMarker) {
-                        updateMarker(selectedMarker.id, { 
-                          elevationOffset: defaultElevationOffsets[stationType] 
-                        });
-                        trackEvent("marker_elevation_reset", {
-                          stationType,
-                          markerId: selectedMarker.id,
-                          newValue: defaultElevationOffsets[stationType]
-                        });
-                      }
-                    }}
-                    className="text-xs text-blue-600 hover:underline"
-                    disabled={isAnalyzing || !selectedMarker}
-                  >
-                    Reset to Default
-                  </button>
                 </div>
               </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Height above ground for this specific marker (0-100m).
-              </p>
             </div>
           </div>
           

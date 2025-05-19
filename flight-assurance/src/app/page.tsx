@@ -42,10 +42,14 @@ import AnalysisWizard from "./components/AnalysisWizard";
 import WelcomeMessage from "./components/WelcomeMessage";
 import ChecklistComponent from "./components/ChecklistComponent";
 import 'mapbox-gl/dist/mapbox-gl.css';
+import Image from "next/image";
 import ObstacleAnalysisDashboard from "./components/Analyses/ObstacleAnalysis/TerrainAnalysisDashboard";
 import AnalysisDashboard from "./components/Analyses/LOSAnalyses/UI/VisibilityAnalysisDashboard";
 import MapSelectionPanel from "./components/AO/MapSelectionPanel";
 
+//payment and premium access
+import { PremiumProvider } from "./context/PremiumContext";
+import UpgradeModal from "./components/UI/UpgradeModal";
 
 /**
  * Main content component for the home page, managing UI layout and uploader/wizard overlays
@@ -111,36 +115,35 @@ const HomeContent = () => {
   }, [flightPlan, aoGeometry, showWizard, showUploader, showAreaOpsUploader]);
 
   // Add handlers for map selection
-/**
- * Starts map selection mode
- */
-const handleStartMapSelection = (mode: "map" | "search") => {
-  setIsMapSelectionMode(true);
-  setMapSelectionMode(mode);
-  setShowWizard(false);
-  trackEvent('map_selection_started', { mode });
-};
+  /**
+   * Starts map selection mode
+   */
+  const handleStartMapSelection = (mode: "map" | "search") => {
+    setIsMapSelectionMode(true);
+    setMapSelectionMode(mode);
+    setShowWizard(false);
+    trackEvent('map_selection_started', { mode });
+  };
 
-/**
- * Completes map selection
- */
-const handleMapSelectionComplete = () => {
-  setIsMapSelectionMode(false);
-  trackEvent('map_selection_completed', {});
-};
+  /**
+   * Completes map selection
+   */
+  const handleMapSelectionComplete = () => {
+    setIsMapSelectionMode(false);
+    trackEvent('map_selection_completed', {});
+  };
 
-/**
- * Cancels map selection
- */
-const handleMapSelectionCancel = () => {
-  setIsMapSelectionMode(false);
-  setShowWizard(true);
-  trackEvent('map_selection_cancelled', {});
-};
+  /**
+   * Cancels map selection
+   */
+  const handleMapSelectionCancel = () => {
+    setIsMapSelectionMode(false);
+    setShowWizard(true);
+    trackEvent('map_selection_cancelled', {});
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-white overflow-x-hidden">
-
       {/* Main Content Area */}
       <div className="flex-1 w-full h-full mx-2">
         <div className="flex flex-row h-full relative">
@@ -166,7 +169,17 @@ const handleMapSelectionCancel = () => {
               {(!showUploader && !showAreaOpsUploader && showWizard && !flightPlan && !aoGeometry) && (
                 <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20 p-4">
                   <div className="bg-white p-2 rounded-lg shadow-lg w-full max-w-3xl">
-                    <h3 className="text-2xl font-semibold mx-4 mt-4 mb-2">Start Your Analysis</h3>
+                    <div className="flex items-center mx-4 mt-4 gap-2">
+                        <Image
+                        src="/Logonobackgrnd.png"
+                        alt="Intel.Aero Name Logo"
+                        width={60}
+                        height={24}
+                        style={{ objectFit: "contain" }}
+                      />
+                      <h3 className="text-xl font-semibold">Start Here</h3>
+
+                    </div>
                     <AnalysisWizard 
                       onClose={() => setShowWizard(false)} 
                       onStartMapSelection={handleStartMapSelection}
@@ -203,7 +216,6 @@ const handleMapSelectionCancel = () => {
 
           {/* Right Sidebar: Checklist and Plan Verification */}
           <div className="w-80 h-full shrink-0 max-h-screen overflow-y-auto flex p-1 mr-2 flex-col gap-4 pb-4">
-
             {/* Plan Verification Section */}
             <div className="w-full z-0">
               <Card className="w-full rounded-l-xl">
@@ -304,7 +316,10 @@ export default function Home() {
                 <LOSAnalysisProvider>
                   <ObstacleAnalysisProvider>
                     <ChecklistProvider>
-                      <HomeContent />
+                      <PremiumProvider>
+                        <HomeContent />
+                        <UpgradeModal />
+                      </PremiumProvider>
                     </ChecklistProvider>
                   </ObstacleAnalysisProvider>
                 </LOSAnalysisProvider>

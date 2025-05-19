@@ -39,6 +39,10 @@ import {
   Move
 } from 'lucide-react';
 
+import PremiumButton from '../../UI/PremiumButton';
+import { usePremium, FeatureId } from '../../../context/PremiumContext';
+
+
 interface TerrainAnalysisDashboardProps {
   onClose?: () => void;
 }
@@ -235,23 +239,24 @@ const PowerlineAnalysisSection: React.FC<PowerlineAnalysisSectionProps> = ({
             </span>
           ) : hvButtonText}
         </button>
-        <button 
-          className={`
-            py-2 px-4 rounded text-white text-xs font-medium
-            ${prerequisitesMet 
-              ? 'bg-blue-500 hover:bg-blue-600' 
-              : 'bg-gray-300 cursor-not-allowed'}
-          `}
-          onClick={onLocalButtonClick}
-          disabled={!prerequisitesMet || isLocalLoading}
-        >
-          {isLocalLoading ? (
-            <span className="flex items-center justify-center">
-              <Loader className="w-4 h-4 mr-2 animate-spin" />
-              Loading...
-            </span>
-          ) : localButtonText}
-        </button>
+          <PremiumButton 
+            featureId="local_powerlines"
+            onClick={onLocalButtonClick}
+            disabled={!prerequisitesMet || isLocalLoading}
+            className={`
+              py-2 px-4 rounded text-white text-xs font-medium
+              ${prerequisitesMet 
+                ? 'bg-blue-500 hover:bg-blue-600' 
+                : 'bg-gray-300 cursor-not-allowed'}
+            `}
+          >
+            {isLocalLoading ? (
+              <span className="flex items-center justify-center">
+                <Loader className="w-4 h-4 mr-2 animate-spin" />
+                Loading...
+              </span>
+            ) : localButtonText}
+          </PremiumButton>
       </div>
     </div>
   );
