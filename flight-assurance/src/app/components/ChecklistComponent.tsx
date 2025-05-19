@@ -136,23 +136,26 @@ const ChecklistComponent: React.FC<ChecklistComponentProps> = ({
     setExpandedGroups(newExpanded);
   };
 
-  // Handle guide me action by mapping to appropriate panel and section
-  const handleGuideMe = (target: { component: string; action: string }) => {
-    const panel = actionToPanelMap[target.action];
-    let section: 'flight' | 'station' | 'merged' | 'stationLOS' | null = null;
-    if (panel === 'los') {
-      if (['analyseObserverVsTerrain', 'analyseGCSRepeaterVsTerrain', 'observerToDrone', 'antennaToDrone'].includes(target.action)) {
-        section = 'station';
-      } else if (target.action === 'droneToGround') {
-        section = 'merged';
-      } else if (target.action === 'antennaToAntenna') {
-        section = 'stationLOS';
-      }
+/**
+ * Handles the "Guide Me" action by mapping the target action to the appropriate panel and section.
+ * @param target - The target component and action from the checklist item.
+ */
+const handleGuideMe = (target: { component: string; action: string }) => {
+  const panel = actionToPanelMap[target.action];
+  let section: 'flight' | 'station' | 'merged' | 'stationLOS' | null = null;
+  if (panel === 'los') {
+    if (['analyseObserverVsTerrain', 'analyseGCSRepeaterVsTerrain'].includes(target.action)) {
+      section = 'station';
+    } else if (['observerToDrone', 'antennaToDrone', 'droneToGround'].includes(target.action)) {
+      section = 'flight'; // Direct to FlightPathAnalysisCard
+    } else if (target.action === 'antennaToAntenna') {
+      section = 'stationLOS';
     }
-    if (panel) {
-      togglePanel(panel, section);
-    }
-  };
+  }
+  if (panel) {
+    togglePanel(panel, section);
+  }
+};
 
   return (
     <Card className={`w-full rounded-lg bg-white shadow ${className}`}>
