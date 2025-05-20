@@ -8,6 +8,11 @@ import type { GridAnalysisRef } from "../../Services/GridAnalysis/GridAnalysisCo
 import { trackEventWithForm as trackEvent } from "../../../tracking/tracking";
 import { layerManager, MAP_LAYERS } from "../../../../services/LayerManager";
 
+//premium
+import { usePremium, TierLevel } from "../../../../context/PremiumContext";
+import PremiumButton from "../../../UI/PremiumButton";
+
+
 interface StationAnalysisCardProps {
   gridAnalysisRef: React.RefObject<GridAnalysisRef>;
   stationType: "gcs" | "observer" | "repeater";
@@ -34,6 +39,28 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
   } = useLOSAnalysis();
   
   const { elevationService } = useMapContext();
+
+  //premium checks
+  const { tierLevel, getParameterLimits } = usePremium();
+
+  // Get premium tier limits for parameters
+  const gridRangeLimits = getParameterLimits('gridRange');
+  const gridSizeLimits = getParameterLimits('gridSize');
+
+  // Create handlers for each slider to enforce limits
+  const handleGridSizeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = Number(e.target.value);
+    // Apply tier-based minimum limit
+    const limitedValue = Math.max(newValue, gridSizeLimits.min);
+    setGridSize(limitedValue);
+  };
+
+  const handleGridRangeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = Number(e.target.value);
+    // Apply tier-based maximum limit
+    const limitedValue = Math.min(newValue, gridRangeLimits.max);
+    setMarkerConfig(stationType, { gridRange: limitedValue });
+  };
   
   // Filter markers of the specified type
   const typeMarkers = useMemo(() => 
@@ -224,8 +251,6 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
           )}
           
           <div className="space-y-3">
-
-            
             <div>
               <div className="flex justify-between items-center mb-1">
                 <label className="block text-xs text-gray-600">Adjust Grid Range (m):</label>
@@ -234,16 +259,21 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
               <input
                 type="range"
                 min="500"
-                max="5000"
+                max={gridRangeLimits.max}
                 step="100"
                 value={markerConfigs[stationType].gridRange}
-                onChange={(e) => setMarkerConfig(stationType, { gridRange: Number(e.target.value) })}
+                onChange={handleGridRangeChange}
                 className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                 disabled={isAnalyzing}
               />
+              {tierLevel < TierLevel.COMMERCIAL && (
+                <p className="text-xs text-yellow-500 mt-1">
+                  Range limited to 500m. Upgrade for extended range.
+                </p>
+              )}
               <div className="flex justify-between text-xs text-gray-500 mt-1">
                 <span>500m</span>
-                <span>5000m</span>
+                <span>{gridRangeLimits.max}m</span>
               </div>
             </div>
             
@@ -254,16 +284,21 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
               </div>
               <input
                 type="range"
-                min="1"
+                min={gridSizeLimits.min}
                 max="100"
                 step="1"
                 value={gridSize}
-                onChange={(e) => setGridSize(Number(e.target.value))}
+                onChange={handleGridSizeChange}
                 className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                 disabled={isAnalyzing}
               />
+              {tierLevel < TierLevel.COMMERCIAL && (
+                <p className="text-xs text-yellow-500 mt-1">
+                  Minimum {gridSizeLimits.min}m grid size. Upgrade for higher resolution.
+                </p>
+              )}
               <div className="flex justify-between text-xs text-gray-500 mt-1">
-                <span>1m</span>
+                <span>{gridSizeLimits.min}m</span>
                 <span>100m</span>
               </div>
               <p className="text-xs text-gray-500 mt-1">
@@ -300,7 +335,8 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
             </div>
           </div>
           
-          <button
+          <PremiumButton
+            featureId="station_analysis"
             onClick={handleRunStationAnalysis}
             disabled={isAnalyzing || !selectedMarker}
             className={`w-full py-1 rounded mt-3 ${
@@ -310,7 +346,7 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
             }`}
           >
             {isAnalyzing ? "Analysing..." : "Run Analysis"}
-          </button>
+          </PremiumButton>
         </>
       )}
       

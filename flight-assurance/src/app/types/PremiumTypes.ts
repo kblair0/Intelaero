@@ -1,15 +1,11 @@
-/**
- * Shared premium types for use across the application
- */
-
-// Tier levels
+// PremiumTypes.ts
 export enum TierLevel {
   FREE = 0,
   COMMUNITY = 1,
   COMMERCIAL = 2
 }
 
-// Feature IDs for all premium features
+// Feature IDs with tier requirements
 export type FeatureId = 
   | 'add_gcs' 
   | 'add_observer' 
@@ -19,4 +15,8 @@ export type FeatureId =
   | 'station_los_analysis'
   | 'flight_path_analysis'
   | 'terrain_analysis'
-  | 'local_powerlines';
+  | 'local_powerlines'
+  | 'hv_powerlines'
+  | 'airspace_analysis'
+  | 'extended_grid_range'    // For ranges > 500m
+  | 'high_resolution_grid';  // For resolutions < 30m

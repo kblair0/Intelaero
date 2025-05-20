@@ -41,6 +41,7 @@ import {
 
 import PremiumButton from '../../UI/PremiumButton';
 import { usePremium, FeatureId } from '../../../context/PremiumContext';
+import { layerManager } from '../../../services/LayerManager';
 
 
 interface TerrainAnalysisDashboardProps {
@@ -60,6 +61,7 @@ interface AnalysisSectionProps {
   prerequisitesMet: boolean;
   prerequisitesMessage?: string;
   isLoading?: boolean;
+  featureId: FeatureId;
 }
 
 /**
@@ -90,7 +92,8 @@ const AnalysisSection: React.FC<AnalysisSectionProps> = ({
   checklistGroupId,
   prerequisitesMet,
   prerequisitesMessage,
-  isLoading
+  isLoading,
+  featureId
 }) => {
   const { checks } = useChecklistContext();
   
@@ -141,23 +144,46 @@ const AnalysisSection: React.FC<AnalysisSectionProps> = ({
       )}
       
       <div className="mt-3">
-        <button 
-          className={`
-            w-full py-2 px-4 rounded text-white text-xs font-medium
-            ${prerequisitesMet 
-              ? 'bg-blue-500 hover:bg-blue-600' 
-              : 'bg-gray-300 cursor-not-allowed'}
-          `}
-          onClick={onButtonClick}
-          disabled={!prerequisitesMet || isLoading}
-        >
-          {isLoading ? (
-            <span className="flex items-center justify-center">
-              <Loader className="w-4 h-4 mr-2 animate-spin" />
-              Loading...
-            </span>
-          ) : buttonText}
-        </button>
+        {featureId ? (
+          // Use PremiumButton if featureId is provided
+          <PremiumButton 
+            featureId={featureId}
+            onClick={onButtonClick}
+            disabled={!prerequisitesMet || isLoading}
+            className={`
+              w-full py-2 px-4 rounded text-white text-xs font-medium
+              ${prerequisitesMet 
+                ? 'bg-blue-500 hover:bg-blue-600' 
+                : 'bg-gray-300 cursor-not-allowed'}
+            `}
+          >
+            {isLoading ? (
+              <span className="flex items-center justify-center">
+                <Loader className="w-4 h-4 mr-2 animate-spin" />
+                Loading...
+              </span>
+            ) : buttonText}
+          </PremiumButton>
+        ) : (
+          // Use regular button if no featureId is provided (free features)
+          <button 
+            className={`
+              w-full py-2 px-4 rounded text-white text-xs font-medium
+              ${prerequisitesMet 
+                ? 'bg-blue-500 hover:bg-blue-600' 
+                : 'bg-gray-300 cursor-not-allowed'}
+            `}
+            onClick={onButtonClick}
+            disabled={!prerequisitesMet || isLoading}
+          >
+            {isLoading ? (
+              <span className="flex items-center justify-center">
+                <Loader className="w-4 h-4 mr-2 animate-spin" />
+                Loading...
+              </span>
+            ) : buttonText}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -222,23 +248,24 @@ const PowerlineAnalysisSection: React.FC<PowerlineAnalysisSectionProps> = ({
       )}
       
       <div className="mt-3 flex flex-col gap-2">
-        <button 
-          className={`
-            py-2 px-4 rounded text-white text-xs font-medium
-            ${prerequisitesMet 
-              ? 'bg-blue-500 hover:bg-blue-600' 
-              : 'bg-gray-300 cursor-not-allowed'}
-          `}
-          onClick={onHVButtonClick}
-          disabled={!prerequisitesMet || isHVLoading}
-        >
-          {isHVLoading ? (
-            <span className="flex items-center justify-center">
-              <Loader className="w-4 h-4 mr-2 animate-spin" />
-              Loading...
-            </span>
-          ) : hvButtonText}
-        </button>
+          <PremiumButton 
+            featureId="hv_powerlines"
+            className={`
+              py-2 px-4 rounded text-white text-xs font-medium
+              ${prerequisitesMet 
+                ? 'bg-blue-500 hover:bg-blue-600' 
+                : 'bg-gray-300 cursor-not-allowed'}
+            `}
+            onClick={onHVButtonClick}
+            disabled={!prerequisitesMet || isHVLoading}
+          >
+            {isHVLoading ? (
+              <span className="flex items-center justify-center">
+                <Loader className="w-4 h-4 mr-2 animate-spin" />
+                Loading...
+              </span>
+            ) : hvButtonText}
+          </PremiumButton>
           <PremiumButton 
             featureId="local_powerlines"
             onClick={onLocalButtonClick}
@@ -437,6 +464,7 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
   /**
    * Handles running terrain analysis for Area of Operations
    * Uses GridAnalysisController when available, falls back to context method
+   * With improved error handling to recover from stack overflows
    */
   const handleRunAOAnalysis = async () => {
     trackEvent("run_ao_terrain_analysis", { panel: "TerrainAnalysisDashboard.tsx" });
@@ -448,34 +476,71 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
       // Generate grid if needed (keep this part)
       let terrainGrid = aoTerrainGrid;
       if (!terrainGrid || terrainGrid.length === 0) {
-        terrainGrid = await generateTerrainGrid();
+        try {
+          terrainGrid = await generateTerrainGrid();
+          if (!terrainGrid || terrainGrid.length === 0) {
+            throw new Error("Failed to generate terrain grid");
+          }
+        } catch (gridError) {
+          console.error("Grid generation error:", gridError);
+          throw new Error("Failed to generate terrain grid. Please try again with a smaller buffer if the problem persists.");
+        }
       }
       
-      if (!terrainGrid || terrainGrid.length === 0) {
-        throw new Error("Failed to generate terrain grid");
-      }
+      console.log(`Running analysis on ${terrainGrid.length} grid cells`);
       
       // Complete checklist item
       const checkId = checks.find(c => c.group === 'terrainProfile' && c.status === 'pending')?.id;
       if (checkId) completeCheck(checkId);
       
-      // Prioritize using the GridAnalysisController if available
+      // Try using GridAnalysisController first
       if (gridAnalysisRef.current) {
         console.log("Using GridAnalysisController for terrain analysis");
-        await gridAnalysisRef.current.analyzeTerrainGrid(
-          terrainGrid,
-          {
-            referenceAltitude: 120, // Default value - could be configurable
-            onProgress: (progress) => {
-              // Handle progress updates if needed
+        try {
+          const results = await gridAnalysisRef.current.analyzeTerrainGrid(
+            terrainGrid,
+            {
+              referenceAltitude: 120, // Default value - could be configurable
+              onProgress: (progress) => {
+                // Handle progress updates if needed
+              },
+              // Add timeout to prevent hanging
+              timeout: 20000 // 20sec timeout
             }
+          );
+          
+          // Check if visualization succeeded but we still have analysis results
+          setSuccessMessage("Terrain analysis complete");
+          return true;
+        } catch (controllerError) {
+          console.error("GridAnalysisController error:", controllerError);
+          
+          // Special handling for stack overflow or timeout errors
+          if (controllerError instanceof Error && 
+              (controllerError.message.includes("Maximum call stack size") || 
+              controllerError.message.includes("timeout"))) {
+            
+            // Visualization might have failed but analysis could still succeed
+            console.log("Attempting to continue with results despite visualization error");
+            
+            // Check if we got analysis results despite the visualization error
+            if (terrainAnalysisResult) {
+              setSuccessMessage("Analysis complete, but visualization limited due to area size");
+              return true;
+            }
+            
+            // If we have no results, try the context method as fallback
+            console.log("Falling back to context method after controller visualization failure");
+          } else {
+            // For other errors, just rethrow
+            throw controllerError;
           }
-        );
-        setSuccessMessage("Terrain analysis complete");
-        return true;
-      } else {
-        console.log("GridAnalysisController not available, using context method");
-        // Fall back to the AreaOfOpsContext method if controller not available
+        }
+      }
+      
+      // Fall back to the AreaOfOpsContext method
+      console.log("Using context method for terrain analysis");
+      try {
         const result = await analyzeTerrainElevation(120);
         
         // Set appropriate success message
@@ -489,14 +554,66 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
         }
         
         return true;
+      } catch (contextError) {
+        console.error("Context method error:", contextError);
+        
+        // Special handling for visualization errors
+        if (contextError instanceof Error && contextError.message.includes("Maximum call stack size")) {
+          // We might still have useful information in terrainAnalysisResult
+          if (terrainAnalysisResult) {
+            setSuccessMessage("Analysis complete, but visualization limited due to area size");
+            return true;
+          }
+        }
+        
+        throw contextError;
       }
     } catch (error) {
-      setLocalError(error instanceof Error ? error.message : "Unknown error");
+      // Improved error handling with more helpful messages
+      let errorMessage = "Unknown error during analysis";
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        
+        // Provide more helpful messages for common errors
+        if (error.message.includes("Maximum call stack size exceeded")) {
+          errorMessage = "Visualization failed due to area size, but analysis may have succeeded. Click 'Reset and Try Again' to retry the visualization.";
+        } else if (error.message.includes("timeout")) {
+          errorMessage = "Analysis timed out. The area may be too large to process. Try with a smaller buffer.";
+        }
+      }
+      
+      setLocalError(errorMessage);
       return false;
     } finally {
       setLocalAnalyzing(false);
     }
   };
+
+      /**
+   * Reset analysis state to recover from errors
+   */
+  const handleResetAnalysis = () => {
+    trackEvent("reset_terrain_analysis", { panel: "TerrainAnalysisDashboard.tsx" });
+    setLocalError(null);
+    setSuccessMessage(null);
+    
+    // Reset local state
+    setLocalAnalyzing(false);
+    setIsLoadingHV(false);
+    setIsLoadingDBYD(false);
+    setIsLoadingAirspace(false);
+    
+    // Remove terrain grid visualization but keep the data
+    layerManager.removeLayer(layerManager.MAP_LAYERS.AOTERRAIN_GRID);
+    
+    console.log("Terrain analysis reset, ready to try again");
+    
+    // Optional: Notify user
+    setSuccessMessage("Analysis reset. You can now try again.");
+    
+  };
+
 
   /**
    * Handles toggling HV powerlines layer
@@ -607,6 +724,16 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
           {localError}
         </div>
       )}
+
+      {localError && (
+        <button 
+          className="w-full py-2 px-4 mb-4 rounded text-white text-xs font-medium bg-blue-500 hover:bg-blue-600"
+          onClick={handleResetAnalysis}
+          disabled={isAnalyzing}
+        >
+          Reset and Try Again
+        </button>
+      )}
       
       {successMessage && (
         <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700 mb-4">
@@ -637,6 +764,7 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
           prerequisitesMet={!!aoGeometry}
           prerequisitesMessage={!aoGeometry ? "Please define an operating area first" : undefined}
           isLoading={isAnalyzing}
+          featureId="terrain_analysis"
         />
         
         {/* Powerline Analysis Section with Two Buttons */}
@@ -666,6 +794,7 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
           checklistGroupId="airspace"
           prerequisitesMet={true}
           isLoading={isLoadingAirspace}
+          featureId="airspace_analysis"
         />
       </div>
       

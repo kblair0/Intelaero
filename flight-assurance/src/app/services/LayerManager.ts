@@ -305,163 +305,239 @@ class LayerManager {
     }
   }
 
-/**
- * Adds or updates an AO terrain grid to the map
- */
-addAreaOfOperationsTerrain(gridCells: GridCell[]): boolean {
-  if (!this.ensureMap()) return false;
-  
-  try {
-    // Remove existing terrain grid if present
-    this.removeLayer(MAP_LAYERS.AOTERRAIN_GRID);
+  /**
+   * Adds or updates an AO terrain grid to the map with sampling for visualization
+   * while preserving complete dataset for analysis
+   */
+  addAreaOfOperationsTerrain(gridCells: GridCell[]): boolean {
+    if (!this.ensureMap()) return false;
     
-    if (!gridCells || gridCells.length === 0) {
-      console.warn("Empty grid cells provided to addAreaOfOperationsTerrain");
-      return false;
-    }
-    
-    // Calculate elevation range for color scaling
-    const elevations = gridCells.map(cell => cell.properties.elevation);
-    const minElevation = Math.min(...elevations);
-    const maxElevation = Math.max(...elevations);
-    
-    // Convert grid cells to GeoJSON FeatureCollection
-    const features = gridCells.map(cell => ({
-      type: "Feature" as const,
-      geometry: cell.geometry,
-      properties: cell.properties
-    }));
-    
-    const gridFeatureCollection = {
-      type: "FeatureCollection" as const,
-      features
-    };
-    
-    // First add the source safely
-    const sourceId = MAP_LAYERS.AOTERRAIN_GRID;
-    
-    if (this.map!.getSource(sourceId)) {
-      try {
-        (this.map!.getSource(sourceId) as mapboxgl.GeoJSONSource).setData(gridFeatureCollection);
-      } catch (sourceError) {
-        console.warn("Error updating source, removing and recreating:", sourceError);
-        this.map!.removeSource(sourceId);
+    try {
+      // Remove existing terrain grid if present
+      this.removeLayer(MAP_LAYERS.AOTERRAIN_GRID);
+      
+      if (!gridCells || gridCells.length === 0) {
+        console.warn("Empty grid cells provided to addAreaOfOperationsTerrain");
+        return false;
+      }
+      
+      console.log(`Processing ${gridCells.length} terrain grid cells for visualization`);
+      
+      // RENDERING OPTIMIZATION: Use a sampling approach for visualization only
+      // This doesn't affect analysis, only how many cells we display on the map
+      if (gridCells.length > 20000) {
+        console.warn(`Rendering a very large number of cells (${gridCells.length}). Consider reducing buffer size if performance issues occur.`);
+      }
+      // Use all cells for visualization
+      const visualizationCells = gridCells;
+      
+      // Calculate elevation range for color scaling using ALL cells for accurate representation
+      let minElevation = Infinity;
+      let maxElevation = -Infinity;
+      
+      for (const cell of gridCells) {
+        const elevation = cell.properties.elevation;
+        if (elevation < minElevation) minElevation = elevation;
+        if (elevation > maxElevation) maxElevation = elevation;
+      }
+      
+      // Convert the SAMPLED grid cells to GeoJSON for visualization
+      const features = visualizationCells.map(cell => ({
+        type: "Feature" as const,
+        geometry: cell.geometry,
+        properties: {
+          elevation: cell.properties.elevation
+        }
+      }));
+      
+      const gridFeatureCollection = {
+        type: "FeatureCollection" as const,
+        features
+      };
+      
+      // First add the source safely
+      const sourceId = MAP_LAYERS.AOTERRAIN_GRID;
+      
+      if (this.map!.getSource(sourceId)) {
+        try {
+          (this.map!.getSource(sourceId) as mapboxgl.GeoJSONSource).setData(gridFeatureCollection);
+        } catch (sourceError) {
+          console.warn("Error updating source, removing and recreating:", sourceError);
+          this.map!.removeSource(sourceId);
+          this.map!.addSource(sourceId, {
+            type: "geojson",
+            data: gridFeatureCollection
+          });
+        }
+      } else {
         this.map!.addSource(sourceId, {
           type: "geojson",
           data: gridFeatureCollection
         });
       }
-    } else {
-      this.map!.addSource(sourceId, {
-        type: "geojson",
-        data: gridFeatureCollection
-      });
-    }
-    
-    // Then add the layer
-    try {
-      if (this.map!.getLayer(sourceId)) {
-        this.map!.removeLayer(sourceId);
-      }
       
-      this.map!.addLayer({
-        id: sourceId,
-        type: "fill",
-        source: sourceId,
-        layout: { visibility: "visible" },
-        paint: {
-          "fill-color": [
+      // Then add the layer with ENHANCED COLOR MAPPING
+      try {
+        if (this.map!.getLayer(sourceId)) {
+          this.map!.removeLayer(sourceId);
+        }
+        
+        // Determine the best color scale approach based on elevation range
+        const elevationRange = maxElevation - minElevation;
+        const medianElevation = this.calculateMedianElevation(gridCells);
+        const useEnhancedScale = elevationRange > 300; // For areas with large elevation differences
+        
+        // Create color expression based on distribution
+        let colorExpression;
+        if (useEnhancedScale) {
+          // Enhanced scale for large elevation differences
+          // This uses quantiles rather than linear interpolation
+          const quartile1 = minElevation + (medianElevation - minElevation) * 0.5;
+          const quartile3 = medianElevation + (maxElevation - medianElevation) * 0.5;
+          const highPoint = medianElevation + (maxElevation - medianElevation) * 0.8;
+          
+          colorExpression = [
             "interpolate",
             ["linear"],
             ["get", "elevation"],
-            minElevation, "#0000FF", // Lowest elevation -> Blue
-            minElevation + (maxElevation - minElevation) * 0.33, "#00FF00", // 33% -> Green
-            minElevation + (maxElevation - minElevation) * 0.66, "#FFFF00", // 66% -> Yellow
-            maxElevation, "#FF0000" // Highest elevation -> Red
-          ],
-          "fill-opacity": 0.5
+            minElevation, "#0000FF",     // Lowest elevation (Blue)
+            quartile1, "#00AAFF",        // 1st quartile (Light Blue)
+            medianElevation, "#00FF00",  // Median elevation (Green)
+            quartile3, "#FFFF00",        // 3rd quartile (Yellow)
+            highPoint, "#FF0000",        // High elevation (Red)
+            maxElevation, "#800080"      // Highest elevation (Purple)
+          ];
+        } else {
+          // Standard linear scale for areas with moderate elevation change
+          colorExpression = [
+            "interpolate",
+            ["linear"],
+            ["get", "elevation"],
+            minElevation, "#0000FF",                                             // Lowest (Blue)
+            minElevation + (maxElevation - minElevation) * 0.2, "#00AAFF",       // 20% (Light Blue)
+            minElevation + (maxElevation - minElevation) * 0.4, "#00FF00",       // 40% (Green)
+            minElevation + (maxElevation - minElevation) * 0.6, "#FFFF00",       // 60% (Yellow)
+            minElevation + (maxElevation - minElevation) * 0.8, "#FF0000",       // 80% (Red)
+            maxElevation, "#800080"                                              // 100% (Purple)
+          ];
         }
-      });
-      
-      // Notify listeners
-      this.notifyListeners('layerAdded', sourceId, true);
-      
-      return true;
-    } catch (layerError) {
-      console.error("Error adding terrain grid layer:", layerError);
-      return false;
-    }
-  } catch (error) {
-    console.error("Error adding AO terrain grid:", error);
-    return false;
-  }
-}
+        
+        // Add the layer with improved color mapping
+        this.map!.addLayer({
+          id: sourceId,
+          type: "fill",
+          source: sourceId,
+          layout: { visibility: "visible" },
+          paint: {
+            "fill-color": colorExpression,
+            "fill-opacity": 0.7,  // Increased opacity for better visibility
+            "fill-outline-color": [  // Add outline color for better cell connection
+              "interpolate",
+              ["linear"],
+              ["get", "elevation"],
+              minElevation, "#0000AA",  // Dark blue for low elevations
+              maxElevation, "#550055"   // Dark purple for high elevations
+            ]
+          }
+        }); 
 
-/**
- * Fit the map to AO bounds
- */
-fitToAreaOfOperations(geometry: GeoJSON.FeatureCollection): boolean {
-  if (!this.ensureMap()) return false;
-  
-  try {
-    if (!geometry || !geometry.features || geometry.features.length === 0) {
-      console.warn("Empty geometry provided to fitToAreaOfOperations");
+        
+        // Notify listeners
+        this.notifyListeners('layerAdded', sourceId, true);
+        
+        return true;
+      } catch (layerError) {
+        console.error("Error adding terrain grid layer:", layerError);
+        return false;
+      }
+    } catch (error) {
+      console.error("Error adding AO terrain grid:", error);
       return false;
     }
+  }
+
+    /**
+   * Helper method to calculate median elevation from grid cells
+   * @private
+   */
+  private calculateMedianElevation(cells: GridCell[]): number {
+    // Extract all elevations and sort them
+    const elevations = cells.map(cell => cell.properties.elevation).sort((a, b) => a - b);
     
-    // Calculate bounds manually without turf as a fallback
-    let minLng = Infinity;
-    let minLat = Infinity;
-    let maxLng = -Infinity;
-    let maxLat = -Infinity;
+    // Get the middle value
+    const mid = Math.floor(elevations.length / 2);
+    if (elevations.length % 2 === 0) {
+      // Even number of elements - take the average of the two middle values
+      return (elevations[mid - 1] + elevations[mid]) / 2;
+    } else {
+      // Odd number of elements - take the middle value
+      return elevations[mid];
+    }
+  }
+
+  /**
+   * Fit the map to AO bounds
+   */
+  fitToAreaOfOperations(geometry: GeoJSON.FeatureCollection): boolean {
+    if (!this.ensureMap()) return false;
     
     try {
-      // First try with turf
-      const bbox = turf.bbox(geometry);
-      this.map!.fitBounds(
-        [
-          [bbox[0], bbox[1]],
-          [bbox[2], bbox[3]]
-        ],
-        { padding: 50, duration: 200 }
-      );
-      return true;
-    } catch (turfError) {
-      console.warn("Turf bbox calculation failed, using manual calculation:", turfError);
+      if (!geometry || !geometry.features || geometry.features.length === 0) {
+        console.warn("Empty geometry provided to fitToAreaOfOperations");
+        return false;
+      }
       
-      // Manual calculation as fallback
-      geometry.features.forEach(feature => {
-        if (feature.geometry.type === 'Polygon') {
-          const coordinates = feature.geometry.coordinates[0];
-          coordinates.forEach(coord => {
-            minLng = Math.min(minLng, coord[0]);
-            minLat = Math.min(minLat, coord[1]);
-            maxLng = Math.max(maxLng, coord[0]);
-            maxLat = Math.max(maxLat, coord[1]);
-          });
-        }
-      });
+      // Calculate bounds manually without turf as a fallback
+      let minLng = Infinity;
+      let minLat = Infinity;
+      let maxLng = -Infinity;
+      let maxLat = -Infinity;
       
-      if (minLng !== Infinity && minLat !== Infinity && maxLng !== -Infinity && maxLat !== -Infinity) {
+      try {
+        // First try with turf
+        const bbox = turf.bbox(geometry);
         this.map!.fitBounds(
           [
-            [minLng, minLat],
-            [maxLng, maxLat]
+            [bbox[0], bbox[1]],
+            [bbox[2], bbox[3]]
           ],
           { padding: 50, duration: 200 }
         );
         return true;
+      } catch (turfError) {
+        console.warn("Turf bbox calculation failed, using manual calculation:", turfError);
+        
+        // Manual calculation as fallback
+        geometry.features.forEach(feature => {
+          if (feature.geometry.type === 'Polygon') {
+            const coordinates = feature.geometry.coordinates[0];
+            coordinates.forEach(coord => {
+              minLng = Math.min(minLng, coord[0]);
+              minLat = Math.min(minLat, coord[1]);
+              maxLng = Math.max(maxLng, coord[0]);
+              maxLat = Math.max(maxLat, coord[1]);
+            });
+          }
+        });
+        
+        if (minLng !== Infinity && minLat !== Infinity && maxLng !== -Infinity && maxLat !== -Infinity) {
+          this.map!.fitBounds(
+            [
+              [minLng, minLat],
+              [maxLng, maxLat]
+            ],
+            { padding: 50, duration: 200 }
+          );
+          return true;
+        }
       }
+      
+      return false;
+    } catch (error) {
+      console.error("Error fitting to AO bounds:", error);
+      return false;
     }
-    
-    return false;
-  } catch (error) {
-    console.error("Error fitting to AO bounds:", error);
-    return false;
   }
-}
-
-
 
   /**
    * Reset all layers

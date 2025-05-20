@@ -11,7 +11,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode, useCa
 // Import shared types
 import { TierLevel, FeatureId } from '../types/PremiumTypes';
 // Import from premiumConfig.ts
-import { FEATURE_TIER_REQUIREMENTS, TIER_CONFIG } from '../utils/premiumConfig';
+import { FEATURE_TIER_REQUIREMENTS, TIER_CONFIG, PARAMETER_LIMITS } from '../utils/premiumConfig';
 
 // Access code validation response
 interface CodeValidationResponse {
@@ -39,15 +39,19 @@ interface PremiumContextValue extends PremiumContextState {
   closeModal: () => void;
   validateAccessCode: (code: string) => Promise<boolean>;
   getTierName: (level?: TierLevel) => string;
-  getFeatureRequiredTier: (featureId: FeatureId) => TierLevel;
+  getRequiredTierForFeature: (featureId: FeatureId, params?: any) => TierLevel;
   getRemainingDays: () => number | null;
+  getParameterLimits: (
+    parameterType: 'gridRange' | 'gridSize' | 'stationCount'
+  ) => { min: number; max: number };
 }
 
 // Context creation
 const PremiumContext = createContext<PremiumContextValue | undefined>(undefined);
 
 // Re-export TierLevel and FeatureId for backward compatibility
-export { TierLevel, FeatureId };
+export { TierLevel };
+export type { FeatureId };
 
 // Storage keys
 const STORAGE_KEYS = {
@@ -117,28 +121,63 @@ export const PremiumProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   // Check if user can use a specific feature - Using FEATURE_TIER_REQUIREMENTS from premiumConfig
   const canUseFeature = useCallback((featureId: FeatureId, params?: any): boolean => {
-    // Get the required tier level for this feature
-    const requiredTierLevel = FEATURE_TIER_REQUIREMENTS[featureId] || TierLevel.COMMERCIAL;
+    // Check if the feature ID is marker-related
+    const isMarkerFeature = featureId.startsWith('add_');
     
-    // Check if current tier is greater than or equal to required tier
-    if (state.tierLevel < requiredTierLevel) {
-      return false;
-    }
-    
-    // Special case for marker limits
-    if (featureId === 'add_gcs' || featureId === 'add_observer' || featureId === 'add_repeater') {
+    if (isMarkerFeature) {
       const markerType = featureId.replace('add_', '') as 'gcs' | 'observer' | 'repeater';
       const currentCount = params?.currentCount || 0;
-      return currentCount < TIER_CONFIG[state.tierLevel].maxMarkers[markerType];
+      
+      // Check marker limits for current tier
+      const maxAllowed = TIER_CONFIG[state.tierLevel].maxMarkers[markerType];
+      
+      // If no markers of this type are allowed, or we've reached the limit
+      if (maxAllowed === 0 || currentCount >= maxAllowed) {
+        return false;
+      }
+      
+      return true;
+    } else {
+      // For non-marker features, check the feature map directly
+      const availableInTier = TIER_CONFIG[state.tierLevel].features[featureId];
+      return !!availableInTier;
     }
-    
-    // If tier level is sufficient, allow access to the feature
-    return true;
   }, [state.tierLevel]);
 
-  // Check if user can add another marker of specified type
+  // Unified function to determine required tier level
+  const getRequiredTierForFeature = useCallback((featureId: FeatureId, params?: any): TierLevel => {
+    // For marker features with current count
+    if (featureId.startsWith('add_') && params?.currentCount !== undefined) {
+      const markerType = featureId.replace('add_', '') as 'gcs' | 'observer' | 'repeater';
+      const currentCount = params.currentCount;
+      
+      // Find the lowest tier that allows this many markers of this type
+      for (let tier = TierLevel.FREE; tier <= TierLevel.COMMERCIAL; tier++) {
+        const maxAllowed = TIER_CONFIG[tier].maxMarkers[markerType];
+        if (maxAllowed > currentCount) {
+          return tier;
+        }
+      }
+      
+      // Default to commercial if no tier is sufficient
+      return TierLevel.COMMERCIAL;
+    }
+    
+    // For basic feature access, return from the requirements map
+    return FEATURE_TIER_REQUIREMENTS[featureId] || TierLevel.COMMERCIAL;
+  }, []);
+
+  // Check if user can add a marker of a specific type
   const canAddMarker = useCallback((markerType: 'gcs' | 'observer' | 'repeater', currentCount: number): boolean => {
-    return currentCount < TIER_CONFIG[state.tierLevel].maxMarkers[markerType];
+    const maxAllowed = TIER_CONFIG[state.tierLevel].maxMarkers[markerType];
+    return currentCount < maxAllowed;
+  }, [state.tierLevel]);
+
+  // Get parameter limits for current tier
+  const getParameterLimits = useCallback((
+    parameterType: 'gridRange' | 'gridSize' | 'stationCount'
+  ): { min: number; max: number } => {
+    return TIER_CONFIG[state.tierLevel].parameters[parameterType];
   }, [state.tierLevel]);
 
   // Open upgrade modal when attempting to use premium feature
@@ -226,14 +265,10 @@ export const PremiumProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   // Get tier name
   const getTierName = useCallback((level?: TierLevel): string => {
-    const tierLevel = level !== undefined ? level : state.tierLevel;
-    return TIER_CONFIG[tierLevel].name;
+    // If a specific level is provided, use that; otherwise use the current user's tier
+    const tierToDisplay = level !== undefined ? level : state.tierLevel;
+    return TIER_CONFIG[tierToDisplay].name;
   }, [state.tierLevel]);
-
-  // Get required tier for a feature - using the imported FEATURE_TIER_REQUIREMENTS
-  const getFeatureRequiredTier = useCallback((featureId: FeatureId): TierLevel => {
-    return FEATURE_TIER_REQUIREMENTS[featureId] || TierLevel.FREE;
-  }, []);
 
   // Get remaining days for subscription
   const getRemainingDays = useCallback((): number | null => {
@@ -254,8 +289,9 @@ export const PremiumProvider: React.FC<{ children: ReactNode }> = ({ children })
     closeModal,
     validateAccessCode,
     getTierName,
-    getFeatureRequiredTier,
-    getRemainingDays
+    getRequiredTierForFeature,
+    getRemainingDays,
+    getParameterLimits
   };
 
   return (
@@ -272,4 +308,12 @@ export const usePremium = (): PremiumContextValue => {
     throw new Error('usePremium must be used within a PremiumProvider');
   }
   return context;
+};
+
+// Helper function for external use
+export const getParameterLimits = (
+  parameterType: 'gridRange' | 'gridSize' | 'stationCount',
+  userTier: TierLevel
+): { min: number; max: number } => {
+  return PARAMETER_LIMITS[userTier][parameterType];
 };

@@ -17,6 +17,10 @@ import type { GridAnalysisRef } from "../../Services/GridAnalysis/GridAnalysisCo
 import { trackEventWithForm as trackEvent } from "../../../tracking/tracking";
 import { layerManager, MAP_LAYERS } from "../../../../services/LayerManager";
 import { useMarkersContext } from "../../../../context/MarkerContext";
+// Import premium context for feature access
+import { usePremium, TierLevel } from "../../../../context/PremiumContext";
+import PremiumButton from "../../../UI/PremiumButton";
+
 
 interface FlightPathAnalysisCardProps {
   gridAnalysisRef: React.RefObject<GridAnalysisRef>;
@@ -49,6 +53,27 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
   
   // Keep track of which markers to include in visibility analysis
   const [selectedMarkerIds, setSelectedMarkerIds] = useState<string[]>([]);
+
+  //Premium Implementation
+  const { tierLevel, getParameterLimits } = usePremium();
+  // Get premium tier limits for parameters
+  const gridRangeLimits = getParameterLimits('gridRange');
+  const gridSizeLimits = getParameterLimits('gridSize');
+
+  // Create handlers for each slider to enforce limits
+  const handleGridSizeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = Number(e.target.value);
+    // Apply tier-based minimum limit
+    const limitedValue = Math.max(newValue, gridSizeLimits.min);
+    setGridSize(limitedValue);
+  };
+
+  const handleGridRangeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = Number(e.target.value);
+    // Apply tier-based maximum limit
+    const limitedValue = Math.min(newValue, gridRangeLimits.max);
+    setElosGridRange(limitedValue);
+  };
 
   useEffect(() => {
     // Update toggle state when new results arrive
@@ -282,13 +307,18 @@ const toggleVisibilityLayerVisibility = useCallback(() => {
           <input
             type="range"
             min="500"
-            max="5000"
+            max={gridRangeLimits.max}
             step="100"
             value={elosGridRange}
-            onChange={(e) => setElosGridRange(Number(e.target.value))}
+            onChange={handleGridRangeChange}
             className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
             disabled={isAnalyzing}
           />
+          {tierLevel < TierLevel.COMMERCIAL && (
+            <p className="text-xs text-yellow-500 mt-1">
+              Range limited to 500m. Upgrade for extended range.
+            </p>
+          )}
           <p className="text-xs text-gray-500">
             Only considers terrain within this distance of the flight path
           </p>
@@ -303,14 +333,19 @@ const toggleVisibilityLayerVisibility = useCallback(() => {
           </div>
           <input
             type="range"
-            min="1"
+            min={gridSizeLimits.min}
             max="100"
             step="1"
             value={gridSize}
-            onChange={(e) => setGridSize(Number(e.target.value))}
+            onChange={handleGridSizeChange}
             className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
             disabled={isAnalyzing}
           />
+          {tierLevel < TierLevel.COMMERCIAL && (
+            <p className="text-xs text-yellow-500 mt-1">
+              Minimum {gridSizeLimits.min}m grid size. Upgrade for higher resolution.
+            </p>
+          )}
           <p className="text-xs text-gray-500">The lower the number, the higher the fidelity</p>
         </div>
 
@@ -336,7 +371,8 @@ const toggleVisibilityLayerVisibility = useCallback(() => {
         </p>
       </div>
         
-        <button
+        <PremiumButton
+          featureId="flight_path_analysis"
           onClick={handleRunGridAnalysis}
           disabled={isAnalyzing}
           className={`w-full py-1 rounded ${
@@ -349,7 +385,7 @@ const toggleVisibilityLayerVisibility = useCallback(() => {
               ? "Analysing..."
               : "Run Grid Analysis"
           }
-        </button>
+        </PremiumButton>
       </div>
 
       {/* Flight Path Visibility Section */}
@@ -398,8 +434,9 @@ const toggleVisibilityLayerVisibility = useCallback(() => {
             Place at least one station (GCS, Observer, or Repeater) on the map to perform this analysis.
           </div>
         )}
-        
-        <button
+
+        <PremiumButton
+          featureId="flight_path_analysis" // Using the same feature ID since it's part of the same analysis
           onClick={handleRunVisibilityAnalysis}
           disabled={isAnalyzing || selectedMarkers.length === 0}
           className={`w-full py-1 rounded ${
@@ -414,7 +451,7 @@ const toggleVisibilityLayerVisibility = useCallback(() => {
               ? "Analysing..."
               : "Run Path Visibility Analysis"
           }
-        </button>
+        </PremiumButton>      
       </div>
       
       {/* Analysis in Progress */}

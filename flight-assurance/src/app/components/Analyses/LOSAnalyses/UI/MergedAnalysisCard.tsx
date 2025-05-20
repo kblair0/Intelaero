@@ -10,6 +10,10 @@ import type { GridAnalysisRef } from "../../Services/GridAnalysis/GridAnalysisCo
 import { trackEventWithForm as trackEvent } from "../../../tracking/tracking";
 import { LocationData } from "../../../../types/LocationData";
 import { AnalysisResults } from "../../../../context/LOSAnalysisContext";
+//premium
+import { usePremium, TierLevel } from "../../../../context/PremiumContext";
+import PremiumButton from "../../../UI/PremiumButton";
+
 
 interface MergedAnalysisCardProps {
   gridAnalysisRef: React.RefObject<GridAnalysisRef>;
@@ -28,6 +32,15 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
   const { markers, defaultElevationOffsets } = useMarkersContext();
   const { markerConfigs, isAnalyzing, setError, setIsAnalyzing, results, setResults } = useLOSAnalysis();
   const { elevationService } = useMapContext();
+
+  //premium checks
+  const { tierLevel, getParameterLimits } = usePremium();
+
+  // Get the station count limits
+  const stationCountLimits = getParameterLimits('stationCount');
+
+  // Add a helper to check if the user is allowed to have multiple stations
+  const isLimitedByTier = tierLevel < TierLevel.COMMERCIAL;
 
   // Create available stations from all markers - using useMemo to prevent recreation on every render
   const availableStations = useMemo(() => markers.map(marker => ({
@@ -89,6 +102,8 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
     computedStations.filter(station => selectedMarkerIds.includes(station.id)),
     [computedStations, selectedMarkerIds]
   );
+    // Determine if user can perform merged analysis (premium) (needs at least 2 stations)
+  const canRunMergedAnalysis = tierLevel >= TierLevel.COMMERCIAL && selectedStations.length >= 2;
 
   const handleRunMergedAnalysis = async () => {
     if (!gridAnalysisRef.current) {
@@ -188,17 +203,23 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
       <p className="text-xs mb-2">
         This analysis combines visibility from selected stations.
       </p>
-      {availableStations.length < 2 ? (
-        <div className="p-2 bg-yellow-100 border border-yellow-400 text-xs text-yellow-700 rounded">
-          ⚠️ Please place at least two markers (GCS, Observer, or Repeater) on the map to enable merged analysis.
-          {availableStations.length === 1 && (
-            <p className="mt-1">
-              Currently placed: {getStationDisplayName(availableStations[0])}
-            </p>
+        {availableStations.length < 2 ? (
+          <div className="p-2 bg-yellow-100 border border-yellow-400 text-xs text-yellow-700 rounded">
+            ⚠️ Please place at least two markers (GCS, Observer, or Repeater) on the map to enable merged analysis.
+            {availableStations.length === 1 && (
+              <p className="mt-1">
+                Currently placed: {getStationDisplayName(availableStations[0])}
+              </p>
+            )}
+          </div>
+        ) : (
+          <>
+          {/* If limited by tier, show warning */}
+          {isLimitedByTier && (
+            <div className="p-2 mb-3 bg-yellow-100 border border-yellow-400 text-xs text-yellow-700 rounded">
+              ⚠️ Merged analysis requires the Commercial tier. With your current tier, you can only use {stationCountLimits.max} station.
+            </div>
           )}
-        </div>
-      ) : (
-        <>
           <div className="mb-3 border rounded p-2 bg-gray-50">
             <p className="text-xs font-medium mb-1">Select stations to include:</p>
             {availableStations.map((station) => (
@@ -231,7 +252,8 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
               </p>
             ))}
           </div>
-          <button
+          <PremiumButton
+            featureId="merged_analysis"
             onClick={handleRunMergedAnalysis}
             disabled={isAnalyzing || selectedStations.length < 2}
             className={`w-full py-1 rounded mt-3 ${
@@ -241,7 +263,7 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
             }`}
           >
             {isAnalyzing ? "Analysing..." : "Run Merged Analysis"}
-          </button>
+          </PremiumButton>
         </>
       )}
       {results && results.stats && selectedStations.length >= 2 && (

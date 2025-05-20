@@ -13,12 +13,14 @@
  * - LOSAnalysisContext (analysis configuration)
  */
 // components/Map/Controls/MarkerControls.tsx
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { useMarkers } from './Hooks/useMarkers';
 import { useMapContext } from '../../context/mapcontext';
 import { useLOSAnalysis } from '../../context/LOSAnalysisContext';
 import { GridAnalysisRef } from '../Analyses/Services/GridAnalysis/GridAnalysisController';
 import { trackEventWithForm as trackEvent } from '../tracking/tracking';
+import PremiumButton from '../../components/UI/PremiumButton';
+import { Wifi, Radio, Eye, XCircle } from 'lucide-react'; // Using appropriate icons
 
 const MarkerControls: React.FC = () => {
   const { map, terrainLoaded } = useMapContext();
@@ -32,7 +34,8 @@ const MarkerControls: React.FC = () => {
     addGroundStation,
     addObserver,
     addRepeater,
-    removeAllAnalysisLayers
+    removeAllAnalysisLayers,
+    error // This will be displayed to the user
   } = useMarkers({ 
     map, 
     terrainLoaded: terrainLoaded 
@@ -132,33 +135,71 @@ const MarkerControls: React.FC = () => {
     }
   };
 
+  // Get marker counts for permission parameters
+  const gcsCount = markers.filter(m => m.type === 'gcs').length;
+  const observerCount = markers.filter(m => m.type === 'observer').length;
+  const repeaterCount = markers.filter(m => m.type === 'repeater').length;
+
   return (
-    <div className="absolute top-4 right-4 z-20 flex flex-col space-y-2">
-      <button 
-        onClick={handleAddGroundStation} 
-        className="map-button ground-station-icon"
-      >
-        Add Ground Station 📡
-      </button>
-      <button 
-        onClick={handleAddObserver}
-        className="map-button observer-icon"
-      >
-        Add Observer 🔭
-      </button>
-      <button 
-        onClick={handleAddRepeater}
-        className="map-button repeater-icon"
-      >
-        Add Repeater ⚡️
-      </button>
-      <button 
-        onClick={handleResetAnalyses}
-        className="map-button"
-      >
-        Clear All Visibility Analyses 🚫
-      </button>
-    </div>
+    <>
+      {/* Error notification display */}
+      {error && (
+        <div className="absolute top-20 right-4 z-30 bg-red-50 border border-red-200 text-red-700 
+                      px-4 py-2 rounded-md shadow-md max-w-xs animate-fadeIn">
+          <div className="flex items-start">
+            <XCircle size={16} className="mt-0.5 mr-2 flex-shrink-0" />
+            <p className="text-sm">{error}</p>
+          </div>
+        </div>
+      )}
+      
+      <div className="absolute top-4 right-4 z-20 flex flex-col space-y-2">
+        {/* Ground Station Button */}
+        <PremiumButton 
+          featureId="add_gcs"
+          onClick={handleAddGroundStation} 
+          className="map-button ground-station-icon flex items-center justify-center"
+          permissionParams={{ currentCount: gcsCount }}
+          showIndicator={true}
+        >
+          <Wifi size={16} className="mr-2" />
+          Add Ground Station
+        </PremiumButton>
+        
+        {/* Observer Button */}
+        <PremiumButton 
+          featureId="add_observer"
+          onClick={handleAddObserver}
+          className="map-button observer-icon flex items-center justify-center"
+          permissionParams={{ currentCount: observerCount }}
+          showIndicator={true}
+        >
+          <Eye size={16} className="mr-2" />
+          Add Observer
+        </PremiumButton>
+        
+        {/* Repeater Button */}
+        <PremiumButton 
+          featureId="add_repeater"
+          onClick={handleAddRepeater}
+          className="map-button repeater-icon flex items-center justify-center"
+          permissionParams={{ currentCount: repeaterCount }}
+          showIndicator={true}
+        >
+          <Radio size={16} className="mr-2" />
+          Add Repeater
+        </PremiumButton>
+        
+        {/* Clear Analysis Button - not premium restricted */}
+        <button 
+          onClick={handleResetAnalyses}
+          className="map-button flex items-center justify-center"
+        >
+          <XCircle size={16} className="mr-2" />
+          Clear All Analyses
+        </button>
+      </div>
+    </>
   );
 };
 

@@ -312,18 +312,18 @@ export default function Home() {
         <AreaOfOpsProvider>
           <FlightPlanProvider>
             <FlightConfigurationProvider>
-              <MarkerProvider>
-                <LOSAnalysisProvider>
-                  <ObstacleAnalysisProvider>
-                    <ChecklistProvider>
-                      <PremiumProvider>
+              <PremiumProvider>
+                <MarkerProvider>
+                  <LOSAnalysisProvider>
+                    <ObstacleAnalysisProvider>
+                      <ChecklistProvider>
                         <HomeContent />
                         <UpgradeModal />
-                      </PremiumProvider>
-                    </ChecklistProvider>
-                  </ObstacleAnalysisProvider>
-                </LOSAnalysisProvider>
-              </MarkerProvider>
+                      </ChecklistProvider>
+                    </ObstacleAnalysisProvider>
+                  </LOSAnalysisProvider>
+                </MarkerProvider>
+              </PremiumProvider>
             </FlightConfigurationProvider>
           </FlightPlanProvider>
         </AreaOfOpsProvider>

@@ -10,9 +10,10 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { usePremium, TierLevel } from '../../context/PremiumContext';
 import { X, Lock, CreditCard, Key, AlertCircle, Check, Loader, Info, ChevronRight } from 'lucide-react';
+import { TIER_CONFIG } from '../../utils/premiumConfig';
 
 // Modal component
 const UpgradeModal: React.FC = () => {
@@ -32,13 +33,59 @@ const UpgradeModal: React.FC = () => {
     validationError,
     tierLevel,
     getTierName,
-    getFeatureRequiredTier,
+    getRequiredTierForFeature,
     getRemainingDays
   } = usePremium();
 
   // Get products from Stripe
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  // Calculate the required tier accurately
+  const requiredTier = useMemo(() => {
+    if (!attemptedFeature) return TierLevel.COMMUNITY;
+    
+    // For marker features, determine based on marker limits
+    if (attemptedFeature.startsWith('add_')) {
+      const markerType = attemptedFeature.replace('add_', '') as 'gcs' | 'observer' | 'repeater';
+      
+      // Find the lowest tier that allows this marker type
+      for (let tier = TierLevel.FREE; tier <= TierLevel.COMMERCIAL; tier++) {
+        if (TIER_CONFIG[tier].maxMarkers[markerType] > 0) {
+          return tier;
+        }
+      }
+      return TierLevel.COMMERCIAL;
+    }
+    
+    // For regular features, use the standard function
+    return getRequiredTierForFeature(attemptedFeature);
+  }, [attemptedFeature, getRequiredTierForFeature]);
+
+  // Get the name of the required tier
+  const requiredTierName = getTierName(requiredTier);
+  
+  // Get a user-friendly feature name
+  const featureName = useMemo(() => {
+    if (!attemptedFeature) return "Premium Feature";
+    
+    // For marker features
+    if (attemptedFeature.startsWith('add_')) {
+      const markerType = attemptedFeature.replace('add_', '');
+      const typeNames = {
+        'gcs': 'Ground Station',
+        'observer': 'Observer',
+        'repeater': 'Repeater'
+      };
+      return `Add ${typeNames[markerType] || markerType} Marker`;
+    }
+    
+    // For other features, format the feature ID
+    return attemptedFeature
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  }, [attemptedFeature]);
 
   useEffect(() => {
     async function fetchProducts() {
@@ -70,16 +117,14 @@ const UpgradeModal: React.FC = () => {
 
   // Pre-select appropriate product based on required tier
   useEffect(() => {
-    if (attemptedFeature) {
-      const requiredTier = getFeatureRequiredTier(attemptedFeature);
-      
+    if (isModalOpen && requiredTier) {
       if (requiredTier === TierLevel.COMMUNITY) {
         setSelectedProduct('prod_SL53TJIs0Fup3h');
       } else if (requiredTier === TierLevel.COMMERCIAL) {
         setSelectedProduct('prod_NFFWRYSXrISHVK');
       }
     }
-  }, [attemptedFeature, getFeatureRequiredTier]);
+  }, [isModalOpen, requiredTier]);
 
   // Handle access code submission
   const handleCodeSubmit = async (e: React.FormEvent) => {
@@ -129,15 +174,21 @@ const UpgradeModal: React.FC = () => {
     }
   };
 
-  // Get required tier for attempted feature
-  const requiredTier = attemptedFeature ? getFeatureRequiredTier(attemptedFeature) : TierLevel.COMMUNITY;
-  const requiredTierName = getTierName(requiredTier);
-
   // If modal is closed, don't render anything
   if (!isModalOpen) return null;
 
   // Calculate remaining days for subscription
   const remainingDays = getRemainingDays();
+
+  // Get limits for marker types if this is a marker feature
+  let markerLimits = null;
+  if (attemptedFeature && attemptedFeature.startsWith('add_')) {
+    const markerType = attemptedFeature.replace('add_', '') as 'gcs' | 'observer' | 'repeater';
+    markerLimits = {
+      current: TIER_CONFIG[tierLevel].maxMarkers[markerType],
+      required: TIER_CONFIG[requiredTier].maxMarkers[markerType]
+    };
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
@@ -167,14 +218,22 @@ const UpgradeModal: React.FC = () => {
             </div>
             <div className="w-full">
               <div className="flex justify-between items-center">
-                <h3 className="font-medium text-gray-900 text-lg">Premium Feature Access</h3>
+                <h3 className="font-medium text-gray-900 text-lg">{featureName}</h3>
                 <div className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-800 rounded-full text-xs font-medium">
                   <Info className="w-3.5 h-3.5" />
                   <span>Requires {requiredTierName} Tier</span>
                 </div>
               </div>
+              
               <p className="text-sm text-gray-600 mt-1">
-                This feature requires a premium subscription to access.
+                {markerLimits ? (
+                  <>
+                    Your current {getTierName()} plan allows {markerLimits.current} of these markers. 
+                    {requiredTierName} tier allows {markerLimits.required}.
+                  </>
+                ) : (
+                  `This feature requires the ${requiredTierName} tier or higher to access.`
+                )}
               </p>
             </div>
           </div>
@@ -184,7 +243,20 @@ const UpgradeModal: React.FC = () => {
             <div className="flex justify-between items-center">
               <div>
                 <p className="text-sm font-medium text-gray-900">Your Current Tier: </p>
-                <p className="text-xs text-gray-600">{getTierName()} Plan</p>
+                <div className="flex items-center">
+                  <span className="text-xs text-gray-600">{getTierName()} Plan</span>
+                  {tierLevel < requiredTier && (
+                    <span className="ml-2 text-xs px-1.5 py-0.5 bg-red-100 text-red-700 rounded-full">
+                      Upgrade needed
+                    </span>
+                  )}
+                  {tierLevel >= requiredTier && (
+                    <span className="ml-2 text-xs px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full">
+                      <Check className="inline w-3 h-3 mr-0.5" />
+                      Access granted
+                    </span>
+                  )}
+                </div>
               </div>
               {tierLevel > TierLevel.FREE && remainingDays !== null && (
                 <div className="text-right">

@@ -48,7 +48,7 @@ const WelcomeMessage: React.FC<WelcomeMessageProps> = ({ onGetStarted, onClose }
           Intel.Aero empowers drone pilots, from hobbyists to commercial operators, with clear insights into visibility and connectivity over any terrain.
         </p>
         <p className="text-md mb-1 text-gray-600 max-w-xl mx-auto">
-          Fly worry-free, knowing you’ll maintain visual contact and reliable connectivity (e.g., GCS/LTE) with your drone.
+          Fly worry-free, knowing you’ll maintain visual contact and reliable connectivity (e.g. GCS/LTE) with your drone.
         </p>
         <p className="mt-2 max-w-xl mx-auto mt-4 text-md">
           <em>'Your software has literally turned my planning from days into hours!'</em> - Industry Partner
@@ -70,7 +70,6 @@ const WelcomeMessage: React.FC<WelcomeMessageProps> = ({ onGetStarted, onClose }
               style={{ objectFit: "contain" }}
               aria-label="UgCS provides versatile ground control. Intel.Aero’s integration with UgCS ensures reliable visibility and connectivity across terrains."
             />
-            <span className="mt-1 text-gray-600 text-xs">UgCS</span>
             <div className="absolute bottom-full mb-1 hidden group-hover:block bg-gray-800 text-white text-xs rounded-lg p-1 w-56 text-center z-10">
               UgCS provides versatile ground control. Intel.Aero’s integration ensures reliable visibility and connectivity across terrains.
             </div>
@@ -84,7 +83,6 @@ const WelcomeMessage: React.FC<WelcomeMessageProps> = ({ onGetStarted, onClose }
               style={{ objectFit: "contain" }}
               aria-label="ArduPilot’s open-source autopilot software powers many professional drones. Intel.Aero’s compatibility with ArduPilot ensures seamless integration."
             />
-            <span className="mt-1 text-gray-600 text-xs">ArduPilot</span>
             <div className="absolute bottom-full mb-1 hidden group-hover:block bg-gray-800 text-white text-xs rounded-lg p-1 w-56 text-center z-10">
               ArduPilot’s open-source autopilot powers professional drones. Intel.Aero’s compatibility ensures seamless integration.
             </div>
@@ -93,12 +91,11 @@ const WelcomeMessage: React.FC<WelcomeMessageProps> = ({ onGetStarted, onClose }
             <Image
               src="/logos/dji-logo.png"
               alt="DJI Logo"
-              width={100}
+              width={80}
               height={50}
               style={{ objectFit: "contain" }}
               aria-label="DJI, the global leader in drone manufacturing, sets the standard for drones. Intel.Aero’s support for the DJI SDK enables use with DJI’s popular hardware."
             />
-            <span className="mt-1 text-gray-600 text-xs">DJI</span>
             <div className="absolute bottom-full mb-1 hidden group-hover:block bg-gray-800 text-white text-xs rounded-lg p-1 w-56 text-center z-10">
               DJI, the global leader in drones, sets the standard. Intel.Aero’s DJI SDK support enables use with popular hardware.
             </div>
@@ -112,7 +109,6 @@ const WelcomeMessage: React.FC<WelcomeMessageProps> = ({ onGetStarted, onClose }
               style={{ objectFit: "contain" }}
               aria-label="DroneDeploy is a leading platform for drone mapping. Intel.Aero’s compatibility with DroneDeploy enhances mapping with visibility insights."
             />
-            <span className="mt-1 text-gray-600 text-xs">DroneDeploy</span>
             <div className="absolute bottom-full mb-1 hidden group-hover:block bg-gray-800 text-white text-xs rounded-lg p-1 w-56 text-center z-10">
               DroneDeploy is a leading platform for drone mapping. Intel.Aero’s compatibility enhances mapping with visibility insights.
             </div>
@@ -126,7 +122,6 @@ const WelcomeMessage: React.FC<WelcomeMessageProps> = ({ onGetStarted, onClose }
               style={{ objectFit: "contain" }}
               aria-label="MAVLink, the industry-standard protocol, enables Intel.Aero to integrate with open-source autopilots for reliable waypoint navigation."
             />
-            <span className="mt-1 text-gray-600 text-xs">MAVLink</span>
             <div className="absolute bottom-full mb-1 hidden group-hover:block bg-gray-800 text-white text-xs rounded-lg p-1 w-56 text-center z-10">
               MAVLink, the industry-standard protocol, enables Intel.Aero to integrate with autopilots for waypoint navigation.
             </div>
@@ -140,7 +135,6 @@ const WelcomeMessage: React.FC<WelcomeMessageProps> = ({ onGetStarted, onClose }
               style={{ objectFit: "contain" }}
               aria-label="Skydio, a leader in autonomous drones, is AI-driven. Intel.Aero’s support for Skydio enhances autonomous missions with connectivity analysis."
             />
-            <span className="mt-1 text-gray-600 text-xs">Skydio</span>
             <div className="absolute bottom-full mb-1 hidden group-hover:block bg-gray-800 text-white text-xs rounded-lg p-1 w-56 text-center z-10">
               Skydio, a leader in autonomous drones, is AI-driven. Intel.Aero’s support enhances autonomous missions with connectivity analysis.
             </div>
@@ -149,12 +143,11 @@ const WelcomeMessage: React.FC<WelcomeMessageProps> = ({ onGetStarted, onClose }
             <Image
               src="/logos/PX4-Logo-Black.png"
               alt="PX4 Logo"
-              width={100}
+              width={90}
               height={50}
               style={{ objectFit: "contain" }}
               aria-label="PX4, a leading open-source autopilot, powers advanced drones. Intel.Aero’s PX4 compatibility ensures confident mission planning."
             />
-            <span className="mt-1 text-gray-600 text-xs">PX4</span>
             <div className="absolute bottom-full mb-1 hidden group-hover:block bg-gray-800 text-white text-xs rounded-lg p-1 w-56 text-center z-10">
               PX4, a leading open-source autopilot, powers advanced drones. Intel.Aero’s compatibility ensures confident planning.
             </div>
@@ -164,12 +157,11 @@ const WelcomeMessage: React.FC<WelcomeMessageProps> = ({ onGetStarted, onClose }
             <Image
               src="/logos/pix4d-logo.png"
               alt="Pix4D Logo"
-              width={100}
+              width={80}
               height={50}
               style={{ objectFit: "contain" }}
               aria-label="Pix4D is renowned for photogrammetry. Intel.Aero’s compatibility with Pix4D combines visibility analysis with high-precision mapping."
             />
-            <span className="mt-1 text-gray-600 text-xs">Pix4D</span>
             <div className="absolute bottom-full mb-1 hidden group-hover:block bg-gray-800 text-white text-xs rounded-lg p-1 w-56 text-center z-10">
               Pix4D is renowned for photogrammetry. Intel.Aero’s compatibility combines visibility analysis with high-precision mapping.
             </div>

@@ -29,6 +29,10 @@ import { Line } from "react-chartjs-2";
 import { Chart, registerables } from "chart.js";
 Chart.register(...registerables);
 
+//premium
+import { usePremium, TierLevel } from "../../../../context/PremiumContext";
+import PremiumButton from "../../../UI/PremiumButton";
+
 interface StationLOSAnalysisCardProps {
   gridAnalysisRef: React.RefObject<GridAnalysisRef>;
 }
@@ -42,6 +46,18 @@ const StationLOSAnalysisCard: React.FC<StationLOSAnalysisCardProps> = ({ gridAna
   // State for selected marker IDs instead of marker types
   const [sourceMarkerId, setSourceMarkerId] = useState<string>("");
   const [targetMarkerId, setTargetMarkerId] = useState<string>("");
+
+  //premium
+  const { tierLevel, getParameterLimits } = usePremium();
+
+  // Get the station count limits
+  const stationCountLimits = getParameterLimits('stationCount');
+
+  // Check if user can use this feature (Commercial tier)
+  const canUseLOSAnalysis = tierLevel >= TierLevel.COMMERCIAL;
+
+  // Check if limited by tier
+  const isLimitedByTier = tierLevel < TierLevel.COMMERCIAL;
   
   const [stationLOSResult, setStationLOSResult] = useState<StationLOSResult | null>(null);
   const [losProfileData, setLosProfileData] = useState<LOSProfilePoint[] | null>(null);
@@ -227,6 +243,14 @@ const StationLOSAnalysisCard: React.FC<StationLOSAnalysisCardProps> = ({ gridAna
           ⚠️ Please place at least two markers on the map to enable line of sight analysis.
         </div>
       ) : (
+        <>
+        {isLimitedByTier && (
+          <div className="p-2 mb-3 bg-yellow-100 border border-yellow-400 text-xs text-yellow-700 rounded">
+            ⚠️ Line of sight analysis requires the Commercial tier. 
+            With your current tier, you can only use {stationCountLimits.max} station.
+          </div>
+        )}
+
         <div className="mb-2">
           <div className="flex flex-row gap-4">
             <div className="flex-1">
@@ -266,27 +290,28 @@ const StationLOSAnalysisCard: React.FC<StationLOSAnalysisCardProps> = ({ gridAna
             </div>
           </div>
         </div>
+          <PremiumButton
+            featureId="station_los_analysis"
+            onClick={() => {
+              trackEvent("station_los_check_click", { 
+                sourceId: sourceMarkerId, 
+                targetId: targetMarkerId,
+                sourceType: sourceMarker?.type,
+                targetType: targetMarker?.type
+              });
+              handleRunStationLOS();
+            }}
+            disabled={isAnalyzing || !isValidSelection}
+            className={`w-full py-1 text-sm rounded mt-3 ${
+              isAnalyzing || !isValidSelection
+                ? "bg-gray-300 cursor-not-allowed"
+                : "bg-blue-500 hover:bg-blue-600 text-white text-sm"
+            }`}
+          >
+            {isAnalyzing ? "Analysing..." : "Check LOS"}
+          </PremiumButton>
+        </>
       )}
-      
-      <button
-        onClick={() => {
-          trackEvent("station_los_check_click", { 
-            sourceId: sourceMarkerId, 
-            targetId: targetMarkerId,
-            sourceType: sourceMarker?.type,
-            targetType: targetMarker?.type
-          });
-          handleRunStationLOS();
-        }}
-        disabled={isAnalyzing || !isValidSelection}
-        className={`w-full py-1 text-sm rounded mt-3 ${
-          isAnalyzing || !isValidSelection
-            ? "bg-gray-300 cursor-not-allowed"
-            : "bg-blue-500 hover:bg-blue-600 text-white text-sm"
-        }`}
-      >
-        {isAnalyzing ? "Analysing..." : "Check LOS"}
-      </button>
       
       {stationLOSResult && (
         <div className="mt-4">

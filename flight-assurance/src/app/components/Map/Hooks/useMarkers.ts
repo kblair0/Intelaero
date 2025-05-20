@@ -1,6 +1,39 @@
 // src/app/hooks/useMarkers.ts
 "use client";
-import { useRef, useCallback, useEffect } from 'react';
+
+/**
+ * useMarkers.ts
+ * 
+ * Purpose:
+ * This hook manages map markers for ground stations, observers, and repeaters.
+ * It implements premium tier restrictions for marker creation and handles terrain elevation queries.
+ * 
+ * Premium Tier Integration:
+ * - Free tier: No markers allowed
+ * - Community tier: Limited to 1 marker total
+ * - Commercial tier: Up to 10 markers (configurable via PremiumContext)
+ * 
+ * Features:
+ * - Creates, updates, and removes markers on the map
+ * - Queries terrain elevation for marker placement
+ * - Provides error handling for premium tier restrictions
+ * - Manages marker popups and visual styling
+ * - Handles cleanup of analysis layers
+ * 
+ * Usage:
+ * const { 
+ *   addGroundStation, 
+ *   addObserver, 
+ *   addRepeater, 
+ *   error // Contains any premium tier restriction messages
+ * } = useMarkers({ map, terrainLoaded });
+ * 
+ * Related Files:
+ * - MarkerContext.tsx: Provides marker state and premium tier checks
+ * - PremiumContext.tsx: Defines tier levels and restrictions
+ */
+
+import { useRef, useCallback, useEffect, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import { useMarkersContext, MarkerType, Marker } from '../../../context/MarkerContext';
 import { LocationData } from '../../../types/LocationData';
@@ -25,6 +58,9 @@ export function useMarkers({ map, terrainLoaded }: UseMarkersProps) {
   // Store all marker references in a single collection
   const markerRefs = useRef<MarkerRef[]>([]);
   
+  // State for premium tier restriction errors
+  const [error, setError] = useState<string | null>(null);
+  
   const {
     markers,
     addMarker,
@@ -32,7 +68,8 @@ export function useMarkers({ map, terrainLoaded }: UseMarkersProps) {
     removeMarker,
     defaultElevationOffsets
   } = useMarkersContext();
-  //include Ao context clear for removing all analysis layers.
+  
+  // Include AO context clear for removing all analysis layers
   const { setAoTerrainGrid } = useAreaOfOpsContext();
 
   // Helper for querying terrain elevation
@@ -147,6 +184,9 @@ export function useMarkers({ map, terrainLoaded }: UseMarkersProps) {
     async (type: MarkerType): Promise<LocationData | undefined> => {
       if (!map || !terrainLoaded) return;
       
+      // Clear any previous errors
+      setError(null);
+      
       const center = map.getCenter();
       try {
         const elevation = await queryTerrainElevation([center.lng, center.lat]);
@@ -158,8 +198,18 @@ export function useMarkers({ map, terrainLoaded }: UseMarkersProps) {
         
         console.log(`${type.toUpperCase()} Initial Location:`, initialLocation);
         
-        // Add marker to context and get ID
-        const markerId = addMarker(type, initialLocation);
+        // Add marker to context and check result for premium tier restrictions
+        const result = addMarker(type, initialLocation);
+        
+        // If failed due to premium tier restrictions, show error and return
+        if (!result.success) {
+          setError(result.error);
+          console.error(`Failed to add ${type} marker:`, result.error);
+          return;
+        }
+        
+        // Get the marker ID
+        const markerId = result.markerId as string;
         
         // Define colors for different marker types
         const markerColors: Record<MarkerType, string> = {
@@ -170,8 +220,8 @@ export function useMarkers({ map, terrainLoaded }: UseMarkersProps) {
         
         // Get markers of this type to determine index
         const sameTypeMarkers = markers.filter(m => m.type === type);
-        const markerIndex = sameTypeMarkers.length; // This will be the index of the new marker
-        const hasMultiple = sameTypeMarkers.length > 0; // Will be true if there are already others
+        const markerIndex = sameTypeMarkers.length - 1; // This will be the index of the new marker
+        const hasMultiple = sameTypeMarkers.length > 1; // Will be true if there are multiple markers now
         
         // Create the default marker first with the appropriate color
         const newMarker = new mapboxgl.Marker({ 
@@ -180,7 +230,7 @@ export function useMarkers({ map, terrainLoaded }: UseMarkersProps) {
         }).setLngLat(center).addTo(map);
         
         // Only add label if we have multiple markers of this type
-        if (hasMultiple || markerIndex > 0) {
+        if (hasMultiple) {
           // Create the label
           const label = createMarkerLabel(markerIndex, type);
           
@@ -267,6 +317,7 @@ export function useMarkers({ map, terrainLoaded }: UseMarkersProps) {
         return initialLocation;
       } catch (error) {
         console.error(`Error initializing ${type.toUpperCase()}:`, error);
+        setError(`Error creating ${type} marker: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     },
     [map, terrainLoaded, queryTerrainElevation, addMarker, updateMarker, removeMarker, defaultElevationOffsets, markers, createMarkerLabel]
@@ -364,6 +415,7 @@ export function useMarkers({ map, terrainLoaded }: UseMarkersProps) {
     addObserver,
     addRepeater,
     updateMarkerPopups,
-    removeAllAnalysisLayers
+    removeAllAnalysisLayers,
+    error // Expose the error state for premium tier restrictions
   };
 }

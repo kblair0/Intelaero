@@ -2,7 +2,9 @@
 
 import { createContext, useContext, useState, ReactNode } from 'react';
 import { LocationData } from '../types/LocationData';
-import { v4 as uuidv4 } from 'uuid'; // You may need to install this package
+import { v4 as uuidv4 } from 'uuid';
+import { usePremium, TierLevel } from './PremiumContext';
+import { TIER_CONFIG } from '../utils/premiumConfig'; // Import TIER_CONFIG directly
 
 // Define marker types for type safety
 export type MarkerType = 'gcs' | 'observer' | 'repeater';
@@ -15,13 +17,20 @@ export interface Marker {
   elevationOffset: number;
 }
 
+// Add return type for addMarker
+interface AddMarkerResult {
+  success: boolean;
+  markerId?: string;
+  error?: string;
+}
+
 // Context interface
 interface MarkerContextType {
   // Core marker collection
   markers: Marker[];
   
   // Marker management functions
-  addMarker: (type: MarkerType, location: LocationData) => string; // Returns ID
+  addMarker: (type: MarkerType, location: LocationData) => AddMarkerResult;
   updateMarker: (id: string, updates: Partial<Marker>) => void;
   removeMarker: (id: string) => void;
   
@@ -49,11 +58,41 @@ export function MarkerProvider({ children }: { children: ReactNode }) {
     repeater: 2
   });
 
+  // Get premium context
+  const { tierLevel, getTierName } = usePremium();
+
   /**
-   * Adds a new marker of specified type
-   * @returns The ID of the created marker
+   * Adds a new marker of specified type if allowed by tier limitations
+   * @returns Object with success status and either marker ID or error message
    */
-  const addMarker = (type: MarkerType, location: LocationData): string => {
+  const addMarker = (type: MarkerType, location: LocationData): AddMarkerResult => {
+    // Get current count of markers of this type
+    const typeCount = markers.filter(m => m.type === type).length;
+    
+    // Get the maximum allowed for this marker type at current tier
+    const maxAllowed = TIER_CONFIG[tierLevel].maxMarkers[type];
+    
+    // Check if adding this marker is allowed by tier limitations
+    if (typeCount >= maxAllowed) {
+      const tierName = getTierName();
+      
+      // Create a user-friendly error message based on the limitation
+      let errorMessage = '';
+      if (maxAllowed === 0) {
+        // This marker type is not available at this tier
+        errorMessage = `${tierName} tier doesn't support ${type} markers. Upgrade to add this marker type.`;
+      } else {
+        // User has reached their limit for this marker type
+        errorMessage = `${tierName} tier allows only ${maxAllowed} ${type} marker(s). Upgrade to add more.`;
+      }
+      
+      return {
+        success: false,
+        error: errorMessage
+      };
+    }
+    
+    // If we get here, adding the marker is allowed
     const id = uuidv4();
     const newMarker: Marker = {
       id,
@@ -63,12 +102,14 @@ export function MarkerProvider({ children }: { children: ReactNode }) {
     };
     
     setMarkers(prev => [...prev, newMarker]);
-    return id;
+    
+    return {
+      success: true,
+      markerId: id
+    };
   };
 
-  /**
-   * Updates an existing marker by ID
-   */
+  // Update an existing marker
   const updateMarker = (id: string, updates: Partial<Marker>): void => {
     setMarkers(prev => 
       prev.map(marker => 
@@ -77,17 +118,12 @@ export function MarkerProvider({ children }: { children: ReactNode }) {
     );
   };
 
-  /**
-   * Removes a marker by ID
-   */
+  // Remove a marker by ID
   const removeMarker = (id: string): void => {
     setMarkers(prev => prev.filter(marker => marker.id !== id));
   };
 
-
-  /**
-   * Updates the default elevation offset for a marker type
-   */
+  // Set the default elevation offset for a marker type
   const setDefaultElevationOffset = (type: MarkerType, offset: number): void => {
     setDefaultElevationOffsets(prev => ({
       ...prev,
@@ -102,9 +138,7 @@ export function MarkerProvider({ children }: { children: ReactNode }) {
     );
   };
 
-  /**
-   * Gets all markers of a specified type
-   */
+  // Get markers filtered by type
   const getMarkersByType = (type: MarkerType): Marker[] => {
     return markers.filter(m => m.type === type);
   };
