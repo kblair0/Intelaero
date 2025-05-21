@@ -112,3 +112,7 @@ input[type="number"]::placeholder {
   font-size: 12px;
   color: black;
 }
+
+.mapboxgl-marker {
+  z-index: 100
+}

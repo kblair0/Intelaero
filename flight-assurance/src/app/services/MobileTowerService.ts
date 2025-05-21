@@ -304,14 +304,68 @@ function handleTowerClick(e: mapboxgl.MapMouseEvent & { features?: mapboxgl.Mapb
           <div>${props.state}</div>
         ` : ''}
       </div>
+      
+      <!-- Add Create Repeater Button -->
+      <div class="mt-3 pt-2 border-t border-gray-200">
+        <button 
+          id="create-repeater-btn" 
+          class="w-full bg-purple-600 hover:bg-purple-700 text-white py-1 px-3 rounded text-xs font-medium flex items-center justify-center"
+          data-tower-id="${props.id || ''}"
+          data-tower-lng="${coordinates.lng}"
+          data-tower-lat="${coordinates.lat}"
+          data-tower-elevation="${props.elevation || 0}"
+          data-tower-height="${props.height || 2}"
+          data-tower-carrier="${props.carrier || ''}"
+          data-tower-technology="${props.technology || ''}"
+          data-tower-frequency="${frequency.toFixed(1)}"
+          data-tower-azimuth="${props.azimuth || ''}"
+          data-tower-tilt="${props.tilt || ''}"
+          data-tower-eirp="${props.eirp || ''}"
+          data-tower-eirp-unit="${props.eirp_unit || ''}"
+        >
+          <span class="mr-1">⚡️</span> Create Repeater From Tower
+        </button>
+      </div>
     </div>
   `;
   
   // Create and display popup at the event's coordinates
-  new mapboxgl.Popup()
+  const popup = new mapboxgl.Popup()
     .setLngLat(coordinates)
     .setHTML(content)
     .addTo(map);
+    
+  // Add event listener to the button after popup is added to the map
+  setTimeout(() => {
+    const createRepeaterBtn = document.getElementById('create-repeater-btn');
+    if (createRepeaterBtn) {
+      createRepeaterBtn.addEventListener('click', (clickEvent) => {
+        const target = clickEvent.currentTarget as HTMLButtonElement;
+        const towerData = {
+          id: target.dataset.towerId,
+          lng: parseFloat(target.dataset.towerLng || '0'),
+          lat: parseFloat(target.dataset.towerLat || '0'),
+          elevation: parseFloat(target.dataset.towerElevation || '0'),
+          height: parseFloat(target.dataset.towerHeight || '2'),
+          carrier: target.dataset.towerCarrier,
+          technology: target.dataset.towerTechnology,
+          frequency: target.dataset.towerFrequency,
+          azimuth: target.dataset.towerAzimuth ? parseFloat(target.dataset.towerAzimuth) : undefined,
+          tilt: target.dataset.towerTilt ? parseFloat(target.dataset.towerTilt) : undefined,
+          eirp: target.dataset.towerEirp ? parseFloat(target.dataset.towerEirp) : undefined,
+          eirp_unit: target.dataset.towerEirpUnit
+        };
+        
+        // Dispatch custom event to be caught by the useTowerToMarker hook
+        // Fixed: Changed variable name to avoid conflict with the event parameter
+        const customEvent = new CustomEvent('tower:createRepeater', { detail: towerData });
+        window.dispatchEvent(customEvent);
+        
+        // Close the popup
+        popup.remove();
+      });
+    }
+  }, 100); // Small timeout to ensure DOM is ready
 }
 
 /**

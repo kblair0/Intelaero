@@ -7,9 +7,9 @@ import { useLOSAnalysis } from '../../context/LOSAnalysisContext';
 import { useAreaOfOpsContext } from '../../context/AreaOfOpsContext';
 import { useFlightPlanProcessor } from '../Map/Hooks/useFlightPlanProcessor';
 import { useMarkers } from './Hooks/useMarkers';
+import { useTowerToMarker } from '../../hooks/useTowerToMarker';
 import { useLayers } from '../../hooks/useLayers';
 import mapboxgl from 'mapbox-gl';
-
 import MarkerControls from './MarkerControls';
 import LayerControls from './LayerControls';
 import MeasurementControls from './MeasurementControls';
@@ -18,7 +18,6 @@ import AnalysisStatus from './AnalysisStatus';
 import LOSModal from './LOSModal';
 import FlightPathDisplay from './FlightPathDisplay';
 import AODisplay from '../AO/AODisplay';
-
 import MapboxLayerHandler from './MapboxLayerHandler';
 import BYDALayerHandler from './BYDALayerHandler';
 import GridAnalysisController, { GridAnalysisRef } from '../Analyses/Services/GridAnalysis/GridAnalysisController';
@@ -29,8 +28,8 @@ import { trackEventWithForm as trackEvent } from '../tracking/tracking';
  * Props for the Map component
  */
 interface MapProps {
-  activePanel?: 'energy' | 'los' | null;
-  togglePanel?: (panel: 'energy' | 'los') => void;
+  activePanel?: 'energy' | 'los' | 'terrain' | null;
+  togglePanel?: (panel: 'energy' | 'los' | 'terrain') => void;
   flightPlan?: any;
   setShowUploader?: (show: boolean) => void;
 }
@@ -43,12 +42,11 @@ const Map: FC<MapProps> = ({ activePanel, togglePanel, flightPlan, setShowUpload
   const { setFlightPlan, setDistance, setProcessed } = useFlightPlanContext();
   const { isAnalyzing, setIsAnalyzing, setResults, setError, error, resetAnalysis } = useLOSAnalysis();
   const { aoGeometry } = useAreaOfOpsContext();
-
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const bydaLayerHandlerRef = useRef<{ fetchLayers: () => void } | null>(null);
   const { gridAnalysisRef } = useAnalysisController();
   const hasSetMapRef = useRef(false);
-
+  
   const { map, terrainLoaded } = useMap(
     'map-container',
     {
@@ -58,9 +56,10 @@ const Map: FC<MapProps> = ({ activePanel, togglePanel, flightPlan, setShowUpload
       projection: 'globe',
     } as any
   );
-
+  
   const { processFlightPlan } = useFlightPlanProcessor();
   const { markers, updateMarkerPopups } = useMarkers({ map, terrainLoaded });
+  const { convertTowerToRepeater } = useTowerToMarker({ map, terrainLoaded });
   const { addFlightPath, resetLayers } = useLayers();
 
   /**
@@ -74,78 +73,78 @@ const Map: FC<MapProps> = ({ activePanel, togglePanel, flightPlan, setShowUpload
     }
   }, [map, terrainLoaded, setMap]);
 
-/**
- * Process flight plan when available
- */
-useEffect(() => {
-  if (!flightPlan || flightPlan.properties?.processed || !map || !elevationService) {
-    console.log('Skipping flight plan processing:', {
-      hasFlightPlan: !!flightPlan,
-      isProcessed: flightPlan?.properties?.processed,
-      mapLoaded: !!map,
-      elevationServiceAvailable: !!elevationService,
-    });
-    return;
-  }
-
-  console.log(
-    `Starting flight plan processing: elevationService=${!!elevationService}, ` +
-    `mapbox-dem loaded=${map?.isSourceLoaded('mapbox-dem') ?? false}`
-  );
-
-  const handleProcessedPlan = (processedPlan: any) => {
-    console.log('Flight plan processed:', {
-      planId: processedPlan.properties?.id || 'unknown',
-      distance: processedPlan.properties?.totalDistance,
-      hasFeatures: processedPlan.features?.length > 0,
-    });
-
-    if (processedPlan.properties?.totalDistance) {
-      setDistance(processedPlan.properties.totalDistance);
+  /**
+   * Process flight plan when available
+   */
+  useEffect(() => {
+    if (!flightPlan || flightPlan.properties?.processed || !map || !elevationService) {
+      console.log('Skipping flight plan processing:', {
+        hasFlightPlan: !!flightPlan,
+        isProcessed: flightPlan?.properties?.processed,
+        mapLoaded: !!map,
+        elevationServiceAvailable: !!elevationService,
+      });
+      return;
     }
-    addFlightPath(processedPlan);
-    trackEvent('flight_plan_processing_completed', {
-      planId: processedPlan.properties?.id || 'unknown',
-      distance: processedPlan.properties?.totalDistance,
-    });
-  };
 
-  const handleProcessingError = (error: unknown) => {
-    console.error('Failed to process flight plan:', error);
-    setError('Failed to process flight plan. Please try again.');
-    trackEvent('flight_plan_processing_error', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-  };
+    console.log(
+      `Starting flight plan processing: elevationService=${!!elevationService}, ` +
+      `mapbox-dem loaded=${map?.isSourceLoaded('mapbox-dem') ?? false}`
+    );
 
-  trackEvent('flight_plan_processing_started', {
-    planId: flightPlan.properties?.id || 'unknown',
-  });
+    const handleProcessedPlan = (processedPlan: any) => {
+      console.log('Flight plan processed:', {
+        planId: processedPlan.properties?.id || 'unknown',
+        distance: processedPlan.properties?.totalDistance,
+        hasFeatures: processedPlan.features?.length > 0,
+      });
 
-  console.time('FlightPlanProcessing');
-  elevationService
-    .ensureTerrainReady()
-    .then(() => {
-      console.log('Terrain ready');
-      return elevationService.preloadArea(flightPlan.features[0].geometry.coordinates);
-    })
-    .then(() => {
-      console.log('Terrain area preloaded');
-      return processFlightPlan(flightPlan);
-    })
-    .then((processedPlan) => {
-      console.log('processFlightPlan completed:', processedPlan);
-      return processedPlan;
-    })
-    .then(handleProcessedPlan)
-    .catch((error) => {
-      console.error('Processing pipeline error:', error);
-      handleProcessingError(error);
-    })
-    .finally(() => {
-      console.timeEnd('FlightPlanProcessing');
+      if (processedPlan.properties?.totalDistance) {
+        setDistance(processedPlan.properties.totalDistance);
+      }
+      addFlightPath(processedPlan);
+      trackEvent('flight_plan_processing_completed', {
+        planId: processedPlan.properties?.id || 'unknown',
+        distance: processedPlan.properties?.totalDistance,
+      });
+    };
+
+    const handleProcessingError = (error: unknown) => {
+      console.error('Failed to process flight plan:', error);
+      setError('Failed to process flight plan. Please try again.');
+      trackEvent('flight_plan_processing_error', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    };
+
+    trackEvent('flight_plan_processing_started', {
+      planId: flightPlan.properties?.id || 'unknown',
     });
-}, [flightPlan, map, elevationService, processFlightPlan, setFlightPlan, setDistance, setProcessed, setError, addFlightPath]);
+
+    console.time('FlightPlanProcessing');
+    elevationService
+      .ensureTerrainReady()
+      .then(() => {
+        console.log('Terrain ready');
+        return elevationService.preloadArea(flightPlan.features[0].geometry.coordinates);
+      })
+      .then(() => {
+        console.log('Terrain area preloaded');
+        return processFlightPlan(flightPlan);
+      })
+      .then((processedPlan) => {
+        console.log('processFlightPlan completed:', processedPlan);
+        return processedPlan;
+      })
+      .then(handleProcessedPlan)
+      .catch((error) => {
+        console.error('Processing pipeline error:', error);
+        handleProcessingError(error);
+      })
+      .finally(() => {
+        console.timeEnd('FlightPlanProcessing');
+      });
+  }, [flightPlan, map, elevationService, processFlightPlan, setFlightPlan, setDistance, setProcessed, setError, addFlightPath]);
 
   /**
    * Update marker popups when map or terrain changes
@@ -223,7 +222,7 @@ useEffect(() => {
           // Any additional logic beyond calling cancelAnalysis
         }} 
       />
-      {/* <LOSModal /> Disbaled For Now Unitl I fix it.*/}
+      {/* <LOSModal /> Disabled For Now Until I fix it.*/}
 
       <FlightPathDisplay />
       <AODisplay />

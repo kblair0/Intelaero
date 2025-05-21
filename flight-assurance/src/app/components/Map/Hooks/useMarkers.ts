@@ -416,6 +416,7 @@ export function useMarkers({ map, terrainLoaded }: UseMarkersProps) {
     addRepeater,
     updateMarkerPopups,
     removeAllAnalysisLayers,
+    markerRefs,
     error // Expose the error state for premium tier restrictions
   };
 }

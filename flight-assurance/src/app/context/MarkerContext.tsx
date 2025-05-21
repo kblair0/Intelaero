@@ -9,12 +9,27 @@ import { TIER_CONFIG } from '../utils/premiumConfig'; // Import TIER_CONFIG dire
 // Define marker types for type safety
 export type MarkerType = 'gcs' | 'observer' | 'repeater';
 
+// Define tower metadata interface
+export interface TowerMetadata {
+  originalTowerId?: string;
+  carrier?: string;
+  technology?: string;
+  frequency?: string;
+  height?: number;
+  azimuth?: number;
+  tilt?: number;
+  eirp?: number;
+  eirp_unit?: string;
+}
+
 // Extended interface for markers with ID and type
 export interface Marker {
   id: string;
   type: MarkerType;
   location: LocationData;
   elevationOffset: number;
+  // Add optional tower metadata for tower-derived markers
+  towerMetadata?: TowerMetadata;
 }
 
 // Add return type for addMarker
@@ -30,7 +45,7 @@ interface MarkerContextType {
   markers: Marker[];
   
   // Marker management functions
-  addMarker: (type: MarkerType, location: LocationData) => AddMarkerResult;
+  addMarker: (type: MarkerType, location: LocationData, towerMetadata?: TowerMetadata) => AddMarkerResult;
   updateMarker: (id: string, updates: Partial<Marker>) => void;
   removeMarker: (id: string) => void;
   
@@ -63,9 +78,16 @@ export function MarkerProvider({ children }: { children: ReactNode }) {
 
   /**
    * Adds a new marker of specified type if allowed by tier limitations
+   * @param type The marker type (gcs, observer, repeater)
+   * @param location The geographic location of the marker
+   * @param towerMetadata Optional metadata if marker is derived from a tower
    * @returns Object with success status and either marker ID or error message
    */
-  const addMarker = (type: MarkerType, location: LocationData): AddMarkerResult => {
+  const addMarker = (
+    type: MarkerType, 
+    location: LocationData, 
+    towerMetadata?: TowerMetadata
+  ): AddMarkerResult => {
     // Get current count of markers of this type
     const typeCount = markers.filter(m => m.type === type).length;
     
@@ -98,7 +120,9 @@ export function MarkerProvider({ children }: { children: ReactNode }) {
       id,
       type,
       location,
-      elevationOffset: defaultElevationOffsets[type]
+      elevationOffset: defaultElevationOffsets[type],
+      // Include tower metadata if provided
+      ...(towerMetadata && { towerMetadata })
     };
     
     setMarkers(prev => [...prev, newMarker]);
@@ -112,9 +136,23 @@ export function MarkerProvider({ children }: { children: ReactNode }) {
   // Update an existing marker
   const updateMarker = (id: string, updates: Partial<Marker>): void => {
     setMarkers(prev => 
-      prev.map(marker => 
-        marker.id === id ? { ...marker, ...updates } : marker
-      )
+      prev.map(marker => {
+        if (marker.id === id) {
+          // Handle special case for towerMetadata to merge it properly
+          if (updates.towerMetadata && marker.towerMetadata) {
+            return { 
+              ...marker, 
+              ...updates, 
+              towerMetadata: {
+                ...marker.towerMetadata,
+                ...updates.towerMetadata
+              }
+            };
+          }
+          return { ...marker, ...updates };
+        }
+        return marker;
+      })
     );
   };
 
