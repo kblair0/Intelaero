@@ -24,6 +24,7 @@ import FlightPathAnalysisCard from "./FlightPathAnalysisCard";
 import StationAnalysisCard from "./StationAnalysisCard";
 import MergedAnalysisCard from "./MergedAnalysisCard";
 import StationLOSAnalysisCard from "./StationLOSAnalysisCard";
+import MobileTowerAnalysisCard from "./MobileTowerAnalysisCard";
 import { useAnalysisController } from "../../../../context/AnalysisControllerContext";
 import { 
   Plane, 
@@ -184,7 +185,6 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ initialSection = 
         <StationLOSAnalysisCard gridAnalysisRef={gridAnalysisRef} />
       </AnalysisSection>
 
-
       <AnalysisSection
         title="Flight Path Analysis"
         description={descriptions.flight}
@@ -193,6 +193,16 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ initialSection = 
         onToggle={() => toggleSection("flight")}
       >
         <FlightPathAnalysisCard gridAnalysisRef={gridAnalysisRef} />
+      </AnalysisSection>
+
+      <AnalysisSection
+        title="Mobile Tower Coverage"
+        description="View 3G, 4G, and 5G mobile towers in your operating area"
+        icon={<Signal className="w-4 h-4" />}
+        isExpanded={expandedSections.mobileTowers}
+        onToggle={() => toggleSection("mobileTowers")}
+      >
+        <MobileTowerAnalysisCard />
       </AnalysisSection>
       
       <div className="mt-6 p-3 bg-gray-50 rounded-lg border border-gray-200 text-xs text-gray-600">

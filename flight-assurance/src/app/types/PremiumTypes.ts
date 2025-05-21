@@ -18,5 +18,6 @@ export type FeatureId =
   | 'local_powerlines'
   | 'hv_powerlines'
   | 'airspace_analysis'
-  | 'extended_grid_range'    // For ranges > 500m
-  | 'high_resolution_grid';  // For resolutions < 30m
+  | 'extended_grid_range'
+  | 'high_resolution_grid'
+  | 'mobile_tower_analysis';

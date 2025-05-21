@@ -24,6 +24,7 @@ export const MAP_LAYERS = {
   BYDA_SWER: "byda-swer-layer",
   BYDA_OTHER: "byda-other-layer",
   BYDA_DEVICE: "byda-device-layer",
+  MOBILE_TOWERS: "mobile-towers-layer",
 } as const;
 
 export type LayerId = typeof MAP_LAYERS[keyof typeof MAP_LAYERS];

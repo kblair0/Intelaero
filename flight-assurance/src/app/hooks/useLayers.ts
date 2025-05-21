@@ -4,6 +4,8 @@ import { layerManager, MAP_LAYERS } from '../services/LayerManager';
 import { useAreaOfOpsContext } from '../context/AreaOfOpsContext';
 import { useAreaOpsProcessor } from '../components/AO/Hooks/useAreaOpsProcessor';
 import { fetchBYDALayers } from '../services/BYDAService';
+import { displayMobileTowers, filterMobileTowers } from '../services/MobileTowerService';
+import { MobileTowerFilters } from '../types/mobileTowers';
 import type { GeoJSON } from 'geojson';
 import * as turf from '@turf/turf';
 
@@ -282,6 +284,66 @@ export function useLayers() {
   }, [map, toggleLayer]);
 
   /**
+   * Toggle mobile towers layer
+   * @returns {Promise<boolean>} Success status
+   */
+  const toggleMobileTowers = useCallback(async () => {
+    if (!map) {
+      console.warn('toggleMobileTowers: Map not available');
+      return false;
+    }
+    if (!aoGeometry) {
+      console.warn('toggleMobileTowers: AO geometry not available');
+      return false;
+    }
+
+    try {
+      // Ensure AO is visible
+      showAreaOfOperations();
+
+      // Check if layers already exist
+      const towerLayerExists = !!map.getLayer('mobile-towers-unclustered-point');
+      
+      if (towerLayerExists) {
+        // Just toggle visibility if already loaded
+        const isVisible = map.getLayoutProperty('mobile-towers-unclustered-point', 'visibility') === 'visible';
+        
+        if (isVisible) {
+          map.setLayoutProperty('mobile-towers-unclustered-point', 'visibility', 'none');
+          if (map.getLayer('mobile-towers-labels')) {
+            map.setLayoutProperty('mobile-towers-labels', 'visibility', 'none');
+          }
+        } else {
+          map.setLayoutProperty('mobile-towers-unclustered-point', 'visibility', 'visible');
+          // Labels depend on zoom level, so we don't need to set them visible here
+        }
+        
+        return true;
+      } else {
+        // Display towers with the new implementation
+        const success = await displayMobileTowers(map, aoGeometry, setLayerVisibility);
+        return success;
+      }
+    } catch (error) {
+      console.error('toggleMobileTowers: error', error);
+      return false;
+    }
+  }, [map, aoGeometry, showAreaOfOperations, setLayerVisibility]);
+
+  /**
+   * Filter mobile towers by carrier, technology, and frequency band
+   * @param {MobileTowerFilters} filters Filter criteria
+   * @returns {boolean} Success status
+   */
+  const filterMobileTowersLayer = useCallback((filters: MobileTowerFilters) => {
+    if (!map || !map.getLayer('mobile-towers-unclustered-point')) {
+      return false;
+    }
+    
+    return filterMobileTowers(map, filters);
+  }, [map]);
+
+  /**
    * Reset all layers
    */
   const resetLayers = useCallback(() => {
@@ -302,5 +364,7 @@ export function useLayers() {
     togglePowerlines,
     toggleDBYDPowerlines,
     toggleAirspace,
+    toggleMobileTowers,
+    filterMobileTowersLayer 
   };
 }

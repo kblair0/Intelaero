@@ -37,7 +37,8 @@ export const TIER_CONFIG = {
       'hv_powerlines': true,
       'extended_grid_range': false,
       'high_resolution_grid': false,
-      'airspace_analysis': true
+      'airspace_analysis': true,
+      'mobile_tower_analysis': false
     }
   },
   [TierLevel.COMMUNITY]: {
@@ -62,7 +63,8 @@ export const TIER_CONFIG = {
       'hv_powerlines': true,
       'extended_grid_range': false,
       'high_resolution_grid': false,
-      'airspace_analysis': true
+      'airspace_analysis': true,
+      'mobile_tower_analysis': false
     }
   },
   [TierLevel.COMMERCIAL]: {
@@ -87,7 +89,8 @@ export const TIER_CONFIG = {
       'hv_powerlines': true,
       'extended_grid_range': true,
       'high_resolution_grid': true,
-      'airspace_analysis': true
+      'airspace_analysis': true,
+      'mobile_tower_analysis': true
     }
   }
 };
