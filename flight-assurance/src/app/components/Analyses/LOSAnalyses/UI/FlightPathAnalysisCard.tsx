@@ -10,7 +10,7 @@
  * - Configure analysis parameters
  */
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useLOSAnalysis } from "../../../../context/LOSAnalysisContext";
 import { useMapContext } from "../../../../context/mapcontext";
 import type { GridAnalysisRef } from "../../Services/GridAnalysis/GridAnalysisController";
@@ -177,12 +177,12 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
         usingElevationService: !!elevationService
       });
 
-      // Call the controller to run the visibility analysis with selected marker IDs
+      // Cast the parameter object as any to include markerIds
       await gridAnalysisRef.current.runFlightPathVisibilityAnalysis({
         sampleInterval: 10, // 10 meter intervals
         showLayer: showVisibilityLayer,
         markerIds: selectedMarkerIds
-      });
+      } as any);
 
       trackEvent("flight_path_visibility_analysis_success", {
         markerCount: selectedMarkers.length,
@@ -207,11 +207,13 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
 
   // Get display name for a marker, including index if multiple of same type exist
   const getMarkerDisplayName = useCallback((marker: any) => {
+    // Cast marker.type to union type to allow dictionary lookup
+    const typeKey = marker.type as "gcs" | "observer" | "repeater";
     const typeName = {
-      'gcs': 'GCS',
-      'observer': 'Observer',
-      'repeater': 'Repeater'
-    }[marker.type];
+      gcs: 'GCS',
+      observer: 'Observer',
+      repeater: 'Repeater'
+    }[typeKey];
     
     // Count markers of this type
     const typeMarkers = markers.filter(m => m.type === marker.type);
@@ -225,20 +227,25 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
     return typeName;
   }, [markers]);
 
+  // Check if flight path visibility analysis results are available
+  const hasVisibilityResults = results?.flightPathVisibility !== undefined;
+  // Check if grid analysis results are available
+  const hasGridResults = (results?.cells?.length ?? 0) > 0;
+  
   // Update layer visibility state when toggling layers
   const toggleGridLayerVisibility = useCallback(() => {
     layerManager.toggleLayerVisibility(MAP_LAYERS.ELOS_GRID);
   }, []);
 
-const toggleVisibilityLayerVisibility = useCallback(() => {
-  const newVisibility = !showVisibilityLayer;
-  setShowVisibilityLayer(newVisibility);
-  
-  // Ensure layer exists before trying to toggle it
-  if (hasVisibilityResults) {
-    layerManager.setLayerVisibility(MAP_LAYERS.FLIGHT_PATH_VISIBILITY, newVisibility);
-  }
-}, [showVisibilityLayer, results]);
+  const toggleVisibilityLayerVisibility = useCallback(() => {
+    const newVisibility = !showVisibilityLayer;
+    setShowVisibilityLayer(newVisibility);
+    
+    // Ensure layer exists before trying to toggle it
+    if (hasVisibilityResults) {
+      layerManager.setLayerVisibility(MAP_LAYERS.FLIGHT_PATH_VISIBILITY, newVisibility);
+    }
+  }, [showVisibilityLayer, hasVisibilityResults]);
 
   // Listen for layer visibility changes
   useEffect(() => {
@@ -269,12 +276,6 @@ const toggleVisibilityLayerVisibility = useCallback(() => {
       setLocalError("Analysis aborted by user");
     }
   }, [gridAnalysisRef, isAnalyzing, setIsAnalyzing]);
-
-  // Check if flight path visibility analysis results are available
-  const hasVisibilityResults = results?.flightPathVisibility !== undefined;
-  
-  // Check if grid analysis results are available
-  const hasGridResults = results?.cells?.length > 0;
 
   return (
     <div className="p-3 bg-white rounded shadow mb-4">

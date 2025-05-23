@@ -120,14 +120,19 @@ const FlightPathDisplay: React.FC = () => {
   }, [map, terrainLoaded, flightPlan, config, metrics]);
   */
 
-  // —— Clean up markers when this component unmounts
-  useEffect(() => {
-    return () => {
-      startMarkerRef.current?.remove();
-      endMarkerRef.current?.remove();
-      availableRangeMarkerRef.current?.remove();
-    };
-  }, []);
+useEffect(() => {
+  // Capture the current ref values for cleanup
+  const startMarker = startMarkerRef.current;
+  const endMarker = endMarkerRef.current;
+  const availableRangeMarker = availableRangeMarkerRef.current;
+  
+  return () => {
+    // Use the captured references in cleanup
+    startMarker?.remove();
+    endMarker?.remove();
+    availableRangeMarker?.remove();
+  };
+}, []);
 
   return null;
 };

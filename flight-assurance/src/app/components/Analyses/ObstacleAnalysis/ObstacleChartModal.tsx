@@ -39,14 +39,18 @@ const ObstacleChartModal: React.FC<ObstacleChartModalProps> = ({
   const { flightPlan } = useFlightPlanContext();
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
 
-  // Cleanup effect for chart instance
+// Cleanup effect for chart instance
   useEffect(() => {
+    // Capture the current ref value when the effect runs
+    const currentChart = chartRef.current;
+    
     return () => {
-      if (chartRef.current) {
+      // Use the captured value in cleanup
+      if (currentChart) {
         try {
-          chartRef.current.options.onHover = () => {};
-          chartRef.current.stop();
-          chartRef.current.destroy();
+          currentChart.options.onHover = () => {};
+          currentChart.stop();
+          currentChart.destroy();
         } catch (error) {
           console.error("Error destroying chart:", error);
         }

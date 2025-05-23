@@ -167,7 +167,7 @@ const handleGuideMe = (target: { component: string; action: string }) => {
         </div>
         
         <p className="text-xs text-gray-600">
-          Follow these steps to complete your analyses. Use 'Guide Me' to locate each action in the app.
+          Follow these steps to complete your analyses. Use Guide Me to locate each action in the app.
         </p>
         
         <div className="flex-1 overflow-y-auto">

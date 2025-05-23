@@ -24,7 +24,7 @@ import PremiumButton from '../../../UI/PremiumButton';
 import { Signal, Loader, Network, AlertTriangle, CheckCircle, Radio, Smartphone, Wifi } from 'lucide-react';
 
 interface MobileTowerAnalysisCardProps {
-  // Props if needed
+  className?: string;
 }
 
 const MobileTowerAnalysisCard: React.FC<MobileTowerAnalysisCardProps> = () => {

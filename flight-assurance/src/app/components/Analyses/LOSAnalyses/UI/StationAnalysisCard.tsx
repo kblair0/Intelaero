@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useMarkersContext } from "../../../../context/MarkerContext";
 import { useLOSAnalysis } from "../../../../context/LOSAnalysisContext";
 import { useMapContext } from "../../../../context/mapcontext";
@@ -94,14 +94,14 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
   const selectedMarker = typeMarkers.find(m => m.id === selectedMarkerId);
   
   // Get layer ID for this marker
-  const getLayerId = (markerId: string) => {
+  const getLayerId = useCallback((markerId: string) => {
     const layerPrefix = 
       stationType === 'gcs' ? MAP_LAYERS.GCS_GRID :
       stationType === 'observer' ? MAP_LAYERS.OBSERVER_GRID :
       MAP_LAYERS.REPEATER_GRID;
     
     return `${layerPrefix}-${markerId}`;
-  };
+  }, [stationType]);
   
   // Run station analysis
   const handleRunStationAnalysis = async () => {
@@ -204,7 +204,7 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
     return () => {
       unsubscribe();
     };
-  }, [selectedMarkerId]);
+  }, [selectedMarkerId, getLayerId]);
 
   return (
     <div className="bg-white rounded shadow p-3 mb-4">
@@ -308,7 +308,7 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
             
             <div>
               <div className="flex justify-between items-center mb-1">
-                <label className="text-xs text-gray-600">This Observers' Height (m)</label>
+                <label className="text-xs text-gray-600">This Observer&apos;s Height (m)</label>
                 <div className="flex items-center space-x-2">
                   <input
                     type="number"

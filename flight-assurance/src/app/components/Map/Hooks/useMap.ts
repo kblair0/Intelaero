@@ -27,6 +27,7 @@ export const useMap = (containerId: string, options: mapboxgl.MapboxOptions) => 
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const [terrainLoaded, setTerrainLoaded] = useState(false);
   const [mapError, setMapError] = useState<Error | null>(null);
+  const centerString = JSON.stringify(options.center);
 
   useEffect(() => {
     if (!containerId) {
@@ -51,7 +52,7 @@ export const useMap = (containerId: string, options: mapboxgl.MapboxOptions) => 
       const map = new mapboxgl.Map({
         container, // Pass DOM element directly
         style: options.style,
-        center: options.center,
+        center: JSON.parse(centerString),
         zoom: options.zoom,
         projection: options.projection,
       });
@@ -112,7 +113,7 @@ export const useMap = (containerId: string, options: mapboxgl.MapboxOptions) => 
       }
       mapRef.current = null;
     };
-  }, [containerId, options.style, JSON.stringify(options.center), options.zoom, options.projection]);
+  }, [containerId, options.style, centerString, options.zoom, options.projection]);
 
   return {
     map: mapRef.current,

@@ -263,10 +263,10 @@ const generateChartData = useCallback((result: ObstacleAnalysisResult): TerrainC
  * @param onProgress - Optional callback to report progress (returns true to cancel)
  * @returns Promise that resolves when terrain data is filled
  */
-async function fillTerrain(
+const fillTerrain = useCallback(async (
   pts: SamplePoint[],
   onProgress?: (percent: number) => boolean
-) {
+) => {
   if (!map) {
     throw new Error("Map not available");
   }
@@ -401,7 +401,7 @@ async function fillTerrain(
       pts.sort((a, b) => a.distanceFromStart - b.distanceFromStart);
     }
   }
-}
+}, [map, flightPlan]);
 
 /**
  * Runs the obstacle analysis for the flight plan
@@ -589,8 +589,7 @@ const runAnalysis = useCallback(async (options?: Partial<AnalysisOptions>) => {
     console.error(`[${new Date().toISOString()}] [ObstacleAnalysisContext.tsx] Analysis ${analysisId} error:`, err);
     setError(err instanceof Error ? err.message : String(err));
     setStatus('error');
-  }
-}, [map, flightPlan, isProcessed, analysisOptions, setError, setStatus, setProgress, setFlightPlan, generateChartData]);
+  }}, [map, flightPlan, isProcessed, analysisOptions, setError, setStatus, setProgress, setFlightPlan, generateChartData, fillTerrain, status]);
 /**
  * Cancels the ongoing analysis
  */

@@ -18,7 +18,7 @@
 
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useMarkersContext } from "../../../../context/MarkerContext";
 import { useLOSAnalysis } from "../../../../context/LOSAnalysisContext";
 import { useMapContext } from "../../../../context/mapcontext";
@@ -72,7 +72,10 @@ const StationLOSAnalysisCard: React.FC<StationLOSAnalysisCardProps> = ({ gridAna
   };
 
   // Get all available markers
-  const availableMarkers = markers.length > 0 ? markers : [];
+  const availableMarkers = useMemo(() => 
+    markers.length > 0 ? markers : [], 
+    [markers]
+  );
 
   // Set initial marker selections when markers change
   useEffect(() => {

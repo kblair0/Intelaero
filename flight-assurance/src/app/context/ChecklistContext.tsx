@@ -38,15 +38,8 @@ interface ChecklistContextProps {
 const ChecklistContext = createContext<ChecklistContextProps | undefined>(undefined);
 
 /**
- * Provides checklist state and methods
- * @param children - React components to render within the provider
- */
-export const ChecklistProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [checks, setChecks] = useState<ChecklistItem[]>([]);
-  const [guidedTarget, setGuidedTarget] = useState<{ component: string; action: string } | null>(null);
-
-/**
  * Mapping of analysis IDs to checklist steps
+ * Static configuration that doesn't depend on component state
  */
 const analysisToChecklistSteps: Record<string, ChecklistStep[]> = {
   terrainProfile: [
@@ -146,6 +139,7 @@ const analysisToChecklistSteps: Record<string, ChecklistStep[]> = {
 
 /**
  * Mapping of checklist actions to MapSidePanel names
+ * Static configuration that doesn't depend on component state
  */
 const actionToPanelMap: Record<string, 'terrain' | 'los' | 'energy' | null> = {
   analyseTerrainInAO: 'terrain',
@@ -162,6 +156,14 @@ const actionToPanelMap: Record<string, 'terrain' | 'los' | 'energy' | null> = {
   droneToGround: 'los',
   antennaToAntenna: 'los',
 };
+
+/**
+ * Provides checklist state and methods
+ * @param children - React components to render within the provider
+ */
+export const ChecklistProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [checks, setChecks] = useState<ChecklistItem[]>([]);
+  const [guidedTarget, setGuidedTarget] = useState<{ component: string; action: string } | null>(null);
 
   /**
    * Adds checklist items based on selected analyses

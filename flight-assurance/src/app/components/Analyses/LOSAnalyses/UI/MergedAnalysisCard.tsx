@@ -87,7 +87,7 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
     if (JSON.stringify(markerIds.sort()) !== JSON.stringify([...selectedMarkerIds].sort())) {
       setSelectedMarkerIds(markerIds);
     }
-  }, [availableStations]); // This dependency is now properly memoized
+}, [availableStations, selectedMarkerIds]);
 
   const handleMarkerSelectionChange = (markerId: string, isSelected: boolean) => {
     if (isSelected) {

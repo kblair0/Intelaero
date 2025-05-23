@@ -22,13 +22,85 @@ export const useFlightPlanProcessor = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const { generateAOFromFlightPlan } = useAreaOpsProcessor();
 
+
   /**
-   * Updates a flight plan with real terrain elevations
+   * Densifies a terrain-following segment by interpolating points.
+   * Memoized to prevent unnecessary re-creation and maintain stable dependencies.
    */
+  const densifyTerrainSegment = useCallback(async (
+    segmentCoords: [number, number, number][],
+    waypoints: WaypointData[],
+    elevations: number[]
+  ): Promise<[number, number, number][]> => {
+    if (!map) throw new Error('Map not initialized');
+    if (segmentCoords.length < 2) return segmentCoords;
+    
+    const coords2D = segmentCoords.map(([lon, lat]) => [lon, lat]);
+    const line = turf.lineString(coords2D);
+    const cumDist: number[] = [0];
+    
+    for (let i = 1; i < segmentCoords.length; i++) {
+      cumDist.push(cumDist[i - 1] + turf.distance(coords2D[i - 1], coords2D[i], { units: 'meters' }));
+    }
+    
+    const totalLen = cumDist[cumDist.length - 1];
+    const step = 10; // 10 meter steps
+    const densified: [number, number, number][] = [];
+    
+    const points: [number, number][] = [];
+    for (let d = 0; d <= totalLen; d += step) {
+      const pt = turf.along(line, d, { units: 'meters' });
+      points.push(pt.geometry.coordinates as [number, number]);
+    }
+    
+    // Clear cache to avoid stale values
+    clearElevationCache();
+    
+    // Preload tiles
+    await preloadTiles(map, points);
+    
+    // Use dynamic test points
+    await ensureDEMLoaded(map, points.slice(0, 3));
+    
+    const interpElevations = await getReliableTerrainElevations(map, points);
+    
+    // Log elevations for debugging
+    console.log(`[${new Date().toISOString()}] [FlightPlanProcessor] Interpolated elevations:`, interpElevations);
+    
+    // Add terrain and waypoint altitude
+    for (let i = 0; i < points.length; i++) {
+      const [lon, lat] = points[i];
+      const elev = interpElevations[i];
+      
+      // Interpolate waypoint altitude
+      let waypointAlt = waypoints[0].originalAltitude;
+      if (waypoints.length > 1) {
+        const d = i * step;
+        const segmentIdx = cumDist.findIndex(cd => cd > d) - 1;
+        const idx = Math.max(0, segmentIdx);
+        const nextIdx = Math.min(waypoints.length - 1, idx + 1);
+        
+        if (idx === nextIdx) {
+          waypointAlt = waypoints[idx].originalAltitude;
+        } else {
+          const segStart = cumDist[idx];
+          const segEnd = cumDist[nextIdx];
+          const ratio = (d - segStart) / (segEnd - segStart);
+          waypointAlt = waypoints[idx].originalAltitude + 
+            ratio * (waypoints[nextIdx].originalAltitude - waypoints[idx].originalAltitude);
+        }
+      }
+      
+      densified.push([lon, lat, elev + waypointAlt]);
+    }
+    
+    return densified;
+  }, [map]);
+
 /**
  * Updates a flight plan with real terrain elevations
  */
-const updateFlightPlanElevations = async (plan: FlightPlanData): Promise<FlightPlanData> => {
+const updateFlightPlanElevations = useCallback(async (plan: FlightPlanData): Promise<FlightPlanData> => {
   if (!map) throw new Error('Map not initialized');
   
   console.log(`[${new Date().toISOString()}] [FlightPlanProcessor] Updating flight plan with real elevations...`);
@@ -150,14 +222,14 @@ const updateFlightPlanElevations = async (plan: FlightPlanData): Promise<FlightP
     (waypoints[0]?.originalAltitude || 0);
   
   updatedPlan.properties.processed = true;
-  updatedPlan.properties.placeholder = false; // No longer using placeholders
+  updatedPlan.properties.placeholder = false;
   updatedPlan.features[0].geometry.coordinates = processedCoords;
   updatedPlan.features[0].properties.originalCoordinates = originalCoords;
   updatedPlan.waypointDistances = waypointDistances;
   updatedPlan.originalWaypointDistances = originalWaypointDistances;
   
   return updatedPlan;
-};
+}, [map, densifyTerrainSegment]);
 
   /**
    * Processes a flight plan by resolving altitudes with terrain data.
@@ -270,80 +342,7 @@ const updateFlightPlanElevations = async (plan: FlightPlanData): Promise<FlightP
     } finally {
       setIsProcessing(false);
     }
-  }, [map, generateAOFromFlightPlan]);
-
-  /**
-   * Densifies a terrain-following segment by interpolating points.
-   */
-  const densifyTerrainSegment = async (
-    segmentCoords: [number, number, number][],
-    waypoints: WaypointData[],
-    elevations: number[]
-  ): Promise<[number, number, number][]> => {
-    if (!map) throw new Error('Map not initialized');
-    if (segmentCoords.length < 2) return segmentCoords;
-    
-    const coords2D = segmentCoords.map(([lon, lat]) => [lon, lat]);
-    const line = turf.lineString(coords2D);
-    const cumDist: number[] = [0];
-    
-    for (let i = 1; i < segmentCoords.length; i++) {
-      cumDist.push(cumDist[i - 1] + turf.distance(coords2D[i - 1], coords2D[i], { units: 'meters' }));
-    }
-    
-    const totalLen = cumDist[cumDist.length - 1];
-    const step = 10; // 10 meter steps
-    const densified: [number, number, number][] = [];
-    
-    const points: [number, number][] = [];
-    for (let d = 0; d <= totalLen; d += step) {
-      const pt = turf.along(line, d, { units: 'meters' });
-      points.push(pt.geometry.coordinates as [number, number]);
-    }
-    
-    // Clear cache to avoid stale values
-    clearElevationCache();
-    
-    // Preload tiles
-    await preloadTiles(map, points);
-    
-    // Use dynamic test points
-    await ensureDEMLoaded(map, points.slice(0, 3));
-    
-    const interpElevations = await getReliableTerrainElevations(map, points);
-    
-    // Log elevations for debugging
-    console.log(`[${new Date().toISOString()}] [FlightPlanProcessor] Interpolated elevations:`, interpElevations);
-    
-    // Add terrain and waypoint altitude
-    for (let i = 0; i < points.length; i++) {
-      const [lon, lat] = points[i];
-      const elev = interpElevations[i];
-      
-      // Interpolate waypoint altitude
-      let waypointAlt = waypoints[0].originalAltitude;
-      if (waypoints.length > 1) {
-        const d = i * step;
-        const segmentIdx = cumDist.findIndex(cd => cd > d) - 1;
-        const idx = Math.max(0, segmentIdx);
-        const nextIdx = Math.min(waypoints.length - 1, idx + 1);
-        
-        if (idx === nextIdx) {
-          waypointAlt = waypoints[idx].originalAltitude;
-        } else {
-          const segStart = cumDist[idx];
-          const segEnd = cumDist[nextIdx];
-          const ratio = (d - segStart) / (segEnd - segStart);
-          waypointAlt = waypoints[idx].originalAltitude + 
-            ratio * (waypoints[nextIdx].originalAltitude - waypoints[idx].originalAltitude);
-        }
-      }
-      
-      densified.push([lon, lat, elev + waypointAlt]);
-    }
-    
-    return densified;
-  };
+  }, [map, generateAOFromFlightPlan, updateFlightPlanElevations ]);
 
   return { 
     processFlightPlan, 

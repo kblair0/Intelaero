@@ -371,7 +371,7 @@ const goToNextStep = useCallback(() => {
     setCurrentStep((prev) => prev + 1);
     trackEvent("wizard_next_step", { from: currentStep, to: currentStep + 1 });
   }
-}, [currentStep, selectedAnalysisType, selectedAnalyses.length, trackEvent]);
+}, [currentStep, selectedAnalysisType, selectedAnalyses.length]);
 
   /**
    * Move to the previous step

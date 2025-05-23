@@ -51,7 +51,7 @@ const WelcomeMessage: React.FC<WelcomeMessageProps> = ({ onGetStarted, onClose }
           Fly worry-free, knowing you’ll maintain visual contact and reliable connectivity (e.g. GCS/LTE) with your drone.
         </p>
         <p className="mt-2 max-w-xl mx-auto mt-4 text-md">
-          <em>'Your software has literally turned my planning from days into hours!'</em> - Industry Partner
+          <em>&apos;Your software has literally turned my planning from days into hours!&apos;</em> - Industry Partner
         </p>
       </div>
 

@@ -424,7 +424,8 @@ const analyzeFlightPath = useCallback(
     visualizeGrid,
     cleanupAnalysis,
     setIsAnalyzing,
-    elevationService
+    elevationService,
+    sampleFlightPath
   ]
 );
 

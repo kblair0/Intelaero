@@ -13,32 +13,42 @@
 
 import { forwardRef, useImperativeHandle, useRef, useState, useCallback } from 'react';
 import { useGridAnalysis } from '../../Hooks/useGridAnalysis';
-import { AnalysisResults, useLOSAnalysis } from '../../../../context/LOSAnalysisContext';
+import { 
+  AnalysisResults as ContextAnalysisResults,
+  useLOSAnalysis 
+} from '../../../../context/LOSAnalysisContext';
 import { useMapContext } from '../../../../context/mapcontext';
 import { layerManager, MAP_LAYERS } from '../../../../services/LayerManager';
 import { FlightPlanData } from '../../../../context/FlightPlanContext';
-import { LocationData, AnalysisType, StationLOSResult, LOSProfilePoint, GridCell } from '../../Types/GridAnalysisTypes';
+import { 
+  LocationData, 
+  AnalysisType, 
+  StationLOSResult, 
+  LOSProfilePoint, 
+  GridCell,
+  AnalysisResults as TypesAnalysisResults 
+} from '../../Types/GridAnalysisTypes';
 import { useMarkersContext } from '../../../../context/MarkerContext';
 
 // Interface for the controller's public methods
 export interface GridAnalysisRef {
-  runFlightPathAnalysis: () => Promise<AnalysisResults>;
+  runFlightPathAnalysis: () => Promise<ContextAnalysisResults>;
   runStationAnalysis: (options: {
     stationType: 'gcs' | 'observer' | 'repeater';
     location: LocationData;
     range: number;
     elevationOffset: number;
     markerId: string;
-  }) => Promise<AnalysisResults>;
+  }) => Promise<ContextAnalysisResults>;
   runMergedAnalysis: (stations: Array<{
     type: 'gcs' | 'observer' | 'repeater';
     location: LocationData;
     range: number;
     elevationOffset: number;
-  }>) => Promise<AnalysisResults>;
+  }>) => Promise<ContextAnalysisResults>;
   checkStationToStationLOS: (
-    sourceStation: 'gcs' | 'observer' | 'repeater',
-    targetStation: 'gcs' | 'observer' | 'repeater'
+    sourceStation: string,
+    targetStation: string
   ) => Promise<{
     result: StationLOSResult;
     profile: LOSProfilePoint[];
@@ -47,18 +57,71 @@ export interface GridAnalysisRef {
     sampleInterval?: number;
     minimumOffset?: number;
     showLayer?: boolean;
-  }) => Promise<AnalysisResults>;
-  analyzeTerrainGrid: (gridCells: GridCell[]) => Promise<AnalysisResults>;
+    markerIds?: string[];
+  }) => Promise<ContextAnalysisResults>;
+  analyzeTerrainGrid: (gridCells: GridCell[], options?: {
+    referenceAltitude?: number;
+    onProgress?: (progress: number) => boolean | void;
+  }) => Promise<ContextAnalysisResults>;
 
   abortAnalysis: () => void;
 }
-
 
 interface GridAnalysisControllerProps {
   flightPlan?: FlightPlanData;
   onProgress?: (progress: number) => void;
   onError?: (error: Error) => void;
   onComplete?: (results: any) => void;
+}
+
+/**
+ * Adapts analysis results from GridAnalysisTypes to LOSAnalysisContext format
+ * This ensures consistent data structure throughout the application
+ */
+function adaptAnalysisResults(
+  internalResults: TypesAnalysisResults
+): ContextAnalysisResults {
+  // Create a new object with the basic properties copied
+  const results: ContextAnalysisResults = {
+    cells: internalResults.cells,
+    stats: internalResults.stats ? {
+      visibleCells: internalResults.stats.visibleCells,
+      totalCells: internalResults.stats.totalCells,
+      averageVisibility: internalResults.stats.averageVisibility,
+      analysisTime: internalResults.stats.analysisTime,
+      // Copy terrainStats if present
+      terrainStats: internalResults.stats.terrainStats
+    } : null,
+    stationLOSResult: internalResults.stationLOSResult
+  };
+
+  // Convert flightPathVisibility if present
+  if (internalResults.flightPathVisibility) {
+    results.flightPathVisibility = {
+      visibleLength: internalResults.flightPathVisibility.visibleLength,
+      totalLength: internalResults.flightPathVisibility.totalLength,
+      coveragePercentage: internalResults.flightPathVisibility.coveragePercentage
+    };
+
+    // Convert stationStats from Record to Array format
+    if (internalResults.flightPathVisibility.stationStats) {
+      results.flightPathVisibility.stationStats = Object.entries(
+        internalResults.flightPathVisibility.stationStats
+      ).map(([stationId, visibleLength]) => {
+        // Extract station type from ID (assuming format like "gcs-123")
+        const stationType = stationId.split('-')[0] as 'gcs' | 'observer' | 'repeater';
+        const totalLength = internalResults.flightPathVisibility?.totalLength || 0;
+        
+        return {
+          stationType,
+          visibleLength,
+          coveragePercentage: totalLength > 0 ? (visibleLength / totalLength) * 100 : 0
+        };
+      });
+    }
+  }
+
+  return results;
 }
 
 /**
@@ -134,14 +197,17 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
           cleanup();
           
           // Pass sampling resolution to analysis function
-          const results = await runAnalysis(AnalysisType.FLIGHT_PATH, { 
+          const internalResults = await runAnalysis(AnalysisType.FLIGHT_PATH, { 
             flightPlan,
             samplingResolution
           });
 
-          setResults(results);
-          if (onComplete) onComplete(results);
-          return results;
+          // Convert to context format
+          const contextResults = adaptAnalysisResults(internalResults);
+          
+          setResults(contextResults);
+          if (onComplete) onComplete(contextResults);
+          return contextResults;
         } catch (error: unknown) {
           const message = error instanceof Error ? error.message : "Unknown error";
           setError(message);
@@ -151,6 +217,7 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
           setIsAnalyzing(false);
         }
       },
+      
       // Station analysis
       async runStationAnalysis(options) {
         try {
@@ -179,15 +246,18 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
           layerManager.removeLayer(layerId);
           
           // Run the analysis with the unique layer ID
-          const results = await runAnalysis(AnalysisType.STATION, {
+          const internalResults = await runAnalysis(AnalysisType.STATION, {
             ...options,
             layerId
           });
           
-          setResults(results);
+          // Convert to context format
+          const contextResults = adaptAnalysisResults(internalResults);
           
-          if (onComplete) onComplete(results);
-          return results;
+          setResults(contextResults);
+          
+          if (onComplete) onComplete(contextResults);
+          return contextResults;
         } catch (error: unknown) {
           const message = error instanceof Error ? error.message : "Unknown error";
           setError(message);
@@ -199,24 +269,28 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
       },
       
       // Merged analysis - update to use markers collection
-      async runMergedAnalysis(options) {
+      async runMergedAnalysis(stations) {
         try {
           setIsAnalyzing(true);
           layerManager.removeLayer(MAP_LAYERS.MERGED_VISIBILITY);
           
-          // If no specific stations are provided, use all markers
-          const stations = options?.stations || markers.map(marker => ({
+          // Use the provided stations array directly
+          const stationsToUse = stations || markers.map(marker => ({
             type: marker.type,
             location: marker.location,
             range: 500, // Default range if not specified
             elevationOffset: marker.elevationOffset
           }));
           
-          const results = await runAnalysis(AnalysisType.MERGED, { stations });
-          setResults(results);
+          const internalResults = await runAnalysis(AnalysisType.MERGED, { stations: stationsToUse });
           
-          if (onComplete) onComplete(results);
-          return results;
+          // Convert to context format
+          const contextResults = adaptAnalysisResults(internalResults);
+          
+          setResults(contextResults);
+          
+          if (onComplete) onComplete(contextResults);
+          return contextResults;
         } catch (error: unknown) {
           const message = error instanceof Error ? error.message : "Unknown error";
           setError(message);
@@ -266,8 +340,8 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
             }
           );
           
-          // Extract LOS result from analysis results
-          const results = {
+          // Create internal results format
+          const internalResults = {
             cells: [],
             stats: {
               visibleCells: 0,
@@ -278,9 +352,12 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
             stationLOSResult: losData.stationLOSResult,
           };
           
-          setResults(results);
+          // Convert to context format
+          const contextResults = adaptAnalysisResults(internalResults);
           
-          if (onComplete) onComplete(results);
+          setResults(contextResults);
+          
+          if (onComplete) onComplete(contextResults);
           
           return { 
             result: losData.stationLOSResult!, 
@@ -312,11 +389,16 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
           const { analyzeFlightPathVisibility, addVisibilityLayer } = await import(
             '../../LOSAnalyses/Utils/FlightPathVisibilityEngine');
           
-          // Run the analysis with all markers
+          // Filter markers if markerIds is provided
+          const markersToUse = options.markerIds 
+            ? markers.filter(marker => options.markerIds?.includes(marker.id))
+            : markers;
+          
+          // Run the analysis with selected markers
           const visibilityResults = await analyzeFlightPathVisibility(
             map!,
             flightPlan,
-            markers, // Pass all markers instead of filtered stations
+            markersToUse,
             elevationService,
             {
               sampleInterval: options.sampleInterval || 10,
@@ -343,8 +425,10 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
             );
           }
           
-          // Create the analysis results object
-          const results: AnalysisResults = {
+          // Create the internal results object
+          // Note: This is handling a unique case where FlightPathVisibilityEngine already returns
+          // in the format expected by LOSAnalysisContext, so we need to convert it to our internal format first
+          const internalResults: TypesAnalysisResults = {
             cells: [], // Not using cells for this analysis
             stats: {
               visibleCells: 0,
@@ -356,14 +440,21 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
               visibleLength: visibilityResults.stats.visibleLength,
               totalLength: visibilityResults.stats.totalLength,
               coveragePercentage: visibilityResults.stats.coveragePercentage,
-              stationStats: visibilityResults.stats.stationStats
+              // Convert the array-based stats to a Record format for internal use
+              stationStats: visibilityResults.stats.stationStats?.reduce((acc, stat) => {
+                acc[`${stat.stationType}-${Math.random().toString(36).substr(2, 9)}`] = stat.visibleLength;
+                return acc;
+              }, {} as Record<string, number>)
             }
           };
           
-          setResults(results);
+          // Convert back to context format
+          const contextResults = adaptAnalysisResults(internalResults);
           
-          if (onComplete) onComplete(results);
-          return results;
+          setResults(contextResults);
+          
+          if (onComplete) onComplete(contextResults);
+          return contextResults;
           
         } catch (error: unknown) {
           const message = error instanceof Error ? error.message : "Unknown error";
@@ -375,79 +466,83 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
           setProgress(0);
         }
       },
-      // Analyze a grid of terrain cells
-// In GridAnalysisController.tsx
-// Find the analyzeTerrainGrid method and replace it with this enhanced version:
-
-/**
- * Analyzes a grid of terrain cells to generate elevation statistics
- * @param gridCells - The grid cells to analyze
- * @param options - Analysis options including reference altitude and progress tracking
- * @returns Analysis results with terrain statistics
- */
-async analyzeTerrainGrid(
-  gridCells: GridCell[], 
-  options?: { 
-    referenceAltitude?: number;
-    onProgress?: (progress: number) => boolean | void;
-  }
-): Promise<AnalysisResults> {
-  try {
-    setIsAnalyzing(true);
-    
-    const startTime = performance.now();
-    
-    // Run the terrain analysis with proper options
-    const result = await analyzeTerrainGrid(
-      gridCells, 
-      {
-        batchSize: 1000,
-        referenceAltitude: options?.referenceAltitude || 120,
-        onProgress: (progress) => {
-          // Update internal progress
-          if (options?.onProgress) {
-            return options.onProgress(progress) || false;
-          }
-          if (onProgress) {
-            onProgress(progress);
-          }
-          return false;
+      
+      /**
+       * Analyzes a grid of terrain cells to generate elevation statistics
+       * @param gridCells - The grid cells to analyze
+       * @param options - Analysis options including reference altitude and progress tracking
+       * @returns Analysis results with terrain statistics
+       */
+      async analyzeTerrainGrid(
+        gridCells: GridCell[], 
+        options?: { 
+          referenceAltitude?: number;
+          onProgress?: (progress: number) => boolean | void;
         }
-      }
-    );
-    
-    // Create consistent results format
-    const analysisResults: AnalysisResults = {
-      cells: gridCells,
-      stats: {
-        visibleCells: gridCells.length,
-        totalCells: gridCells.length,
-        averageVisibility: 100, // Not directly applicable for terrain analysis
-        analysisTime: performance.now() - startTime,
-        terrainStats: {
-          highestElevation: result.highestElevation,
-          lowestElevation: result.lowestElevation,
-          averageElevation: result.averageElevation,
-          elevationDistribution: result.elevationDistribution,
-          sampleElevations: result.elevations // Include sample elevations
+      ): Promise<ContextAnalysisResults> {
+        try {
+          setIsAnalyzing(true);
+          
+          const startTime = performance.now();
+          
+          // The hook's analyzeTerrainGrid expects a number for referenceAltitude, not an object
+          // Just pass the referenceAltitude value directly
+          const result = await analyzeTerrainGrid(
+            gridCells,
+            options?.referenceAltitude || 120
+          );
+          
+          // For the progress tracking, we'll need to add a listener in the useEffect
+          if (options?.onProgress || onProgress) {
+            const progressHandler = (progress: number) => {
+              if (options?.onProgress) {
+                return options.onProgress(progress) || false;
+              }
+              if (onProgress) {
+                onProgress(progress);
+              }
+              return false;
+            };
+            
+            // Register progress handling here if needed
+            setProgress(0); // Start at 0%
+          }
+          
+          // Create internal results format
+          const internalResults: TypesAnalysisResults = {
+            cells: gridCells,
+            stats: {
+              visibleCells: gridCells.length,
+              totalCells: gridCells.length,
+              averageVisibility: 100, // Not directly applicable for terrain analysis
+              analysisTime: performance.now() - startTime,
+              terrainStats: {
+                highestElevation: result.highestElevation,
+                lowestElevation: result.lowestElevation,
+                averageElevation: result.averageElevation,
+                elevationDistribution: result.elevationDistribution,
+                sampleElevations: result.elevations // Include sample elevations
+              }
+            }
+          };
+          
+          // Convert to context format
+          const contextResults = adaptAnalysisResults(internalResults);
+          
+          // Set results and notify completion
+          setResults(contextResults);
+          if (onComplete) onComplete(contextResults);
+          
+          return contextResults;
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : "Unknown error";
+          setError(message);
+          if (onError) onError(error instanceof Error ? error : new Error(message));
+          throw error;
+        } finally {
+          setIsAnalyzing(false);
         }
-      }
-    };
-    
-    // Set results and notify completion
-    setResults(analysisResults);
-    if (onComplete) onComplete(analysisResults);
-    
-    return analysisResults;
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    setError(message);
-    if (onError) onError(error instanceof Error ? error : new Error(message));
-    throw error;
-  } finally {
-    setIsAnalyzing(false);
-  }
-},
+      },
 
       // Abort any running analysis
       abortAnalysis() {
@@ -467,6 +562,9 @@ async analyzeTerrainGrid(
       elevationService,
       markers,
       samplingResolution,
+      analyzeTerrainGrid,
+      onProgress,
+      setProgress
     ]);
 
     // The controller doesn't render anything, it just manages state

@@ -21,6 +21,14 @@ export interface AnalysisStats {
   totalCells: number;
   averageVisibility: number;
   analysisTime: number;
+  // Add terrainStats property for terrain analysis
+  terrainStats?: {
+    highestElevation: number;
+    lowestElevation: number;
+    averageElevation: number;
+    elevationDistribution: Record<string, number>;
+    sampleElevations?: number[];
+  };
 }
 
 export interface AnalysisResults {

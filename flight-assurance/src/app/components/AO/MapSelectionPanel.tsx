@@ -21,7 +21,6 @@
  * - AreaOfOpsContext
  * - MapContext
  */
-
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import * as turf from "@turf/turf";
 import { useMapContext } from "../../context/mapcontext";
@@ -72,42 +71,6 @@ const MapSelectionPanel: React.FC<MapSelectionPanelProps> = ({
   const clickListenerRef = useRef<((e: mapboxgl.MapMouseEvent) => void) | null>(null);
   const circleLayerId = "temp-circle-preview";
   const centerId = "temp-center-point";
-  
-  /**
-   * Sets up map click listener for point selection
-   */
-  const setupMapClickListener = useCallback(() => {
-    if (!map || status !== "idle") return;
-    
-    setStatus("selecting");
-    
-    // Remove any existing listener
-    if (clickListenerRef.current) {
-      map.off("click", clickListenerRef.current);
-      clickListenerRef.current = null;
-    }
-    
-    // Create new click listener
-    const handleMapClick = (e: mapboxgl.MapMouseEvent) => {
-      const coordinates: [number, number] = [e.lngLat.lng, e.lngLat.lat];
-      setCenterPoint(coordinates);
-      showCirclePreview(coordinates, radius);
-      trackEvent("ao_map_point_selected", { coordinates });
-      
-      // Stop listening for clicks once a point is selected
-      map.off("click", handleMapClick);
-      map.getCanvas().style.cursor = "";
-    };
-    
-    // Save reference and attach to map
-    clickListenerRef.current = handleMapClick;
-    map.on("click", handleMapClick);
-    
-    // Update cursor
-    map.getCanvas().style.cursor = "crosshair";
-    
-    trackEvent("ao_map_selection_started", { mode });
-  }, [map, radius, status, mode]);
   
   /**
    * Shows temporary circle preview on the map
@@ -179,7 +142,43 @@ const MapSelectionPanel: React.FC<MapSelectionPanelProps> = ({
         }
       });
     }
-  }, [map]);
+  }, [map, centerId, circleLayerId]);
+  
+  /**
+   * Sets up map click listener for point selection
+   */
+  const setupMapClickListener = useCallback(() => {
+    if (!map || status !== "idle") return;
+    
+    setStatus("selecting");
+    
+    // Remove any existing listener
+    if (clickListenerRef.current) {
+      map.off("click", clickListenerRef.current);
+      clickListenerRef.current = null;
+    }
+    
+    // Create new click listener
+    const handleMapClick = (e: mapboxgl.MapMouseEvent) => {
+      const coordinates: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+      setCenterPoint(coordinates);
+      showCirclePreview(coordinates, radius);
+      trackEvent("ao_map_point_selected", { coordinates });
+      
+      // Stop listening for clicks once a point is selected
+      map.off("click", handleMapClick);
+      map.getCanvas().style.cursor = "";
+    };
+    
+    // Save reference and attach to map
+    clickListenerRef.current = handleMapClick;
+    map.on("click", handleMapClick);
+    
+    // Update cursor
+    map.getCanvas().style.cursor = "crosshair";
+    
+    trackEvent("ao_map_selection_started", { mode });
+  }, [map, radius, status, mode, showCirclePreview]);
   
   /**
    * Updates circle preview when radius changes
@@ -189,7 +188,7 @@ const MapSelectionPanel: React.FC<MapSelectionPanelProps> = ({
       showCirclePreview(centerPoint, radius);
     }
   }, [centerPoint, radius, showCirclePreview]);
-  
+
   /**
    * Cleans up temporary map layers
    */

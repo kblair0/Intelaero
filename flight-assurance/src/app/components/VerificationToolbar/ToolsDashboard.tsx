@@ -34,6 +34,7 @@ import {
   VisibilityAnalysisCard 
 } from "./Cards";
 import { useChecklistContext } from "../../context/ChecklistContext";
+import ReloadButton from "../UI/ReloadButton";
 
 // Dynamic imports for map layer handlers
 import dynamic from "next/dynamic";
@@ -210,6 +211,19 @@ const PlanVerificationDashboard: React.FC<PlanVerificationDashboardProps & { act
         onTogglePanel={onTogglePanel}
         activePanel={activePanel} // Pass activePanel to reflect panel state
       />
+
+      <div className="pt-4 border-t border-gray-200">
+        <ReloadButton 
+          variant="danger"
+          size="md"
+          text="Reset App"
+          className="w-full"
+          onBeforeReload={() => {
+            localStorage.clear();
+            sessionStorage.clear();
+          }}
+        />
+      </div>
 
       {/* Energy Analysis Card Hidden For Now
       <EnergyAnalysisCard 
