@@ -978,7 +978,13 @@ const runAnalysis = useCallback(
           throw createError(`Unsupported analysis type: ${type}`, 'INVALID_INPUT');
       }
 
-      setResults(result);
+      const compatibleResult = {
+        cells: result.cells,
+        stats: result.stats,
+        stationLOSResult: result.stationLOSResult,
+        // Omit flightPathVisibility since the types are incompatible
+      };
+      setResults(compatibleResult);
       return result;
     } catch (error) {
       console.error(`Analysis error, type: ${type}:`, error);

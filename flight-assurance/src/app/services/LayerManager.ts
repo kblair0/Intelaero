@@ -2,6 +2,7 @@
 // src/services/LayerManager.ts
 import mapboxgl from 'mapbox-gl';
 import * as turf from '@turf/turf';
+import { GridCell } from '../components/Analyses/Types/GridAnalysisTypes';
 
 export const MAP_LAYERS = {
   ELOS_GRID: 'elos-grid-layer',

@@ -6,9 +6,7 @@
  * with minimal overhead. Replaces and enhances TerrainUtils functionality.
  */
 
-import mapboxgl from 'mapbox-gl';
 import * as turf from '@turf/turf';
-import { Coordinates2D } from '../Types/GridAnalysisTypes';
 
 export class ElevationService {
   private map: mapboxgl.Map;

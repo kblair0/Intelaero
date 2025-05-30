@@ -4,15 +4,9 @@ import React, { createContext, useContext, useState, ReactNode, useCallback, use
 import { useMapContext } from "./mapcontext";
 import { analyzeTerrainGrid } from "../components/Analyses/Utils/GridAnalysisCore";
 import { useAnalysisController } from "./AnalysisControllerContext";
-export interface GridCell {
-  id: string;
-  geometry: GeoJSON.Polygon;
-  properties: {
-    elevation: number;
-    [key: string]: any;
-  };
-}
 
+// FIXED: Import GridCell from unified location - removes type conflicts
+import { GridCell } from "../components/Analyses/Types/GridAnalysisTypes";
 
 /**
  * Terrain analysis result interface
@@ -44,6 +38,7 @@ interface AreaOfOpsContextType {
 }
 
 const AreaOfOpsContext = createContext<AreaOfOpsContextType | undefined>(undefined);
+
 // Add this at the top of AreaOfOpsContext.tsx, outside of any component
 const createError = (message: string, code?: string, details?: any): Error => {
   const error = new Error(message);
@@ -93,7 +88,7 @@ const analyzeTerrainElevation = useCallback(async (referenceAltitude: number = 1
         {
           batchSize: 1000,
           referenceAltitude,
-          onProgress: (progress) => {
+          onProgress: (progress: number) => {
             setAnalysisProgress(progress);
             return abortAnalysisRef.current;
           }
@@ -134,7 +129,7 @@ const analyzeTerrainElevation = useCallback(async (referenceAltitude: number = 1
       aoTerrainGrid,
       {
         referenceAltitude,
-        onProgress: (progress) => {
+        onProgress: (progress: number) => {
           setAnalysisProgress(progress);
           return abortAnalysisRef.current;
         }

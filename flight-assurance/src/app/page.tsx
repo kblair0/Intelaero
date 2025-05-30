@@ -45,7 +45,7 @@ import Image from "next/image";
 import ObstacleAnalysisDashboard from "./components/Analyses/ObstacleAnalysis/TerrainAnalysisDashboard";
 import AnalysisDashboard from "./components/Analyses/LOSAnalyses/UI/VisibilityAnalysisDashboard";
 import MapSelectionPanel from "./components/AO/MapSelectionPanel";
-import { ReloadButton } from "./components/UI/ReloadButton";
+import ReloadButton from "./components/UI/ReloadButton";
 import MarkerLocationsModal from "./components/UI/MarkerLocationsModal";
 
 //payment and premium access

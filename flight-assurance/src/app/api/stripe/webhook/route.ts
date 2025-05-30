@@ -19,7 +19,7 @@ import { TierLevel } from '../../../context/PremiumContext';
 
 // Initialize Stripe with secret key
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2023-10-16',
+  apiVersion: '2025-04-30.basil' as const,
 });
 
 // Valid product IDs and their corresponding tier levels
@@ -97,9 +97,10 @@ async function handleSuccessfulPayment(session: Stripe.Checkout.Session) {
     // Verify product exists and determine tier level
     let tierLevel: number;
     
-    if (VALID_PRODUCTS[productId]) {
-      console.log(`Valid product found: ${productId} (${VALID_PRODUCTS[productId].name})`);
-      tierLevel = VALID_PRODUCTS[productId].tierLevel;
+    if (productId && productId in VALID_PRODUCTS) {
+      const product = VALID_PRODUCTS[productId as keyof typeof VALID_PRODUCTS];
+      console.log(`Valid product found: ${productId} (${product.name})`);
+      tierLevel = product.tierLevel;
     } else if (tierLevelString) {
       // Fallback to provided tier level if product not recognized
       console.log(`Product not recognized but tierLevel provided: ${tierLevelString}`);
@@ -132,7 +133,7 @@ async function handleSuccessfulPayment(session: Stripe.Checkout.Session) {
       tierLevel,
       productId,
       validityDays,
-      customerEmail
+      customerEmail || undefined
     );
     
     console.log('Code metadata:', {
@@ -164,7 +165,8 @@ async function handleSuccessfulPayment(session: Stripe.Checkout.Session) {
       }
     } catch (error) {
       console.error('Final error storing access code:', error);
-      throw new Error(`Failed to store access code: ${error.message}`);
+      throw new Error(`Failed to store access code: ${error instanceof Error ? error.message : 'Unknown error'}`);
+
     }
     
     // Update the Stripe session with the access code
@@ -179,7 +181,7 @@ async function handleSuccessfulPayment(session: Stripe.Checkout.Session) {
       console.log('Session updated successfully with access code');
     } catch (error) {
       console.error('Error updating session with access code:', error);
-      throw new Error(`Failed to update session: ${error.message}`);
+      throw new Error(`Failed to update session: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
     
     // Log successful completion

@@ -80,14 +80,11 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
 
   // Initialize selected markers when available markers change - with proper dependency tracking
   useEffect(() => {
-    // The key fix: Use a stable reference by getting the IDs first
-    const markerIds = availableStations.map(station => station.id);
-    
-    // Only update if we have different IDs than currently selected
-    if (JSON.stringify(markerIds.sort()) !== JSON.stringify([...selectedMarkerIds].sort())) {
-      setSelectedMarkerIds(markerIds);
+    if (selectedMarkerIds.length === 0 && availableStations.length >= 2) {
+      const initialSelection = [];
+      setSelectedMarkerIds(initialSelection);
     }
-}, [availableStations, selectedMarkerIds]);
+  }, [availableStations.length]);
 
   const handleMarkerSelectionChange = (markerId: string, isSelected: boolean) => {
     if (isSelected) {
@@ -117,6 +114,42 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
       setLocalError("At least two stations are required for merged analysis");
       return;
     }
+
+      // ADD THIS DISTANCE VALIDATION
+      const MAX_STATION_DISTANCE = 5000; // 5km in meters
+      let maxDistance = 0;
+      let farthestPair = { station1: '', station2: '', distance: 0 };
+      
+      // Check all pairs of selected stations
+      for (let i = 0; i < selectedStations.length; i++) {
+        for (let j = i + 1; j < selectedStations.length; j++) {
+          const station1 = selectedStations[i];
+          const station2 = selectedStations[j];
+          
+          const d = distance(
+            [station1.location.lng, station1.location.lat],
+            [station2.location.lng, station2.location.lat],
+            { units: "meters" }
+          );
+          
+          if (d > maxDistance) {
+            maxDistance = d;
+            farthestPair = {
+              station1: getStationDisplayName(station1),
+              station2: getStationDisplayName(station2),
+              distance: Math.round(d)
+            };
+          }
+        }
+      }
+      
+      // Reject if any stations are too far apart
+      if (maxDistance > MAX_STATION_DISTANCE) {
+        const errorMsg = `Stations are too far apart for merged analysis. Maximum distance allowed: ${MAX_STATION_DISTANCE/1000}km. Current maximum: ${(farthestPair.distance/1000).toFixed(1)}km between ${farthestPair.station1} and ${farthestPair.station2}.`;
+        setError(errorMsg);
+        setLocalError(errorMsg);
+        return;
+      }
     
     try {
       setError(null);
@@ -130,9 +163,9 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
         })),
       });
 
-      const mergedResults: AnalysisResults = await gridAnalysisRef.current.runMergedAnalysis({
-        stations: selectedStations
-      });
+      const mergedResults: AnalysisResults = await gridAnalysisRef.current.runMergedAnalysis(
+        selectedStations
+      );
       
       setResults(mergedResults);
       
@@ -221,7 +254,45 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
             </div>
           )}
           <div className="mb-3 border rounded p-2 bg-gray-50">
-            <p className="text-xs font-medium mb-1">Select stations to include:</p>
+            <p className="text-xs font-medium mb-1">
+              Select stations to include ({selectedMarkerIds.length} of {availableStations.length} selected):
+            </p>
+            {selectedMarkerIds.length < 2 && (
+              <p className="text-xs text-orange-600 mb-2">
+                ⚠️ Select at least 2 stations to run merged analysis
+              </p>
+            )}
+
+            {/* DISTANCE WARNING */}
+            {selectedStations.length >= 2 && (() => {
+              let maxDist = 0;
+              for (let i = 0; i < selectedStations.length; i++) {
+                for (let j = i + 1; j < selectedStations.length; j++) {
+                  const d = distance(
+                    [selectedStations[i].location.lng, selectedStations[i].location.lat],
+                    [selectedStations[j].location.lng, selectedStations[j].location.lat],
+                    { units: "meters" }
+                  );
+                  maxDist = Math.max(maxDist, d);
+                }
+              }
+              
+              if (maxDist > 5000) {
+                return (
+                  <p className="text-xs text-red-600 mb-2">
+                    ⚠️ Stations are {(maxDist/1000).toFixed(1)}km apart (max: 5km). Reduce selection for better performance.
+                  </p>
+                );
+              } else if (maxDist > 3000) {
+                return (
+                  <p className="text-xs text-yellow-600 mb-2">
+                    ⚠️ Large area selected ({(maxDist/1000).toFixed(1)}km). Analysis may take longer.
+                  </p>
+                );
+              }
+              return null;
+            })()}
+
             {availableStations.map((station) => (
               <div key={station.id} className="flex items-center mb-1">
                 <input
@@ -262,7 +333,12 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
                 : "bg-blue-500 hover:bg-blue-600 text-white text-sm"
             }`}
           >
-            {isAnalyzing ? "Analysing..." : "Run Merged Analysis"}
+            {isAnalyzing 
+              ? "Analysing..." 
+              : selectedStations.length < 2 
+                ? `Select ${2 - selectedStations.length} More Station${2 - selectedStations.length === 1 ? '' : 's'}`
+                : `Run Merged Analysis (${selectedStations.length} stations)`
+            }
           </PremiumButton>
         </>
       )}

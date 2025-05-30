@@ -1,31 +1,41 @@
-// src/app/types/GridAnalysisTypes.ts
+// src/app/components/Analyses/Types/GridAnalysisTypes.ts
 /**
  * GridAnalysisTypes.ts
  *
- * This file defines the core types used throughout the grid analysis system.
- * It provides a clear type foundation for all LOS (Line of Sight) analysis
- * features including flight path analysis, station-based analysis, and
- * merged visibility calculations.
+ * UNIFIED type definitions for the grid analysis system.
+ * This file consolidates all types to prevent conflicts between
+ * Area of Operations (AO) and Line of Sight (LOS) analysis systems.
  *
  * These types are used by:
  * - useGridAnalysis hook
- * - Analysis module implementations
+ * - Analysis module implementations  
  * - UI components displaying analysis results
+ * - Area of Operations terrain grids
+ * - LayerManager for map display
  */
 
 // Basic coordinate types
 export type Coordinates2D = [number, number];
 export type Coordinates3D = [number, number, number]; // [longitude, latitude, altitude]
 
-// Grid cell representation
+// UNIFIED Grid cell representation - works for both AO and Analysis systems
 export interface GridCell {
   id: string;
   geometry: GeoJSON.Polygon;
   properties: {
+    // Core analysis properties (required for LOS analysis)
     visibility: number; // 0-100 visibility percentage
     fullyVisible: boolean; // Whether cell has 100% visibility
-    elevation?: number; // Terrain elevation in meters
     lastAnalyzed: number; // Timestamp of last analysis
+    
+    // Terrain properties (required for AO compatibility)
+    elevation: number; // Terrain elevation in meters (NOT optional - required for AO)
+    
+    // Additional analysis properties
+    visibleStationCount?: number; // ADDED: Number of stations that can see this cell
+    
+    // Flexible additional properties
+    [key: string]: any;
   };
 }
 
@@ -35,6 +45,7 @@ export interface TerrainStats {
   lowestElevation: number; // Minimum terrain elevation
   averageElevation: number; // Average terrain elevation
   elevationDistribution: Record<string, number>; // Histogram of elevations
+  sampleElevations?: number[]; // Sample elevations for detailed analysis
 }
 
 // Statistics for analysis results
@@ -43,22 +54,23 @@ export interface AnalysisStats {
   totalCells: number;
   averageVisibility: number;
   analysisTime: number;
-  terrainStats?: {
-    highestElevation: number;
-    lowestElevation: number;
-    averageElevation: number;
-    elevationDistribution: Record<string, number>;
-    sampleElevations?: number[]; // Ensure this is included
-  };
+  terrainStats?: TerrainStats; // Terrain statistics if available
 }
 
-// Complete analysis results
+// FIXED: Complete analysis results with all missing properties
 export interface AnalysisResults {
   cells: GridCell[]; // All analyzed cells
   stats: AnalysisStats; // Result statistics
   stationLOSResult?: StationLOSResult; // For station-to-station analysis
   flightPathVisibility?: FlightPathVisibilityResults; // For flight path visibility
   profile?: LOSProfilePoint[]; // Profile data if applicable
+  
+  // FIXED: Direct terrain analysis properties (accessed by GridAnalysisController)
+  highestElevation?: number; // Maximum elevation found
+  lowestElevation?: number; // Minimum elevation found
+  averageElevation?: number; // Average elevation
+  elevationDistribution?: Record<string, number>; // Elevation histogram
+  elevations?: number[]; // Array of sample elevations
 }
 
 // Station-to-station LOS result
@@ -116,4 +128,84 @@ export enum AnalysisType {
   STATION_TO_STATION = 'station_to_station',
   FLIGHT_PATH_VISIBILITY = 'flight_path_visibility',
   TERRAIN = 'terrain' // Added new terrain analysis type
+}
+
+// HELPER FUNCTIONS for backward compatibility
+
+/**
+ * Converts AO-style GridCell to unified GridCell format
+ * Used when AO system passes terrain grids to analysis system
+ */
+export function convertAOCellToAnalysisCell(aoCell: {
+  id: string;
+  geometry: GeoJSON.Polygon;
+  properties: {
+    elevation: number;
+    [key: string]: any;
+  };
+}): GridCell {
+  return {
+    id: aoCell.id,
+    geometry: aoCell.geometry,
+    properties: {
+      // Set default analysis values
+      visibility: 0,
+      fullyVisible: false,
+      lastAnalyzed: Date.now(),
+      // Copy elevation from AO cell (now required, not optional)
+      elevation: aoCell.properties.elevation,
+      // Copy any additional properties
+      ...aoCell.properties
+    }
+  };
+}
+
+/**
+ * Converts unified GridCell back to AO-style format
+ * Used when analysis system returns data to AO system
+ */
+export function convertAnalysisCellToAOCell(analysisCell: GridCell): {
+  id: string;
+  geometry: GeoJSON.Polygon;
+  properties: {
+    elevation: number;
+    [key: string]: any;
+  };
+} {
+  return {
+    id: analysisCell.id,
+    geometry: analysisCell.geometry,
+    properties: {
+      elevation: analysisCell.properties.elevation,
+      // Copy additional properties except analysis-specific ones
+      ...Object.fromEntries(
+        Object.entries(analysisCell.properties).filter(
+          ([key]) => !['visibility', 'fullyVisible', 'lastAnalyzed', 'visibleStationCount'].includes(key)
+        )
+      )
+    }
+  };
+}
+
+/**
+ * Creates a new GridCell with default analysis properties
+ * Used when generating fresh grid cells for analysis
+ */
+export function createGridCell(
+  id: string,
+  geometry: GeoJSON.Polygon,
+  elevation: number,
+  additionalProperties: Record<string, any> = {}
+): GridCell {
+  return {
+    id,
+    geometry,
+    properties: {
+      visibility: 0,
+      fullyVisible: false,
+      lastAnalyzed: Date.now(),
+      elevation,
+      ...additionalProperties
+    }
+  };
 }

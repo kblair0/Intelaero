@@ -5,7 +5,9 @@ import cleanCoords from '@turf/clean-coords';
 import { useAreaOfOpsContext } from '../../../context/AreaOfOpsContext';
 import { useMapContext } from '../../../context/mapcontext';
 import { layerManager } from '../../../services/LayerManager';
-import type { GridCell } from '../../../context/AreaOfOpsContext';
+
+// FIXED: Import GridCell from unified location and helper function
+import { GridCell, createGridCell } from '../../../components/Analyses/Types/GridAnalysisTypes';
 import type { FlightPlanData } from '../../../context/FlightPlanContext';
 
 export const useAreaOpsProcessor = () => {
@@ -198,14 +200,14 @@ export const useAreaOpsProcessor = () => {
             console.warn(`Error querying elevation for cell ${i}:`, elevationError);
           }
           
-          cells.push({
-            id: `terrain-cell-${i}`,
-            geometry: cell.geometry as GeoJSON.Polygon,
-            properties: {
-              elevation,
-              lastAnalyzed: Date.now(),
-            },
-          });
+          // FIXED: Use the helper function to create properly typed GridCell
+          const gridCell = createGridCell(
+            `terrain-cell-${i}`,
+            cell.geometry as GeoJSON.Polygon,
+            elevation
+          );
+          
+          cells.push(gridCell);
         } catch (cellError) {
           console.warn(`Error generating cell ${i}:`, cellError);
         }

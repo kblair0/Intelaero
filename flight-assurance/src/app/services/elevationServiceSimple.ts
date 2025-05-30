@@ -7,8 +7,6 @@
  * wholesale swapout of the old elevation service
  */
 
-import mapboxgl from 'mapbox-gl';
-import { Coordinates2D } from '../Types/GridAnalysisTypes';
 
 export class ElevationService {
   private map: mapboxgl.Map;

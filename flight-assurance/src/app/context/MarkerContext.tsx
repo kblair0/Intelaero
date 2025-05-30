@@ -55,6 +55,14 @@ interface MarkerContextType {
   
   // Helper methods
   getMarkersByType: (type: MarkerType) => Marker[];
+  
+  // ADDED: Properties expected by useGridAnalysis
+  gcsLocation: LocationData | null;
+  observerLocation: LocationData | null;
+  repeaterLocation: LocationData | null;
+  gcsElevationOffset: number;
+  observerElevationOffset: number;
+  repeaterElevationOffset: number;
 }
 
 const MarkerContext = createContext<MarkerContextType | undefined>(undefined);
@@ -181,6 +189,15 @@ export function MarkerProvider({ children }: { children: ReactNode }) {
     return markers.filter(m => m.type === type);
   };
 
+  // ADDED: Computed properties for backward compatibility
+  const gcsLocation = markers.find(m => m.type === 'gcs')?.location || null;
+  const observerLocation = markers.find(m => m.type === 'observer')?.location || null;
+  const repeaterLocation = markers.find(m => m.type === 'repeater')?.location || null;
+  
+  const gcsElevationOffset = markers.find(m => m.type === 'gcs')?.elevationOffset || defaultElevationOffsets.gcs;
+  const observerElevationOffset = markers.find(m => m.type === 'observer')?.elevationOffset || defaultElevationOffsets.observer;
+  const repeaterElevationOffset = markers.find(m => m.type === 'repeater')?.elevationOffset || defaultElevationOffsets.repeater;
+
   return (
     <MarkerContext.Provider
       value={{
@@ -190,7 +207,14 @@ export function MarkerProvider({ children }: { children: ReactNode }) {
         removeMarker,
         defaultElevationOffsets,
         setDefaultElevationOffset,
-        getMarkersByType
+        getMarkersByType,
+        // ADDED: Computed properties
+        gcsLocation,
+        observerLocation,
+        repeaterLocation,
+        gcsElevationOffset,
+        observerElevationOffset,
+        repeaterElevationOffset
       }}
     >
       {children}

@@ -30,7 +30,11 @@ export interface FlightPlanMetadata {
   distance?: number;
   processed: boolean;
   source?: string;
-  metadata?: { file?: Record<string, any>; segments?: Record<string, any>[] };
+  metadata?: { 
+    file?: Record<string, any>; 
+    segments?: Record<string, any>[];
+    navigationIndices?: number[]; // ADDED: Missing navigation indices
+  };
 }
 
 /**
@@ -58,6 +62,7 @@ export interface FlightPlanData extends GeoJSON.FeatureCollection {
     metadata?: FlightPlanMetadata;
     totalDistance?: number;
     processed?: boolean;
+    placeholder?: boolean; // ADDED: Missing placeholder property
   };
   features: FlightPlanFeature[];
   waypointDistances?: number[];
