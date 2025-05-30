@@ -21,7 +21,8 @@ import {
   CheckCircle, 
   XCircle, 
   ChevronDown, 
-  ChevronRight 
+  ChevronRight,
+  Beaker
 } from "lucide-react";
 import { useFlightPlanContext } from "../../context/FlightPlanContext";
 import { useObstacleAnalysis } from "../../context/ObstacleAnalysisContext";
@@ -63,6 +64,7 @@ const ToolsDashboard: React.FC<ToolsDashboardProps & { activePanel?: string | nu
   const [expandedSection, setExpandedSection] = useState<string | null>("basic");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [energyAnalysisOpened, setEnergyAnalysisOpened] = useState(false);
+  const [showExperimental, setShowExperimental] = useState(false);
 
   // Effect: Update overall analyzing state
   useEffect(() => {
@@ -205,22 +207,34 @@ const ToolsDashboard: React.FC<ToolsDashboardProps & { activePanel?: string | nu
 
       <CompactDisclaimerWidget />
 
-      {/* Energy Analysis Card Hidden For Now
-      <EnergyAnalysisCard 
-        isExpanded={expandedSection === 'energy'}
-        onToggleExpanded={() => setExpandedSection(expandedSection === 'energy' ? null : 'energy')}
-        flightPlan={flightPlan}
-        onTogglePanel={onTogglePanel}
-      />
-      */}
-      
-      {/* Basic Checks Card Hidden For Now
-      <BasicChecksCard 
-        isExpanded={expandedSection === 'basic'}
-        onToggleExpanded={() => setExpandedSection(expandedSection === 'basic' ? null : 'basic')}
-        flightPlan={flightPlan}
-      />
-      */}
+      {/* Experimental Features Toggle */}
+      <div className="flex justify-center py-1">
+        <button
+          onClick={() => setShowExperimental(!showExperimental)}
+          className="p-1 rounded-full hover:bg-gray-100 transition-colors opacity-30 hover:opacity-100"
+          title="Experimental"
+        >
+          <Beaker className={`w-3 h-3 ${showExperimental ? 'text-green-500' : 'text-gray-400'}`} />
+        </button>
+      </div>
+
+      {/* Experimental Cards */}
+      {showExperimental && (
+        <>
+          <EnergyAnalysisCard 
+            isExpanded={expandedSection === 'energy'}
+            onToggleExpanded={() => setExpandedSection(expandedSection === 'energy' ? null : 'energy')}
+            flightPlan={flightPlan}
+            onTogglePanel={onTogglePanel}
+          />
+          
+          <BasicChecksCard 
+            isExpanded={expandedSection === 'basic'}
+            onToggleExpanded={() => setExpandedSection(expandedSection === 'basic' ? null : 'basic')}
+            flightPlan={flightPlan}
+          />
+        </>
+      )}
     </div>
   );
 };

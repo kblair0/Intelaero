@@ -23,10 +23,10 @@ import {
   CheckCircle, 
   XCircle, 
   AlertTriangle,
-  Plane,
-  MapPin
+  Plane, Mountain
 } from "lucide-react";
 import { useObstacleAnalysis } from "../../../context/ObstacleAnalysisContext";
+import { ObstacleChartModal } from "../../Analyses/ObstacleAnalysis/ObstacleChartModal";
 import { VerificationCardProps, VerificationStatus, WaypointCoordinate } from "../Utils/types";
 import { 
   findZeroAltitudePoints, 
@@ -37,6 +37,8 @@ import {
 import { trackEventWithForm as trackEvent } from "../../tracking/tracking";
 import { useMapContext } from "../../../context/mapcontext";
 
+
+
 /**
  * Provides basic flight plan validation
  */
@@ -46,6 +48,9 @@ const BasicChecksCard: React.FC<VerificationCardProps> = ({
   flightPlan
 }) => {
   const { results } = useObstacleAnalysis();
+  const { runAnalysis, status } = useObstacleAnalysis(); // Add this line
+  const [showTerrainModal, setShowTerrainModal] = useState(false); // Add this line
+  
   const { toggleLayer } = useMapContext();
   
   // Local state for validation results
@@ -112,13 +117,6 @@ const BasicChecksCard: React.FC<VerificationCardProps> = ({
     return "success";
   };
 
-  // Handle toggling airspace overlay
-  const handleToggleAirspace = () => {
-    trackEvent("toggle_airspace_overlay", { panel: "basicchecks.tsx" });
-    toggleLayer("Airfields");
-    toggleLayer("Airfields Labels");
-  };
-
   // Render height check content based on analysis results
   const renderHeightCheckContent = () => {
     if (!results) {
@@ -146,6 +144,16 @@ const BasicChecksCard: React.FC<VerificationCardProps> = ({
           ✓ Maximum height above ground: {maxClearance.toFixed(1)}m AGL (within 120m limit)
         </div>
       );
+    }
+  };
+
+  const handleRunTerrainAnalysis = async () => {
+    trackEvent("run_terrain_analysis", { panel: "basicchecks.tsx" });
+    try {
+      await runAnalysis();
+      setShowTerrainModal(true);
+    } catch (error) {
+      console.error("Terrain analysis failed:", error);
     }
   };
 
@@ -250,24 +258,23 @@ const BasicChecksCard: React.FC<VerificationCardProps> = ({
           {/* Actions */}
           <div className="flex flex-col gap-2 mt-3">
             <button
-              onClick={handleToggleAirspace}
-              className="flex gap-2 px-3 py-1.5 bg-blue-500 justify-center text-white text-sm rounded-md hover:bg-blue-600 transition-colors"
+              onClick={handleRunTerrainAnalysis}
+              disabled={!flightPlan || status === 'loading'}
+              className="flex gap-2 px-3 py-1.5 bg-green-500 justify-center text-white text-sm rounded-md hover:bg-green-600 transition-colors disabled:bg-gray-300"
             >
-              ✈️ Toggle Airspace
-            </button>
-            <button
-              onClick={() => {
-                trackEvent("insert_weather_click", { panel: "basicchecks.tsx" });
-                if (typeof window !== "undefined") {
-                  window.alert("Coming Soon!");
-                }
-              }}
-              className="px-3 py-1 bg-green-500 text-white text-sm rounded hover:bg-green-600 transition-colors"
-            >
-              Insert Weather
+              <Mountain className="w-4 h-4" />
+              {status === 'loading' ? 'Analyzing...' : 'Show Terrain Profile'}
             </button>
           </div>
         </div>
+      )}
+
+      {/* Terrain Analysis Modal */}
+      {showTerrainModal && (
+        <ObstacleChartModal
+          onClose={() => setShowTerrainModal(false)}
+          title="Flight Path Terrain Analysis"
+        />
       )}
     </div>
   );
