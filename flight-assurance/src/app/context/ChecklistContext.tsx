@@ -123,6 +123,20 @@ const analysisToChecklistSteps: Record<string, ChecklistStep[]> = {
       target: { component: 'AnalysisDashboard', action: 'droneToGround' },
     },
   ],
+  treeHeights: [
+    {
+      label: 'Show Tree Heights',
+      action: 'Click the "Toggle Tree Heights" button under Terrain Analysis Tools',
+      target: { component: 'TerrainAnalysisDashboard', action: 'toggleTreeHeights' },
+    },
+  ],
+  mobileTowerCoverage: [
+    {
+      label: 'Show Mobile Tower Coverage',
+      action: 'Click the "Show Mobile Towers" button under Visibility Analysis Tools',
+      target: { component: 'VisibilityAnalysisDashboard', action: 'showMobileTowers' },
+    },
+  ],
   antennaToAntenna: [
     {
       label: 'Place Two Markers (GCS/Repeater)',
@@ -155,6 +169,8 @@ const actionToPanelMap: Record<string, 'terrain' | 'los' | 'energy' | null> = {
   antennaToDrone: 'los',
   droneToGround: 'los',
   antennaToAntenna: 'los',
+  toggleTreeHeights: 'terrain',
+  showMobileTowers: 'los',
 };
 
 /**

@@ -1,8 +1,8 @@
 // src/components/AnalysisWizard.tsx
 "use client";
 import React, { useState, useCallback, useMemo } from "react";
-import { 
-  X, Eye, Radio, Link as LinkIcon, User, MapPin, FileUp, Search, Zap, Plane, PlaneTakeoff, 
+import {
+  X, Eye, Radio, Link as LinkIcon, User, MapPin, FileUp, Signal, Search, Zap, Plane, Trees, PlaneTakeoff,
   ChevronRight, ChevronLeft, CheckCircle, Settings
 } from "lucide-react";
 import { trackEventWithForm as trackEvent } from "../components/tracking/tracking";
@@ -52,7 +52,7 @@ interface TooltipProps {
 
 const Tooltip: React.FC<TooltipProps> = ({ content }) => (
   <div className="relative ml-1 group">
-    <div 
+    <div
       className="w-5 h-5 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center text-xs hover:bg-gray-300 cursor-help"
       aria-label="Show explanation"
       role="button"
@@ -148,12 +148,11 @@ const ButtonGroup: React.FC<ButtonGroupProps> = ({
           <button
             key={option.value}
             onClick={() => handleButtonClick(option)}
-            className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
-              (option.value !== "custom" && selectedValue === option.value && !showCustomInput) ||
-              (option.value === "custom" && showCustomInput)
+            className={`px-3 py-1.5 rounded-md text-sm transition-colors ${(option.value !== "custom" && selectedValue === option.value && !showCustomInput) ||
+                (option.value === "custom" && showCustomInput)
                 ? "bg-blue-600 text-white hover:bg-blue-700"
                 : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
+              }`}
             aria-label={`${ariaLabel} ${option.label}`}
             title={option.tooltip}
           >
@@ -192,27 +191,26 @@ interface AnalysisButtonProps {
   onClick: () => void;
 }
 
-const AnalysisButton: React.FC<AnalysisButtonProps> = ({ 
-  id, 
-  label, 
-  icon, 
-  iconBg, 
-  selected, 
-  description, 
-  onClick 
+const AnalysisButton: React.FC<AnalysisButtonProps> = ({
+  id,
+  label,
+  icon,
+  iconBg,
+  selected,
+  description,
+  onClick
 }) => (
   <button
     onClick={onClick}
-    className={`px-3 py-2 rounded-lg transition-all flex items-center gap-3 w-full ${
-      selected ? "bg-blue-50 border border-blue-300" : "border border-gray-200 hover:bg-gray-50"
-    }`}
+    className={`px-3 py-2 rounded-lg transition-all flex items-center gap-3 w-full ${selected ? "bg-blue-50 border border-blue-300" : "border border-gray-200 hover:bg-gray-50"
+      }`}
     aria-label={`Toggle ${label}`}
   >
     <div className={`flex-shrink-0 p-1.5 ${iconBg} rounded-full flex items-center justify-center`}>
       {icon}
     </div>
     <span className="text-sm font-medium text-gray-700 flex-grow text-left">{label}</span>
-    
+
     <div className="flex-shrink-0 flex items-center gap-2">
       <Tooltip content={description} />
       {selected && <CheckCircle className="w-4 h-4 text-blue-600" />}
@@ -234,30 +232,30 @@ enum WizardStep {
 /**
  * Improved AnalysisWizard component with a multi-step flow
  */
-const AnalysisWizard: React.FC<AnalysisWizardProps> = ({ 
-  onClose, 
-  onStartMapSelection 
+const AnalysisWizard: React.FC<AnalysisWizardProps> = ({
+  onClose,
+  onStartMapSelection
 }) => {
   // State for wizard progression
   const [currentStep, setCurrentStep] = useState<WizardStep>(WizardStep.AnalysisType);
-  
+
   // State for user selections
   const [selectedAnalysisType, setSelectedAnalysisType] = useState<string | null>(null);
   const [selectedAnalyses, setSelectedAnalyses] = useState<string[]>([]);
-  
+
   // State for parameters
   const [gridSize, setGridSize] = useState<number>(30);
   const [bufferDistance, setBufferDistance] = useState<number>(500);
-  
+
   // Combined antennaHeight for both GCS/Repeater and Observer (using a common height value)
   const [commsAntennaHeight, setCommsAntennaHeight] = useState<number>(2);
 
   // Access context values
-  const { 
+  const {
     defaultElevationOffsets,
     setDefaultElevationOffset
   } = useMarkersContext();
-  
+
   const { setGridSize: setContextGridSize } = useLOSAnalysis();
   const { flightPlan, setFlightPlan } = useFlightPlanContext();
   const { aoGeometry, setAoGeometry, setBufferDistance: setContextBufferDistance } = useAreaOfOpsContext();
@@ -305,12 +303,12 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({
     (value: number) => {
       console.log(`[AnalysisWizard] Updating all antenna heights to ${value}m`);
       setCommsAntennaHeight(value);
-      
+
       // Update all default elevation offsets with the same value
       setDefaultElevationOffset('gcs', value);
       setDefaultElevationOffset('repeater', value);
       setDefaultElevationOffset('observer', value);
-      
+
       trackEvent("antenna_height_changed", { value });
     },
     [setDefaultElevationOffset]
@@ -361,17 +359,17 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({
   /**
    * Move to the next step if possible
    */
-const goToNextStep = useCallback(() => {
-  if (
-    (currentStep === WizardStep.AnalysisType && selectedAnalysisType) ||
-    (currentStep === WizardStep.SelectAnalyses && selectedAnalyses.length > 0) ||
-    currentStep === WizardStep.ConfigureParameters
-  ) {
-    // Just proceed to the next step without special handling
-    setCurrentStep((prev) => prev + 1);
-    trackEvent("wizard_next_step", { from: currentStep, to: currentStep + 1 });
-  }
-}, [currentStep, selectedAnalysisType, selectedAnalyses.length]);
+  const goToNextStep = useCallback(() => {
+    if (
+      (currentStep === WizardStep.AnalysisType && selectedAnalysisType) ||
+      (currentStep === WizardStep.SelectAnalyses && selectedAnalyses.length > 0) ||
+      currentStep === WizardStep.ConfigureParameters
+    ) {
+      // Just proceed to the next step without special handling
+      setCurrentStep((prev) => prev + 1);
+      trackEvent("wizard_next_step", { from: currentStep, to: currentStep + 1 });
+    }
+  }, [currentStep, selectedAnalysisType, selectedAnalyses.length]);
 
   /**
    * Move to the previous step
@@ -404,8 +402,8 @@ const goToNextStep = useCallback(() => {
       case WizardStep.ConfigureParameters:
         return "3. Configure Parameters";
       case WizardStep.UploadData:
-        return selectedAnalysisType === "flightPlan" 
-          ? "4. Upload Flight Plan" 
+        return selectedAnalysisType === "flightPlan"
+          ? "4. Upload Flight Plan"
           : "4. Set Operating Area";
       default:
         return "Analysis Wizard";
@@ -451,6 +449,13 @@ const goToNextStep = useCallback(() => {
       iconBg: "bg-red-100",
       description: "Shows aerodromes and landing areas to ensure compliance with aviation regulations and avoid restricted areas."
     },
+    {
+      id: "treeHeights",
+      label: "Tree Heights",
+      icon: <Trees className="w-4 h-4 text-green-600" />,
+      iconBg: "bg-green-100",
+      description: "Display tree heights within the Area of Operations to identify potential obstacles for drone flight paths."
+    },
   ], []);
 
   /**
@@ -484,6 +489,13 @@ const goToNextStep = useCallback(() => {
       icon: <LinkIcon className="w-4 h-4 text-teal-600" />,
       iconBg: "bg-teal-100",
       description: "Evaluates line of sight between multiple communication antennas/observers or relays to optimise positioning for maximum coverage and signal redundancy."
+    },
+    {
+      id: "mobileTowerCoverage",
+      label: "Mobile Tower Coverage",
+      icon: <Signal className="w-4 h-4 text-purple-600" />,
+      iconBg: "bg-purple-100",
+      description: "View 3G, 4G, and 5G mobile tower coverage in your operating area to assess communication infrastructure availability."
     },
   ], []);
 
@@ -519,14 +531,13 @@ const goToNextStep = useCallback(() => {
     <div className="flex justify-around w-full mb-6">
       {[WizardStep.AnalysisType, WizardStep.SelectAnalyses, WizardStep.ConfigureParameters, WizardStep.UploadData].map((step) => (
         <div key={step} className="flex flex-col items-center">
-          <div 
-            className={`w-8 h-8 rounded-full flex items-center justify-center ${
-              currentStep === step 
-                ? "bg-blue-600 text-white" 
-                : currentStep > step 
-                  ? "bg-green-100 text-green-600 border border-green-600" 
+          <div
+            className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === step
+                ? "bg-blue-600 text-white"
+                : currentStep > step
+                  ? "bg-green-100 text-green-600 border border-green-600"
                   : "bg-gray-100 text-gray-400"
-            }`}
+              }`}
           >
             {currentStep > step ? (
               <CheckCircle className="w-5 h-5" />
@@ -534,10 +545,9 @@ const goToNextStep = useCallback(() => {
               <span>{step + 1}</span>
             )}
           </div>
-          
-          <span className={`text-xs font-medium mt-2 text-center ${
-            currentStep === step ? 'text-blue-600' : 'text-gray-500'
-          }`}>
+
+          <span className={`text-xs font-medium mt-2 text-center ${currentStep === step ? 'text-blue-600' : 'text-gray-500'
+            }`}>
             {step === WizardStep.AnalysisType && "Type"}
             {step === WizardStep.SelectAnalyses && "Analyses"}
             {step === WizardStep.ConfigureParameters && "Parameters"}
@@ -558,9 +568,8 @@ const goToNextStep = useCallback(() => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <button
               onClick={() => toggleAnalysisType("operatingArea")}
-              className={`p-4 border rounded-lg hover:bg-gray-50 transition-colors ${
-                selectedAnalysisType === "operatingArea" ? "border-blue-600 bg-blue-50 shadow-sm" : "border-gray-200"
-              }`}
+              className={`p-4 border rounded-lg hover:bg-gray-50 transition-colors ${selectedAnalysisType === "operatingArea" ? "border-blue-600 bg-blue-50 shadow-sm" : "border-gray-200"
+                }`}
               aria-label="Select Operating Area Analysis"
             >
               <div className="flex items-start">
@@ -587,12 +596,11 @@ const goToNextStep = useCallback(() => {
                 </div>
               </div>
             </button>
-            
+
             <button
               onClick={() => toggleAnalysisType("flightPlan")}
-              className={`p-4 border rounded-lg hover:bg-gray-50 transition-colors ${
-                selectedAnalysisType === "flightPlan" ? "border-blue-600 bg-blue-50 shadow-sm" : "border-gray-200"
-              }`}
+              className={`p-4 border rounded-lg hover:bg-gray-50 transition-colors ${selectedAnalysisType === "flightPlan" ? "border-blue-600 bg-blue-50 shadow-sm" : "border-gray-200"
+                }`}
               aria-label="Select Flight Plan Analysis"
             >
               <div className="flex items-start">
@@ -642,7 +650,7 @@ const goToNextStep = useCallback(() => {
                 ))}
               </div>
             </div>
-            
+
             <div>
               <h3 className="text-md font-medium text-gray-800 mb-3">Visibility Analysis</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -660,7 +668,7 @@ const goToNextStep = useCallback(() => {
                 ))}
               </div>
             </div>
-            
+
             {selectedAnalyses.length === 0 && (
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-md">
                 <p className="text-sm text-amber-700">Please select at least one analysis type to continue</p>
@@ -684,7 +692,7 @@ const goToNextStep = useCallback(() => {
                 </div>
               </div>
             </div>
-            
+
             <div className="space-y-6">
               {selectedAnalysisType === "flightPlan" ? (
                 <div className="grid grid-cols-1 gap-6">
@@ -753,103 +761,103 @@ const goToNextStep = useCallback(() => {
           </div>
         );
 
-      case WizardStep.UploadData:            
-  return (
-    <div className="w-full">
-      {selectedAnalysisType === "flightPlan" ? (
-        <FlightPlanUploader
-          onClose={onClose}
-          onPlanUploaded={handleFlightPlanUploaded}
-        />
-      ) : (
-        <div>
-          {/* Only show the header when not showing KML uploader */}
-          {!showKmlUploader && (
-            <div className="mb-4">
-              <h3 className="text-lg font-medium text-gray-800 mb-2">Define Area of Operations</h3>
-              <p className="text-sm text-gray-600">
-                Choose a method to define your operational area
-              </p>
-            </div>
-          )}
-          
-          {/* Only show the grid when not showing KML uploader */}
-          {!showKmlUploader ? (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* File Upload Option */}
-              <button
-                onClick={() => {
-                  // Show the KML uploader component directly in the wizard
-                  setShowKmlUploader(true);
-                }}
-                className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-blue-200 transition-all flex flex-col items-center text-center"
-              >
-                <div className="p-3 bg-blue-100 rounded-full mb-3">
-                  <FileUp className="w-6 h-6 text-blue-600" />
-                </div>
-                <h4 className="font-medium text-gray-800 mb-1">Upload KML File</h4>
-                <p className="text-sm text-gray-600">
-                  Upload a KML file containing your operation area
-                </p>
-              </button>
-              
-              {/* Map Selection Option */}
-              <button
-                onClick={() => {
-                  if (onStartMapSelection) {
-                    trackEvent("wizard_start_map_selection", { analyses: selectedAnalyses });
-                    onStartMapSelection("map");
-                  }
-                }}
-                className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-green-200 transition-all flex flex-col items-center text-center"
-              >
-                <div className="p-3 bg-green-100 rounded-full mb-3">
-                  <MapPin className="w-6 h-6 text-green-600" />
-                </div>
-                <h4 className="font-medium text-gray-800 mb-1">Select on Map</h4>
-                <p className="text-sm text-gray-600">
-                  Click on the map to define a circular operational area
-                </p>
-              </button>
-              
-              {/* Location Search Option */}
-              <button
-                onClick={() => {
-                  if (onStartMapSelection) {
-                    trackEvent("wizard_start_map_selection", { analyses: selectedAnalyses });
-                    onStartMapSelection("search");
-                  }
-                }}
-                className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-purple-200 transition-all flex flex-col items-center text-center"
-              >
-                <div className="p-3 bg-purple-100 rounded-full mb-3">
-                  <Search className="w-6 h-6 text-purple-600" />
-                </div>
-                <h4 className="font-medium text-gray-800 mb-1">Search Location</h4>
-                <p className="text-sm text-gray-600">
-                  Search for an address or location to use as center point
-                </p>
-              </button>
-            </div>
-          ) : (
-            <div>
-              <button 
-                onClick={() => setShowKmlUploader(false)} 
-                className="mb-4 flex items-center text-sm text-blue-600 hover:text-blue-800"
-              >
-                <ChevronLeft className="w-4 h-4 mr-1" />
-                Back to selection methods
-              </button>
-              <AreaOpsUploader
+      case WizardStep.UploadData:
+        return (
+          <div className="w-full">
+            {selectedAnalysisType === "flightPlan" ? (
+              <FlightPlanUploader
                 onClose={onClose}
-                onAOUploaded={handleAOUploaded}
+                onPlanUploaded={handleFlightPlanUploaded}
               />
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
+            ) : (
+              <div>
+                {/* Only show the header when not showing KML uploader */}
+                {!showKmlUploader && (
+                  <div className="mb-4">
+                    <h3 className="text-lg font-medium text-gray-800 mb-2">Define Area of Operations</h3>
+                    <p className="text-sm text-gray-600">
+                      Choose a method to define your operational area
+                    </p>
+                  </div>
+                )}
+
+                {/* Only show the grid when not showing KML uploader */}
+                {!showKmlUploader ? (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* File Upload Option */}
+                    <button
+                      onClick={() => {
+                        // Show the KML uploader component directly in the wizard
+                        setShowKmlUploader(true);
+                      }}
+                      className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-blue-200 transition-all flex flex-col items-center text-center"
+                    >
+                      <div className="p-3 bg-blue-100 rounded-full mb-3">
+                        <FileUp className="w-6 h-6 text-blue-600" />
+                      </div>
+                      <h4 className="font-medium text-gray-800 mb-1">Upload KML File</h4>
+                      <p className="text-sm text-gray-600">
+                        Upload a KML file containing your operation area
+                      </p>
+                    </button>
+
+                    {/* Map Selection Option */}
+                    <button
+                      onClick={() => {
+                        if (onStartMapSelection) {
+                          trackEvent("wizard_start_map_selection", { analyses: selectedAnalyses });
+                          onStartMapSelection("map");
+                        }
+                      }}
+                      className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-green-200 transition-all flex flex-col items-center text-center"
+                    >
+                      <div className="p-3 bg-green-100 rounded-full mb-3">
+                        <MapPin className="w-6 h-6 text-green-600" />
+                      </div>
+                      <h4 className="font-medium text-gray-800 mb-1">Select on Map</h4>
+                      <p className="text-sm text-gray-600">
+                        Click on the map to define a circular operational area
+                      </p>
+                    </button>
+
+                    {/* Location Search Option */}
+                    <button
+                      onClick={() => {
+                        if (onStartMapSelection) {
+                          trackEvent("wizard_start_map_selection", { analyses: selectedAnalyses });
+                          onStartMapSelection("search");
+                        }
+                      }}
+                      className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-purple-200 transition-all flex flex-col items-center text-center"
+                    >
+                      <div className="p-3 bg-purple-100 rounded-full mb-3">
+                        <Search className="w-6 h-6 text-purple-600" />
+                      </div>
+                      <h4 className="font-medium text-gray-800 mb-1">Search Location</h4>
+                      <p className="text-sm text-gray-600">
+                        Search for an address or location to use as center point
+                      </p>
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <button
+                      onClick={() => setShowKmlUploader(false)}
+                      className="mb-4 flex items-center text-sm text-blue-600 hover:text-blue-800"
+                    >
+                      <ChevronLeft className="w-4 h-4 mr-1" />
+                      Back to selection methods
+                    </button>
+                    <AreaOpsUploader
+                      onClose={onClose}
+                      onAOUploaded={handleAOUploaded}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
 
       default:
         return null;
@@ -874,7 +882,7 @@ const goToNextStep = useCallback(() => {
       <div className="p-6 overflow-y-auto flex-grow">
         {/* Progress indicators */}
         {renderProgressIndicators()}
-        
+
         {/* Step content */}
         {renderStepContent()}
       </div>
@@ -891,7 +899,7 @@ const goToNextStep = useCallback(() => {
           </svg>
           Reset
         </button>
-        
+
         <div className="flex space-x-3">
           {currentStep > 0 && currentStep < WizardStep.UploadData && (
             <button
@@ -903,15 +911,14 @@ const goToNextStep = useCallback(() => {
               Back
             </button>
           )}
-          
+
           {currentStep < WizardStep.UploadData && (
             <button
               onClick={goToNextStep}
-              className={`px-6 py-2 text-sm font-medium text-white rounded-md transition-colors flex items-center ${
-                isNextButtonDisabled
+              className={`px-6 py-2 text-sm font-medium text-white rounded-md transition-colors flex items-center ${isNextButtonDisabled
                   ? "bg-gray-400 cursor-not-allowed"
                   : "bg-blue-600 hover:bg-blue-700"
-              }`}
+                }`}
               disabled={isNextButtonDisabled}
               aria-label="Next Step"
             >

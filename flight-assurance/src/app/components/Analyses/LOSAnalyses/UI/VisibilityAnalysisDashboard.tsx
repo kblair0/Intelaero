@@ -141,6 +141,7 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ initialSection = 
     station: initialSection === 'station',
     merged: initialSection === 'merged',
     stationLOS: initialSection === 'stationLOS',
+      mobileTowers: false, 
   });
   
   const { gridAnalysisRef } = useAnalysisController();
@@ -153,6 +154,7 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ initialSection = 
         station: initialSection === 'station',
         merged: initialSection === 'merged',
         stationLOS: initialSection === 'stationLOS',
+          mobileTowers: false, 
       });
     }
   }, [initialSection]);
