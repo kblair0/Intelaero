@@ -36,7 +36,8 @@ import {
   CheckCircle,
   Signal,
   Loader,
-  Move
+  Move,
+  Trees
 } from 'lucide-react';
 
 import PremiumButton from '../../UI/PremiumButton';
@@ -401,7 +402,7 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
     terrainAnalysisResult
   } = useAreaOfOpsContext();
 
-  const { togglePowerlines, toggleDBYDPowerlines, toggleAirspace } = useLayers();
+  const { togglePowerlines, toggleDBYDPowerlines, toggleAirspace, toggleTreeHeights } = useLayers();
   const { generateTerrainGrid, generateAOFromFlightPlan } = useAreaOpsProcessor();
 
   const [localAnalyzing, setLocalAnalyzing] = useState(false);
@@ -782,6 +783,18 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
           prerequisitesMessage={!aoGeometry ? "Please define an operating area first" : undefined}
           isHVLoading={isLoadingHV}
           isLocalLoading={isLoadingDBYD}
+        />
+
+        {/* Tree Heights Analysis Section */}
+        <AnalysisSection
+          title="Tree Heights"
+          description="Display tree heights within the Area of Operations."
+          icon={<Trees className="w-4 h-4" />}
+          buttonText="Toggle Tree Heights"
+          onButtonClick={toggleTreeHeights}
+          prerequisitesMet={!!aoGeometry}
+          prerequisitesMessage={!aoGeometry ? "Please define an operating area first" : undefined}
+          featureId="tree_heights"
         />
         
         {/* Airspace Analysis Section */}

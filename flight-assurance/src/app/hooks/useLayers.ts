@@ -8,6 +8,7 @@ import { displayMobileTowers, filterMobileTowers } from '../services/MobileTower
 import { MobileTowerFilters } from '../types/mobileTowers';
 import type { GeoJSON } from 'geojson';
 import * as turf from '@turf/turf';
+import mapboxgl from 'mapbox-gl';
 
 export function useLayers() {
   const { map, toggleLayer, setLayerVisibility } = useMapContext();
@@ -344,6 +345,25 @@ export function useLayers() {
   }, [map]);
 
   /**
+   * Toggle tree height raw data visualization
+   * Calls the custom toggle function exposed by MapboxLayerHandler
+   */
+  const toggleTreeHeights = useCallback(() => {
+    if (!map) {
+      console.warn('toggleTreeHeights: Map not available');
+      return;
+    }
+    
+    // Call the custom toggle function we exposed from MapboxLayerHandler
+    if ((map as any).toggleTreeHeights) {
+      (map as any).toggleTreeHeights();
+      console.log('toggleTreeHeights: Raw data visualization toggled');
+    } else {
+      console.warn('toggleTreeHeights: Tree height system not initialized');
+    }
+  }, [map]);
+
+  /**
    * Reset all layers
    */
   const resetLayers = useCallback(() => {
@@ -365,6 +385,7 @@ export function useLayers() {
     toggleDBYDPowerlines,
     toggleAirspace,
     toggleMobileTowers,
-    filterMobileTowersLayer 
+    filterMobileTowersLayer,
+    toggleTreeHeights,
   };
 }

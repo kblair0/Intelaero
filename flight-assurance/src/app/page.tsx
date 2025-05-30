@@ -19,7 +19,6 @@ import Calculator from "./components/Calculator";
 import FlightPlanUploader from "./components/FlightPlanUploader";
 import AreaOpsUploader from "./components/AO/AreaOpsUploader";
 import Map from "./components/Map";
-import DisclaimerModal from "./components/DisclaimerModal";
 import {
   FlightPlanProvider,
   useFlightPlanContext,
@@ -37,7 +36,7 @@ import MapSidePanel from "./components/UI/MapSidePanel";
 import { Battery, Radio, Mountain, MapPin, Search } from "lucide-react";
 import { trackEventWithForm as trackEvent } from "./components/tracking/tracking";
 import { MapProvider } from "./context/mapcontext";
-import { AnalysisControllerProvider } from "./context/AnalysisControllerContext";
+import { AnalysisControllerProvider, useAnalysisController } from "./context/AnalysisControllerContext";
 import AnalysisWizard from "./components/AnalysisWizard";
 import WelcomeMessage from "./components/WelcomeMessage";
 import ChecklistComponent from "./components/ChecklistComponent";
@@ -47,6 +46,7 @@ import ObstacleAnalysisDashboard from "./components/Analyses/ObstacleAnalysis/Te
 import AnalysisDashboard from "./components/Analyses/LOSAnalyses/UI/VisibilityAnalysisDashboard";
 import MapSelectionPanel from "./components/AO/MapSelectionPanel";
 import { ReloadButton } from "./components/UI/ReloadButton";
+import MarkerLocationsModal from "./components/UI/MarkerLocationsModal";
 
 //payment and premium access
 import { PremiumProvider } from "./context/PremiumContext";
@@ -65,6 +65,7 @@ const HomeContent = () => {
   const [showChecklist, setShowChecklist] = useState(false);
   const { flightPlan, setFlightPlan } = useFlightPlanContext();
   const { aoGeometry } = useAreaOfOpsContext();
+  const { showMarkerLocationsModal, setShowMarkerLocationsModal } = useAnalysisController();
 
   const [isMapSelectionMode, setIsMapSelectionMode] = useState<boolean>(false);
   const [mapSelectionMode, setMapSelectionMode] = useState<"map" | "search">("map");
@@ -304,6 +305,22 @@ const HomeContent = () => {
 };
 
 /**
+ * Wrapper component for the MarkerLocationsModal
+ * This ensures the modal has access to all necessary context
+ * and is rendered at the application level
+ */
+const MarkerLocationsModalWrapper: React.FC = () => {
+  const { showMarkerLocationsModal, setShowMarkerLocationsModal } = useAnalysisController();
+  
+  return (
+    <MarkerLocationsModal
+      isOpen={showMarkerLocationsModal}
+      onClose={() => setShowMarkerLocationsModal(false)}
+    />
+  );
+};
+
+/**
  * Home page component, wrapping content with necessary providers
  */
 export default function Home() {
@@ -320,6 +337,7 @@ export default function Home() {
                       <ChecklistProvider>
                         <HomeContent />
                         <UpgradeModal />
+                          <MarkerLocationsModalWrapper />
                       </ChecklistProvider>
                     </ObstacleAnalysisProvider>
                   </LOSAnalysisProvider>

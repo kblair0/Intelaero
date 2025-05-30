@@ -3,20 +3,18 @@
 import { useEffect, useRef } from "react";
 import type mapboxgl from "mapbox-gl";
 import { useMapContext } from "../../context/mapcontext";
-// Import layerManager directly from services if needed for registration purposes:
 import { layerManager } from "../../services/LayerManager";
+import { useTreeHeights } from "../../hooks/useTreeHeights";
 
 interface MapboxLayerHandlerProps {
   map: mapboxgl.Map | null;
 }
 
-// Extend mapboxgl.Map type for popup tracking
 type ExtendedMapboxMap = mapboxgl.Map & {
   __currentPopup?: mapboxgl.Popup | null;
   __airfieldsPopup?: mapboxgl.Popup | null;
 };
 
-// Utility to determine height based on voltage
 const getHeightForVoltage = (voltageValue: string): string => {
   const voltage = voltageValue.trim();
   switch (voltage) {
@@ -35,37 +33,34 @@ const getHeightForVoltage = (voltageValue: string): string => {
 };
 
 const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
-  // Even though your context doesn’t expose the layerManager,
-  // you are importing it directly from your services so you can register layers.
-  const { /* no layerManager here */ } = useMapContext();
+  const { } = useMapContext();
+  const { toggleTreeHeights, handleTreeHeightClick, cleanup: cleanupTreeHeights, isInitialized } = useTreeHeights(map);
+
   const eventHandlersRef = useRef<{
     onPowerlineMouseEnter?: (e: mapboxgl.MapMouseEvent & { features?: mapboxgl.MapboxGeoJSONFeature[] }) => void;
     onPowerlineMouseLeave?: () => void;
     onMapMouseMove?: (e: mapboxgl.MapMouseEvent) => void;
   }>({});
+  
   const currentFeatureRef = useRef<mapboxgl.MapboxGeoJSONFeature | null>(null);
 
   useEffect(() => {
     if (!map) return;
 
-    // Dynamically import mapbox-gl on the client side
     import("mapbox-gl").then((mapboxModule) => {
       const mapboxgl = mapboxModule.default;
       const extMap = map as ExtendedMapboxMap;
 
-      // **Powerlines Layer Setup**
+      // **POWERLINES LAYER SETUP**
       const powerSourceLayerName = "Electricity_Transmission_Line-08vle5";
 
-      // Add vector source for electricity lines if it doesn’t exist, with extra logging
       if (!map.getSource("electricity-lines")) {
         map.addSource("electricity-lines", {
           type: "vector",
           url: "mapbox://intelaero.a8qtcidy",
         });
-      } else {
       }
 
-      // Add powerlines layer and register with layerManager
       if (!map.getLayer("Electricity Transmission Lines")) {
         map.addLayer({
           id: "Electricity Transmission Lines",
@@ -79,11 +74,9 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
           },
           minzoom: 10,
         });
-                layerManager.registerLayer("Electricity Transmission Lines");
-      } else {
+        layerManager.registerLayer("Electricity Transmission Lines");
       }
 
-      // Add powerlines hitbox layer and register with layerManager
       if (!map.getLayer("Electricity Transmission Lines Hitbox")) {
         map.addLayer({
           id: "Electricity Transmission Lines Hitbox",
@@ -95,11 +88,9 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
           minzoom: 10,
         });
         layerManager.registerLayer("Electricity Transmission Lines Hitbox");
-      } else {
-
       }
 
-      // **Interactivity for Powerlines**
+      // **POWERLINES INTERACTIVITY**
       const handlePowerlineMouseEnter = (
         e: mapboxgl.MapMouseEvent & { features?: mapboxgl.MapboxGeoJSONFeature[] }
       ) => {
@@ -129,7 +120,6 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
           .addTo(map);
 
         extMap.__currentPopup = popup;
-
       };
 
       const handlePowerlineMouseLeave = () => {
@@ -138,12 +128,10 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
         if (extMap.__currentPopup) {
           extMap.__currentPopup.remove();
           extMap.__currentPopup = null;
-
         }
       };
 
       const handleMapMouseMove = (e: mapboxgl.MapMouseEvent) => {
-        // Check if the layer exists AND is visible before querying
         if (map.getLayer("Electricity Transmission Lines Hitbox") &&
             map.getLayoutProperty("Electricity Transmission Lines Hitbox", "visibility") === "visible") {
           const features = map.queryRenderedFeatures(e.point, {
@@ -153,32 +141,20 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
             handlePowerlineMouseLeave();
           }
         } else if (currentFeatureRef.current !== null) {
-          // If layer is not visible but we have a current feature, clean up
           handlePowerlineMouseLeave();
         }
       };
 
-      // Bind event handlers
       map.on("mouseenter", "Electricity Transmission Lines Hitbox", handlePowerlineMouseEnter);
       map.on("mouseleave", "Electricity Transmission Lines Hitbox", handlePowerlineMouseLeave);
       map.on("mousemove", handleMapMouseMove);
 
-
-      eventHandlersRef.current = {
-        onPowerlineMouseEnter: handlePowerlineMouseEnter,
-        onPowerlineMouseLeave: handlePowerlineMouseLeave,
-        onMapMouseMove: handleMapMouseMove,
-      };
-
-      // **Airfields Layer Setup**
+      // **AIRFIELDS LAYER SETUP**
       if (!map.getSource("airfields")) {
         map.addSource("airfields", {
           type: "vector",
           url: "mapbox://intelaero.5d451fq2",
         });
-
-      } else {
-
       }
 
       if (!map.getLayer("Airfields")) {
@@ -195,10 +171,7 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
           },
           minzoom: 10,
         });
-
         layerManager.registerLayer("Airfields");
-      } else {
-
       }
 
       if (!map.getLayer("Airfields Labels")) {
@@ -219,19 +192,26 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
           paint: { "text-color": "#FFF" },
           minzoom: 12,
         });
-
         layerManager.registerLayer("Airfields Labels");
-      } else {
-
       }
 
-      // Note: Add any additional interactivity for airfields here if needed.
+      eventHandlersRef.current = {
+        onPowerlineMouseEnter: handlePowerlineMouseEnter,
+        onPowerlineMouseLeave: handlePowerlineMouseLeave,
+        onMapMouseMove: handleMapMouseMove,
+      };
+
+      console.log("✅ MapboxLayerHandler initialization complete");
     });
 
-    // Cleanup event handlers on unmount
+    // Cleanup function
     return () => {
       if (!map) return;
+      
+      console.log("🧹 Cleaning up MapboxLayerHandler");
+      
       const handlers = eventHandlersRef.current;
+      
       if (handlers.onPowerlineMouseEnter) {
         map.off("mouseenter", "Electricity Transmission Lines Hitbox", handlers.onPowerlineMouseEnter);
       }
@@ -242,23 +222,41 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
         map.off("mousemove", handlers.onMapMouseMove);
       }
 
-      // Remove airfields event listeners if any exist
-      map.off("mouseenter", "Airfields");
-      map.off("mouseleave", "Airfields");
-      map.off("click", "Airfields");
-
       const extMap = map as ExtendedMapboxMap;
-      if (extMap.__airfieldsPopup) {
-        extMap.__airfieldsPopup.remove();
-        extMap.__airfieldsPopup = null;
-      }
       if (extMap.__currentPopup) {
         extMap.__currentPopup.remove();
         extMap.__currentPopup = null;
       }
+      if (extMap.__airfieldsPopup) {
+        extMap.__airfieldsPopup.remove();
+        extMap.__airfieldsPopup = null;
+      }
 
+      if (cleanupTreeHeights) {
+        cleanupTreeHeights();
+      }
+      
+      console.log("✅ MapboxLayerHandler cleanup complete");
     };
-  }, [map]);
+  }, [map, cleanupTreeHeights]);
+
+  // Separate useEffect for tree heights integration
+  useEffect(() => {
+    if (!map || !isInitialized) return;
+
+    // Attach tree heights functionality only when initialized
+    (map as any).toggleTreeHeights = toggleTreeHeights;
+    if (handleTreeHeightClick) {
+      map.on("click", handleTreeHeightClick);
+    }
+
+    return () => {
+      delete (map as any).toggleTreeHeights;
+      if (handleTreeHeightClick) {
+        map.off("click", handleTreeHeightClick);
+      }
+    };
+  }, [map, isInitialized, toggleTreeHeights, handleTreeHeightClick]);
 
   return null;
 };

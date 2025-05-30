@@ -19,7 +19,7 @@
  */
 
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import FlightPathAnalysisCard from "./FlightPathAnalysisCard";
 import StationAnalysisCard from "./StationAnalysisCard";
 import MergedAnalysisCard from "./MergedAnalysisCard";
@@ -33,8 +33,10 @@ import {
   Link, 
   ChevronDown, 
   Eye,
-  Signal
+  Signal, MapPin
 } from "lucide-react";
+import { useMarkersContext } from "../../../../context/MarkerContext";
+import { trackEventWithForm as trackEvent } from "../../../tracking/tracking";
 
 /**
  * Props for a collapsible analysis section
@@ -54,6 +56,40 @@ interface AnalysisSectionProps {
 interface AnalysisDashboardProps {
   initialSection?: 'flight' | 'station' | 'merged' | 'stationLOS' | null;
 }
+
+/**
+ * Button component for viewing all marker locations
+ * Uses AnalysisControllerContext to trigger the marker locations modal at the app level
+ */
+const ViewAllLocationsButton: React.FC = () => {
+  const { markers } = useMarkersContext();
+  const { setShowMarkerLocationsModal } = useAnalysisController();
+
+  const handleViewLocations = useCallback(() => {
+    // Instead of managing modal locally, trigger it at the app level
+    setShowMarkerLocationsModal(true);
+    trackEvent("view_all_marker_locations", { 
+      totalMarkers: markers.length
+    });
+  }, [markers.length, setShowMarkerLocationsModal]);
+
+  // Only show button if there are markers
+  if (markers.length === 0) return null;
+
+  return (
+    <div className="mb-3">
+      <button
+        onClick={handleViewLocations}
+        className="w-full px-3 py-2 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors font-medium flex items-center justify-center gap-2"
+        title="View all marker locations"
+        aria-label="View all marker locations"
+      >
+        <MapPin className="w-4 h-4" />
+        View All Marker Locations ({markers.length})
+      </button>
+    </div>
+  );
+};
 
 /**
  * Collapsible section component for each analysis type
@@ -157,6 +193,8 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ initialSection = 
             </p>
           </div>
         </div>
+
+        <ViewAllLocationsButton />
         
         <div className="space-y-4">
           <StationAnalysisCard key="gcs" gridAnalysisRef={gridAnalysisRef} stationType="gcs" />

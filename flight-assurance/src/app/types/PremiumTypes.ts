@@ -20,4 +20,5 @@ export type FeatureId =
   | 'airspace_analysis'
   | 'extended_grid_range'
   | 'high_resolution_grid'
-  | 'mobile_tower_analysis';
+  | 'mobile_tower_analysis'
+  | 'tree_heights';

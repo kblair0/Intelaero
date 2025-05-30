@@ -38,7 +38,8 @@ export const TIER_CONFIG = {
       'extended_grid_range': false,
       'high_resolution_grid': false,
       'airspace_analysis': true,
-      'mobile_tower_analysis': false
+      'mobile_tower_analysis': false,
+      'tree_heights': false
     }
   },
   [TierLevel.COMMUNITY]: {
@@ -64,7 +65,8 @@ export const TIER_CONFIG = {
       'extended_grid_range': false,
       'high_resolution_grid': false,
       'airspace_analysis': true,
-      'mobile_tower_analysis': false
+      'mobile_tower_analysis': false,
+      'tree_heights': false
     }
   },
   [TierLevel.COMMERCIAL]: {
@@ -90,7 +92,8 @@ export const TIER_CONFIG = {
       'extended_grid_range': true,
       'high_resolution_grid': true,
       'airspace_analysis': true,
-      'mobile_tower_analysis': true
+      'mobile_tower_analysis': true,
+      'tree_heights': true
     }
   }
 };
