@@ -26,7 +26,7 @@ import {
   Plane, Mountain
 } from "lucide-react";
 import { useObstacleAnalysis } from "../../../context/ObstacleAnalysisContext";
-import { ObstacleChartModal } from "../../Analyses/ObstacleAnalysis/ObstacleChartModal";
+import ObstacleChartModal from "../../Analyses/ObstacleAnalysis/ObstacleChartModal";
 import { VerificationCardProps, VerificationStatus, WaypointCoordinate } from "../Utils/types";
 import { 
   findZeroAltitudePoints, 
@@ -48,8 +48,8 @@ const BasicChecksCard: React.FC<VerificationCardProps> = ({
   flightPlan
 }) => {
   const { results } = useObstacleAnalysis();
-  const { runAnalysis, status } = useObstacleAnalysis(); // Add this line
-  const [showTerrainModal, setShowTerrainModal] = useState(false); // Add this line
+  const { runAnalysis, status } = useObstacleAnalysis(); 
+  const [showTerrainModal, setShowTerrainModal] = useState(false);
   
   const { toggleLayer } = useMapContext();
   
