@@ -8,7 +8,7 @@
  * 
  * Related Components:
  * - TerrainAnalysisCard: Uses these utilities to display terrain results
- * - PlanVerificationDashboard: May use for coordinating analysis
+ * - ToolsDashboard: May use for coordinating analysis
  */
 
 import { ElevationService } from '@/app/services/ElevationService';

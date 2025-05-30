@@ -12,7 +12,7 @@
  * - Offers quick access to detailed energy analysis
  * 
  * Related Components:
- * - PlanVerificationDashboard: Renders this as a verification card
+ * - ToolsDashboard: Renders this as a verification card
  * - FlightConfigurationContext: Provides battery and flight metrics
  * - Calculator: Detailed energy analysis component opened from this card
  */

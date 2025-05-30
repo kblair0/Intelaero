@@ -13,7 +13,7 @@
  * - Displays analyzed terrain height data when available
  * 
  * Related Components:
- * - PlanVerificationDashboard: Renders this as a verification card
+ * - ToolsDashboard: Renders this as a verification card
  * - ObstacleAnalysisContext: Provides terrain elevation data
  * - FlightPlanContext: Provides flight plan data for validation
  */

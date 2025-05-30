@@ -98,16 +98,6 @@ const LayerControls: React.FC<LayerControlsProps> = ({
           Toggle HV Powerlines ⚡️
         </PremiumButton>
 
-        {/* Local Powerlines - Commercial tier only */}
-        <PremiumButton
-          featureId="local_powerlines"
-          onClick={handleDBYDPowerlines}
-          className="map-button"
-          // Show premium indicator with default settings
-        >
-          Toggle Local Powerlines 🏡
-        </PremiumButton>
-
         {/* Airfields - Free feature */}
         <PremiumButton
           featureId="airspace_analysis"
@@ -121,6 +111,17 @@ const LayerControls: React.FC<LayerControlsProps> = ({
         >
           Toggle Aerodrome Overlay ✈️
         </PremiumButton>
+
+        {/* Local Powerlines - Commercial tier only */}
+        <PremiumButton
+          featureId="local_powerlines"
+          onClick={handleDBYDPowerlines}
+          className="map-button"
+          // Show premium indicator with default settings
+        >
+          Toggle Local Powerlines 🏡
+        </PremiumButton>
+
 
         {/* Terrain Grid - Feature ID depends on grid parameters */}
         <PremiumButton

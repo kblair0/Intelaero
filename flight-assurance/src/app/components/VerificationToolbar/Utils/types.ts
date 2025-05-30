@@ -6,7 +6,7 @@
  * Creates a type-safe foundation for all verification components.
  * 
  * Related Components:
- * - PlanVerificationDashboard: Uses these types to render the verification UI
+ * - ToolsDashboard: Uses these types to render the verification UI
  * - Card components: Implement and extend these interfaces
  * - Utility functions: Process flight plan data using these types
  */
@@ -62,9 +62,9 @@ export interface VerificationCardProps {
 }
 
 /**
- * Props for the PlanVerificationDashboard
+ * Props for the ToolsDashboard
  */
-export interface PlanVerificationDashboardProps {
+export interface ToolsDashboardProps {
   onTogglePanel: (panel: "energy" | "los" | "terrain" | null) => void;
 }
 

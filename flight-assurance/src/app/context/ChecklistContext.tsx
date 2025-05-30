@@ -8,7 +8,7 @@ interface ChecklistStep {
   label: string; // User-friendly name (e.g., 'Open Terrain Tools')
   action: string; // Instructions (e.g., 'Click on the Terrain Analysis card...')
   target: {
-    component: string; // Target component (e.g., 'PlanVerificationDashboard')
+    component: string; // Target component (e.g., 'ToolsDashboard')
     action: string; // Action identifier (e.g., 'openTerrainTools')
   };
 }

@@ -29,7 +29,7 @@ import { LOSAnalysisProvider } from "./context/LOSAnalysisContext";
 import { FlightConfigurationProvider } from "./context/FlightConfigurationContext";
 import { AreaOfOpsProvider } from "./context/AreaOfOpsContext";
 import { ChecklistProvider } from "./context/ChecklistContext";
-import PlanVerificationDashboard from "./components/VerificationToolbar/ToolsDashboard";
+import ToolsDashboard from "./components/VerificationToolbar/ToolsDashboard";
 import Card from "./components/UI/Card";
 import { ObstacleAnalysisProvider } from "./context/ObstacleAnalysisContext";
 import MapSidePanel from "./components/UI/MapSidePanel";
@@ -224,7 +224,7 @@ const HomeContent = () => {
                 <div className="space-y-4 h-full flex flex-col">
                   <h3 className="text-lg font-medium text-gray-900">Terrain and Visibility Toolbar</h3>
                   <div className="flex-1 overflow-y-auto">
-                    <PlanVerificationDashboard onTogglePanel={togglePanel} />
+                    <ToolsDashboard onTogglePanel={togglePanel} />
                   </div>
                 </div>
               </Card>

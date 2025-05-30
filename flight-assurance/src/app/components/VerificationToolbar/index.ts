@@ -6,11 +6,11 @@
  * Re-exports components for easier imports throughout the application.
  * 
  * Usage:
- * import { PlanVerificationDashboard } from '@/components/PlanVerification';
+ * import { ToolsDashboard } from '@/components/PlanVerification';
  */
 
 // Export the dashboard component
-export { default as PlanVerificationDashboard } from './ToolsDashboard';
+export { default as ToolsDashboard } from './ToolsDashboard';
 
 // Re-export utility functions
 export * from './Utils';

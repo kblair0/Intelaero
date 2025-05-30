@@ -12,7 +12,7 @@
  * - Provides concise guidance on how visibility analysis can help planning
  * 
  * Related Components:
- * - PlanVerificationDashboard: Renders this as a verification card
+ * - ToolsDashboard: Renders this as a verification card
  * - AnalysisDashboard: The detailed LOS analysis components
  * - LOSAnalysisContext: Provides analysis data and functionality
  */

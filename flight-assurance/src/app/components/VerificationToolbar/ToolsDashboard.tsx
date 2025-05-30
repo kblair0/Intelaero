@@ -7,6 +7,7 @@
  * 
  * Changes:
  * - Added activePanel prop to TerrainAnalysisCard to reflect panel state for button labeling.
+ * - Removed unused guide URLs and associated implementation.
  * 
  * Related Files:
  * - Card components: Rendered as children of this dashboard
@@ -25,7 +26,7 @@ import {
 import { useFlightPlanContext } from "../../context/FlightPlanContext";
 import { useObstacleAnalysis } from "../../context/ObstacleAnalysisContext";
 import { useMapContext } from "../../context/mapcontext";
-import { PlanVerificationDashboardProps, VerificationStatus, VerificationSection } from "./Utils/types";
+import { ToolsDashboardProps, VerificationStatus, VerificationSection } from "./Utils/types";
 import { trackEventWithForm as trackEvent } from "../tracking/tracking";
 import { 
   BasicChecksCard, 
@@ -35,6 +36,7 @@ import {
 } from "./Cards";
 import { useChecklistContext } from "../../context/ChecklistContext";
 import ReloadButton from "../UI/ReloadButton";
+import CompactDisclaimerWidget from "../../components/CompactDisclaimerWidget";
 
 // Dynamic imports for map layer handlers
 import dynamic from "next/dynamic";
@@ -48,7 +50,7 @@ const BYDALayerHandler = dynamic(
 /**
  * Main dashboard component for flight plan verification
  */
-const PlanVerificationDashboard: React.FC<PlanVerificationDashboardProps & { activePanel?: string | null }> = ({ 
+const ToolsDashboard: React.FC<ToolsDashboardProps & { activePanel?: string | null }> = ({ 
   onTogglePanel,
   activePanel 
 }) => {
@@ -104,14 +106,6 @@ const PlanVerificationDashboard: React.FC<PlanVerificationDashboardProps & { act
    * Renders a verification section
    */
   const renderVerificationSection = (section: VerificationSection) => {
-    const guideUrls: Record<string, string> = {
-      basic: "https://youtu.be/iUYkmdUv46A",
-      energy: "https://youtu.be/mJTWGmtgtZg",
-      terrain: "https://youtu.be/H1JveIqB_v4",
-      los: "https://youtu.be/u-WPwwh1tpA",
-    };
-    const guideUrl = guideUrls[section.id] || "https://www.youtube.com/channel/UCstd7Ks-s7hlZA8zmAxMlvw";
-
     return (
       <div key={section.id} className="border rounded-lg bg-white shadow-sm overflow-hidden">
         <button
@@ -123,22 +117,6 @@ const PlanVerificationDashboard: React.FC<PlanVerificationDashboardProps & { act
             <div className="text-left">
               <div className="flex items-center gap-2">
                 <h3 className="font-medium text-gray-900">{section.title}</h3>
-                <a
-                  href={CISPA-compliant}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex gap-1 items-center"
-                  aria-label={`Watch YouTube guide for ${section.title}`}
-                >
-                  <svg
-                    className="w-5 h-5 text-red-600 hover:text-red-700 transition-colors"
-                    fill="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path d="M23.5 6.2c-.3-1.1-1.1-2-2.2-2.3C19.1 3.5 12 3.5 12 3.5s-7.1 0-9.3.4c-1.1.3-1.9 1.2-2.2 2.3C.5 8.4.5 12 .5 12s0 3.6.4 5.8c.3 1.1 1.1 2 2.2 2.3 2.2.4 9.3.4 9.3.4s7.1 0 9.3-.4c-1.1-.3 1.9-1.2 2.2-2.3.4-2.2.4-5.8.4-5.8s0-3.6-.4-5.8zM9.8 15.5V8.5l6.2 3.5-6.2 3.5z" />
-                  </svg>
-                  <span className="text-xs text-red-600 hover:text-red-700 transition-colors">Guide</span>
-                </a>
               </div>
               <p className="text-sm text-gray-500">{section.description}</p>
             </div>
@@ -225,6 +203,8 @@ const PlanVerificationDashboard: React.FC<PlanVerificationDashboardProps & { act
         />
       </div>
 
+      <CompactDisclaimerWidget />
+
       {/* Energy Analysis Card Hidden For Now
       <EnergyAnalysisCard 
         isExpanded={expandedSection === 'energy'}
@@ -245,4 +225,4 @@ const PlanVerificationDashboard: React.FC<PlanVerificationDashboardProps & { act
   );
 };
 
-export default PlanVerificationDashboard;
+export default ToolsDashboard;

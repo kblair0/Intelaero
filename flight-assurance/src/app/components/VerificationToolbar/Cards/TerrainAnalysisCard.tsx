@@ -7,7 +7,7 @@
  * to the dashboard itself.
  * 
  * Related Components:
- * - PlanVerificationDashboard: Renders this as a verification card
+ * - ToolsDashboard: Renders this as a verification card
  * - TerrainAnalysisDashboard: Contains the detailed terrain analysis tools
  */
 

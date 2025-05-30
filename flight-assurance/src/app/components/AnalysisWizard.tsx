@@ -13,6 +13,7 @@ import { useLOSAnalysis } from "../context/LOSAnalysisContext";
 import { useFlightPlanContext } from "../context/FlightPlanContext";
 import { useAreaOfOpsContext } from "../context/AreaOfOpsContext";
 import { useChecklistContext } from "../context/ChecklistContext";
+import CompactDisclaimerWidget from "./CompactDisclaimerWidget";
 
 
 
@@ -887,47 +888,56 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({
         {renderStepContent()}
       </div>
 
-      {/* Footer with action buttons */}
-      <div className="p-4 border-t border-gray-200 flex justify-between items-center bg-white rounded-b-lg">
-        <button
-          onClick={resetWizard}
-          className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md transition-colors flex items-center"
-          aria-label="Reset Wizard"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          Reset
-        </button>
-
-        <div className="flex space-x-3">
-          {currentStep > 0 && currentStep < WizardStep.UploadData && (
+      {/* Footer with action buttons and disclaimer */}
+      <div className="border-t border-gray-200 bg-white rounded-b-lg max-h-60 overflow-y-auto">
+        <div className="p-4 space-y-3">
+        {/* Navigation buttons */}
+          <div className="flex justify-between items-center">
             <button
-              onClick={goToPreviousStep}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors flex items-center"
-              aria-label="Previous Step"
+              onClick={resetWizard}
+              className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md transition-colors flex items-center"
+              aria-label="Reset Wizard"
             >
-              <ChevronLeft className="w-4 h-4 mr-1" />
-              Back
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Reset
             </button>
-          )}
 
-          {currentStep < WizardStep.UploadData && (
-            <button
-              onClick={goToNextStep}
-              className={`px-6 py-2 text-sm font-medium text-white rounded-md transition-colors flex items-center ${isNextButtonDisabled
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-blue-600 hover:bg-blue-700"
-                }`}
-              disabled={isNextButtonDisabled}
-              aria-label="Next Step"
-            >
-              {currentStep === WizardStep.ConfigureParameters ? "Finish" : "Next"}
-              <ChevronRight className="w-4 h-4 ml-1" />
-            </button>
-          )}
+            <div className="flex space-x-3">
+              {currentStep > 0 && currentStep < WizardStep.UploadData && (
+                <button
+                  onClick={goToPreviousStep}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors flex items-center"
+                  aria-label="Previous Step"
+                >
+                  <ChevronLeft className="w-4 h-4 mr-1" />
+                  Back
+                </button>
+              )}
+
+              {currentStep < WizardStep.UploadData && (
+                <button
+                  onClick={goToNextStep}
+                  className={`px-6 py-2 text-sm font-medium text-white rounded-md transition-colors flex items-center ${
+                    isNextButtonDisabled
+                      ? "bg-gray-400 cursor-not-allowed"
+                      : "bg-blue-600 hover:bg-blue-700"
+                  }`}
+                  disabled={isNextButtonDisabled}
+                  aria-label="Next Step"
+                >
+                  {currentStep === WizardStep.ConfigureParameters ? "Finish" : "Next"}
+                  <ChevronRight className="w-4 h-4 ml-1" />
+                </button>
+              )}
+            </div>
+          </div>
+          
+          {/* Safety disclaimer widget */}
+          <CompactDisclaimerWidget />
         </div>
-      </div>
+      </div>  
     </div>
   );
 };
