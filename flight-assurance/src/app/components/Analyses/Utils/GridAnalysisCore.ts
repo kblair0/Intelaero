@@ -50,7 +50,7 @@ class ElevationCache {
     // Simple LRU: remove oldest entry if cache is full
     if (this.cache.size > this.maxSize) {
       const firstKey = this.cache.keys().next().value;
-      this.cache.delete(firstKey);
+      if (firstKey) this.cache.delete(firstKey);
     }
   }
   
@@ -105,7 +105,7 @@ export async function queryElevation(
   
   // Direct map query as fallback
   try {
-    elevation = map.queryTerrainElevation(coordinates);
+    elevation = map.queryTerrainElevation(coordinates) ?? null;
     if (elevation !== null && elevation !== undefined) {
       elevationCache.set(lon, lat, elevation);
       return elevation;
@@ -191,6 +191,7 @@ export async function generateGrid(
       
       const point = turf.point(center);
       const buffer = turf.buffer(point, range, { units: 'meters' });
+      if (!buffer) throw createError('Failed to create buffer', 'INVALID_INPUT');
       const bounds = turf.bbox(buffer) as BBox;
       
       if (!isValidBounds(bounds)) {

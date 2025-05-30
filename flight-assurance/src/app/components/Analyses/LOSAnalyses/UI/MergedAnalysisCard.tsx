@@ -81,7 +81,7 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
   // Initialize selected markers when available markers change - with proper dependency tracking
   useEffect(() => {
     if (selectedMarkerIds.length === 0 && availableStations.length >= 2) {
-      const initialSelection = [];
+      const initialSelection: string[] = [];
       setSelectedMarkerIds(initialSelection);
     }
   }, [availableStations.length]);

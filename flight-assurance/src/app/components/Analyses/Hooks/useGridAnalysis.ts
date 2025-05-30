@@ -988,7 +988,7 @@ const runAnalysis = useCallback(
       return result;
     } catch (error) {
       console.error(`Analysis error, type: ${type}:`, error);
-      setError(error.message || 'Analysis failed');
+      setError(error instanceof Error ? error.message : 'Analysis failed');
       throw error;
     } finally {
       setIsAnalyzing(false);
