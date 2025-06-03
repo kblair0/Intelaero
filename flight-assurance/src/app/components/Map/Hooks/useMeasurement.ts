@@ -32,43 +32,76 @@ export const useMeasurement = () => {
   const FIXED_LINE_LAYER = 'measurement-fixed-line-layer';
   const TEMP_LINE_LAYER = 'measurement-temp-line-layer';
 
+
   // Clean up measurement resources
   const cleanupMeasurement = useCallback(() => {
-    if (!map) return;
+    // Add comprehensive map validation
+    if (!map || !map.getStyle || !map.getCanvas) {
+      console.warn("Map not available or already destroyed during measurement cleanup");
+      return;
+    }
+    
+    try {
+      // Check if map is still loaded
+      if (!map.loaded()) {
+        console.warn("Map not loaded during measurement cleanup");
+        return;
+      }
+    } catch (mapStateError) {
+      console.warn("Error checking map state during cleanup:", mapStateError);
+      return;
+    }
     
     // Remove markers
-    markersRef.current.forEach(marker => marker.remove());
+    markersRef.current.forEach(marker => {
+      try {
+        marker.remove();
+      } catch (markerError) {
+        console.warn("Error removing marker:", markerError);
+      }
+    });
     markersRef.current = [];
     
     // Remove popup
     if (movingPopupRef.current) {
-      movingPopupRef.current.remove();
-      movingPopupRef.current = null;
+      try {
+        movingPopupRef.current.remove();
+        movingPopupRef.current = null;
+      } catch (popupError) {
+        console.warn("Error removing popup:", popupError);
+      }
     }
     
     // Remove layers and sources - carefully check if they exist first
     try {
-      if (map.getLayer(FIXED_LINE_LAYER)) {
+      if (map.getLayer && map.getLayer(FIXED_LINE_LAYER)) {
         map.removeLayer(FIXED_LINE_LAYER);
       }
       
-      if (map.getLayer(TEMP_LINE_LAYER)) {
+      if (map.getLayer && map.getLayer(TEMP_LINE_LAYER)) {
         map.removeLayer(TEMP_LINE_LAYER);
       }
       
-      if (map.getSource(FIXED_LINE_SOURCE)) {
+      if (map.getSource && map.getSource(FIXED_LINE_SOURCE)) {
         map.removeSource(FIXED_LINE_SOURCE);
       }
       
-      if (map.getSource(TEMP_LINE_SOURCE)) {
+      if (map.getSource && map.getSource(TEMP_LINE_SOURCE)) {
         map.removeSource(TEMP_LINE_SOURCE);
       }
     } catch (e) {
       console.error("Error cleaning up measurement layers:", e);
     }
     
-    // Reset cursor and points
-    map.getCanvas().style.cursor = '';
+    // Reset cursor and points - with additional safety checks
+    try {
+      if (map.getCanvas && map.getCanvas()) {
+        map.getCanvas().style.cursor = '';
+      }
+    } catch (canvasError) {
+      console.warn("Error resetting cursor:", canvasError);
+    }
+    
     pointsRef.current = [];
   }, [map]);
 
@@ -380,7 +413,14 @@ export const useMeasurement = () => {
   // Clean up when the component unmounts
   useEffect(() => {
     return () => {
-      cleanupMeasurement();
+      // Use setTimeout to ensure cleanup happens after any pending operations
+      setTimeout(() => {
+        try {
+          cleanupMeasurement();
+        } catch (cleanupError) {
+          console.warn("Error during measurement cleanup:", cleanupError);
+        }
+      }, 0);
     };
   }, [cleanupMeasurement]);
 

@@ -3,12 +3,12 @@
  * 
  * Purpose:
  * React hook that integrates the tree height visualization system with Mapbox.
- * Manages state, coordinates rendering, and provides clean interface to components.
+ * Uses LAZY INITIALIZATION - systems only initialize when user first activates them.
  * 
  * This hook:
  * - Manages tree height visibility state
  * - Provides toggle functionality for UI components
- * - Handles click interactions for height queries
+ * - Handles click interactions with subtle tooltip
  * - Coordinates with Area of Operations boundaries
  * - Manages canvas lifecycle and cleanup
  * - Integrates with LayerManager for state tracking
@@ -19,9 +19,6 @@
  * - AreaOfOpsContext.tsx: AO boundary integration
  * - LayerManager.ts: Layer state management
  */
-/**
- * useTreeHeights.ts - FIXED VERSION
- */
 
 import { useRef, useCallback, useState, useEffect } from 'react';
 import type mapboxgl from 'mapbox-gl';
@@ -29,10 +26,6 @@ import { useAreaOfOpsContext } from '../context/AreaOfOpsContext';
 import { layerManager } from '../services/LayerManager';
 import { treeHeightSystem } from '../services/TreeHeightSystem';
 import { TreeHeightCanvas } from '../services/TreeHeightCanvas';
-
-type ExtendedMapboxMap = mapboxgl.Map & {
-  __treeHeightsPopup?: mapboxgl.Popup | null;
-};
 
 interface UseTreeHeightsReturn {
   toggleTreeHeights: () => void;
@@ -43,21 +36,30 @@ interface UseTreeHeightsReturn {
 }
 
 export function useTreeHeights(map: mapboxgl.Map | null): UseTreeHeightsReturn {
+  // State management
   const treeHeightVisibleRef = useRef<boolean>(false);
   const isRenderingRef = useRef<boolean>(false);
-  const canvasInstanceRef = useRef<TreeHeightCanvas | null>(null);
   const renderTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  
+  // Lazy initialization refs - systems only created when needed
+  const systemsRef = useRef<{
+    canvas: TreeHeightCanvas | null;
+    systemInitialized: boolean;
+  }>({
+    canvas: null,
+    systemInitialized: false
+  });
+  
   const { aoGeometry } = useAreaOfOpsContext();
 
   // Check if point is within Area of Operations
   const isPointInAO = useCallback((lng: number, lat: number): boolean => {
     if (!aoGeometry || !aoGeometry.features || aoGeometry.features.length === 0) {
-      return true; // If no AO defined, show everywhere
+      return true;
     }
     
     try {
-      // Simple point-in-polygon check
       let minLng = Infinity, maxLng = -Infinity;
       let minLat = Infinity, maxLat = -Infinity;
       
@@ -79,6 +81,15 @@ export function useTreeHeights(map: mapboxgl.Map | null): UseTreeHeightsReturn {
     }
   }, [aoGeometry]);
 
+  // Lazy initialization - only create systems when first needed
+  const ensureSystemsInitialized = useCallback(() => {
+    if (!map || systemsRef.current.systemInitialized) return;
+    
+    treeHeightSystem.initialize(map);
+    systemsRef.current.canvas = new TreeHeightCanvas(map);
+    systemsRef.current.systemInitialized = true;
+  }, [map]);
+
   // Debounced render function
   const triggerRender = useCallback(() => {
     if (!map || !treeHeightVisibleRef.current || isRenderingRef.current) return;
@@ -91,212 +102,208 @@ export function useTreeHeights(map: mapboxgl.Map | null): UseTreeHeightsReturn {
       if (!treeHeightVisibleRef.current || isRenderingRef.current) return;
       
       isRenderingRef.current = true;
-      console.log("🎨 Starting tree height render");
       
       try {
         await treeHeightSystem.renderTreeHeights({
           isPointInAO,
           onProgress: (progress) => {
-            console.log(`🎨 Render progress: ${Math.round(progress * 100)}%`);
+            // Optional: Log progress for debugging
           }
         });
-        
-        console.log("✅ Tree height render complete");
       } catch (error) {
-        console.error("❌ Tree height render error:", error);
+        console.error("Tree height render error:", error);
       } finally {
         isRenderingRef.current = false;
       }
-    }, 300); // 300ms debounce
+    }, 300);
   }, [map, isPointInAO]);
 
-  // SINGLE initialization useEffect - REMOVED DUPLICATE
+  // Lightweight initialization - only register layer capability
   useEffect(() => {
-  if (!map) return;
+    if (!map) return;
 
-  // Initialize tree height system and canvas
-  treeHeightSystem.initialize(map);
-  canvasInstanceRef.current = new TreeHeightCanvas(map);
-  layerManager.registerLayer("tree-height-raster", false);
+    layerManager.registerLayer("tree-height-raster", false);
+    setIsInitialized(true);
 
-  setIsInitialized(true);
-  console.log("🌲 Tree height system initialized");
-
-  // Simple cleanup
-  return () => {
-    console.log("🧹 Cleaning up tree heights initialization");
-    if (canvasInstanceRef.current) {
-      canvasInstanceRef.current.destroy();
-      canvasInstanceRef.current = null;
-    }
-    treeHeightSystem.cleanup();
-    setIsInitialized(false);
-  };
-  }, [map]); // Remove triggerRender dependency
+    return () => {
+      if (systemsRef.current.canvas) {
+        systemsRef.current.canvas.destroy();
+        systemsRef.current.canvas = null;
+      }
+      if (systemsRef.current.systemInitialized) {
+        treeHeightSystem.cleanup();
+        systemsRef.current.systemInitialized = false;
+      }
+      setIsInitialized(false);
+    };
+  }, [map]);
 
   // Toggle tree heights visibility
   const toggleTreeHeights = useCallback(() => {
-    if (!map || !canvasInstanceRef.current) {
-      console.warn("Tree height system not initialized");
+    if (!map) {
+      console.warn("Map not available");
       return;
     }
     
-    console.log('🌲 Toggle tree heights - current state:', treeHeightVisibleRef.current);
+    // Lazy initialization on first use
+    ensureSystemsInitialized();
+    
+    if (!systemsRef.current.canvas) {
+      console.error("Failed to initialize tree height systems");
+      return;
+    }
     
     treeHeightVisibleRef.current = !treeHeightVisibleRef.current;
     const newState = treeHeightVisibleRef.current;
     
-    // Toggle canvas visibility
-    canvasInstanceRef.current.setVisible(newState);
-    
-    // Update LayerManager state
+    systemsRef.current.canvas.setVisible(newState);
     layerManager.setLayerVisibility("tree-height-raster", newState);
     
-    // Trigger render if turning on
     if (newState) {
-      console.log('🎨 Triggering initial render...');
       triggerRender();
     } else {
-      // Clear canvas when turning off
-      canvasInstanceRef.current.clear();
+      systemsRef.current.canvas.clear();
+    }
+  }, [map, ensureSystemsInitialized, triggerRender]);
+
+  // Helper function to show subtle tooltip
+  const showSubtleTooltip = useCallback((content: string) => {
+    if (!map) return;
+    
+    const mapContainer = map.getContainer();
+    
+    // Remove existing tooltip
+    const existingTooltip = mapContainer.querySelector('[data-tree-tooltip]');
+    if (existingTooltip) {
+      existingTooltip.remove();
     }
     
-    console.log('✅ Toggle complete - new state:', newState);
-  }, [map, triggerRender]);
+    // Create subtle corner tooltip
+    const tooltip = document.createElement('div');
+    tooltip.setAttribute('data-tree-tooltip', 'true');
+    tooltip.innerHTML = content;
+    
+    Object.assign(tooltip.style, {
+      position: 'absolute',
+      bottom: '20px',
+      right: '20px',
+      background: 'rgba(0, 0, 0, 0.8)',
+      color: 'white',
+      padding: '8px 12px',
+      borderRadius: '6px',
+      fontSize: '12px',
+      fontFamily: 'system-ui, sans-serif',
+      zIndex: '1000',
+      maxWidth: '200px',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+      pointerEvents: 'none',
+      transition: 'opacity 0.2s ease',
+      opacity: '0'
+    });
+    
+    mapContainer.appendChild(tooltip);
+    
+    // Fade in
+    requestAnimationFrame(() => {
+      tooltip.style.opacity = '1';
+    });
+    
+    // Auto-dismiss after 3 seconds
+    setTimeout(() => {
+      if (tooltip.parentNode) {
+        tooltip.style.opacity = '0';
+        setTimeout(() => {
+          if (tooltip.parentNode) {
+            tooltip.parentNode.removeChild(tooltip);
+          }
+        }, 200);
+      }
+    }, 3000);
+  }, [map]);
 
   // Manual re-render function
   const rerenderTreeHeights = useCallback(() => {
     if (treeHeightVisibleRef.current) {
-      console.log('🔄 Manual re-render triggered');
       triggerRender();
     }
   }, [triggerRender]);
 
   // Handle tree height clicks
   const handleTreeHeightClick = useCallback((e: mapboxgl.MapMouseEvent) => {
-    if (!map || !treeHeightVisibleRef.current || !canvasInstanceRef.current) return;
-    
-    console.log('🖱️ Tree height click at:', e.lngLat);
+    if (!map || !treeHeightVisibleRef.current || !systemsRef.current.canvas) return;
     
     try {
-      // Get height value at click point
-      const heightValue = canvasInstanceRef.current.getHeightAtPoint(e.point.x, e.point.y);
-      
-      // Check if point is in AO
+      const heightValue = systemsRef.current.canvas.getHeightAtPoint(e.point.x, e.point.y);
       const inAO = isPointInAO(e.lngLat.lng, e.lngLat.lat);
       
-      let popupContent: string;
+      let tooltipContent: string;
       
       if (!inAO) {
-        popupContent = `
-          <div style="padding: 8px; min-width: 200px;">
-            <strong>🌲 Tree Height Data</strong><br/>
-            <strong>Status:</strong> Outside Area of Operations<br/>
-            <strong>Location:</strong> ${e.lngLat.lng.toFixed(4)}, ${e.lngLat.lat.toFixed(4)}
+        tooltipContent = `
+          <div>
+            <strong>🌲 Outside Area</strong><br/>
+            ${e.lngLat.lng.toFixed(4)}, ${e.lngLat.lat.toFixed(4)}
           </div>
         `;
       } else if (heightValue !== null && heightValue > 0) {
-        popupContent = `
-          <div style="padding: 8px; min-width: 200px;">
-            <strong>🌲 Tree Height Data</strong><br/>
-            <strong>Height:</strong> ${heightValue}m<br/>
-            <strong>Location:</strong> ${e.lngLat.lng.toFixed(4)}, ${e.lngLat.lat.toFixed(4)}<br/>
-            <strong>Canvas Coords:</strong> ${e.point.x}, ${e.point.y}
+        tooltipContent = `
+          <div>
+            <strong>🌲 Tree Height: ${heightValue}m</strong><br/>
+            ${e.lngLat.lng.toFixed(4)}, ${e.lngLat.lat.toFixed(4)}
           </div>
         `;
       } else {
-        popupContent = `
-          <div style="padding: 8px; min-width: 200px;">
-            <strong>🌲 Tree Height Data</strong><br/>
-            <strong>Height:</strong> No trees detected<br/>
-            <strong>Location:</strong> ${e.lngLat.lng.toFixed(4)}, ${e.lngLat.lat.toFixed(4)}<br/>
-            <strong>Canvas Coords:</strong> ${e.point.x}, ${e.point.y}
+        tooltipContent = `
+          <div>
+            <strong>🌲 No Trees</strong><br/>
+            ${e.lngLat.lng.toFixed(4)}, ${e.lngLat.lat.toFixed(4)}
           </div>
         `;
       }
       
-      showTreePopup(e.lngLat, popupContent);
+      showSubtleTooltip(tooltipContent);
       
     } catch (clickError) {
       console.error('Tree height click error:', clickError);
-      
-      const errorContent = `
-        <div style="padding: 8px;">
-          <strong>🌲 Tree Height Error</strong><br/>
-          <strong>Location:</strong> ${e.lngLat.lng.toFixed(4)}, ${e.lngLat.lat.toFixed(4)}<br/>
-          <strong>Error:</strong> ${clickError instanceof Error ? clickError.message : String(clickError)}
+      showSubtleTooltip(`
+        <div>
+          <strong>🌲 Error</strong><br/>
+          ${clickError instanceof Error ? clickError.message : 'Unknown error'}
         </div>
-      `;
-      
-      showTreePopup(e.lngLat, errorContent);
+      `);
     }
-  }, [map, isPointInAO]);
-
-  // Helper function to show popup
-  const showTreePopup = useCallback((lngLat: mapboxgl.LngLat, content: string) => {
-    if (!map) return;
-    
-    const extMap = map as ExtendedMapboxMap;
-    
-    // Remove existing popup
-    if (extMap.__treeHeightsPopup) {
-      extMap.__treeHeightsPopup.remove();
-      extMap.__treeHeightsPopup = null;
-    }
-    
-    // Create new popup - import mapbox-gl dynamically
-    import("mapbox-gl").then((mapboxModule) => {
-      const mapboxgl = mapboxModule.default;
-      
-      const popup = new mapboxgl.Popup({
-        closeButton: true,
-        closeOnClick: true,
-        maxWidth: "300px",
-      })
-        .setLngLat(lngLat)
-        .setHTML(content)
-        .addTo(map);
-      
-      extMap.__treeHeightsPopup = popup;
-    });
-  }, [map]);
+  }, [map, isPointInAO, showSubtleTooltip]);
 
   // Cleanup function
   const cleanup = useCallback(() => {
-    console.log("🧹 Cleaning up tree heights system");
-    
-    // Clear render timeout
     if (renderTimeoutRef.current) {
       clearTimeout(renderTimeoutRef.current);
       renderTimeoutRef.current = null;
     }
     
-    // Reset state
     treeHeightVisibleRef.current = false;
     isRenderingRef.current = false;
     
-    // Clean up canvas
-    if (canvasInstanceRef.current) {
-      canvasInstanceRef.current.destroy();
-      canvasInstanceRef.current = null;
+    if (systemsRef.current.canvas) {
+      systemsRef.current.canvas.destroy();
+      systemsRef.current.canvas = null;
     }
-    
-    // Clean up popup
-    if (map) {
-      const extMap = map as ExtendedMapboxMap;
-      if (extMap.__treeHeightsPopup) {
-        extMap.__treeHeightsPopup.remove();
-        extMap.__treeHeightsPopup = null;
+
+    // Clean up tooltip
+    const mapContainer = map?.getContainer();
+    if (mapContainer) {
+      const tooltip = mapContainer.querySelector('[data-tree-tooltip]');
+      if (tooltip) {
+        tooltip.remove();
       }
     }
     
-    // Clean up tree height system
-    treeHeightSystem.cleanup();
-    
-    console.log("✅ Tree heights cleanup complete");
+    if (systemsRef.current.systemInitialized) {
+      treeHeightSystem.cleanup();
+      systemsRef.current.systemInitialized = false;
+    }
   }, [map]);
 
-  // Return hook interface
   return {
     toggleTreeHeights,
     rerenderTreeHeights,

@@ -217,6 +217,26 @@ export class TreeHeightCanvas {
   }
 
   /**
+   * Set cursor style when hovering over tree areas
+   */
+  setCursor(cursor: string): void {
+    if (!this.canvas) return;
+    
+    const mapContainer = this.map.getContainer();
+    mapContainer.style.cursor = cursor;
+    console.log(`👆 Map cursor set to: ${cursor}`);
+  }
+
+  /**
+   * Reset cursor to default
+   */
+  resetCursor(): void {
+    const mapContainer = this.map.getContainer();
+    mapContainer.style.cursor = '';
+    console.log(`👆 Map cursor reset`);
+  }
+
+  /**
    * Get canvas statistics for debugging
    */
   getStats(): {

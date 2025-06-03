@@ -1,23 +1,19 @@
 /**
- * page.tsx
+ * page.tsx - OPTIMIZED VERSION WITH LAZY LOADING
  * 
  * Purpose:
  * Main entry point for the application, orchestrating the layout and state management
  * for map, analysis panels, and verification tools. Wraps content with necessary providers.
  * 
- * Changes:
- * - Updated activePanel type to include "terrain".
- * - Added MapSidePanel for Terrain Analysis (ObstacleAnalysisDashboard).
- * - Ensured consistent z-index and styling with LOS and Energy panels.
- * - Passed togglePanel to ChecklistComponent for "Guide Me" functionality.
- * - Added initialSection prop to AnalysisDashboard for section expansion.
+ * Optimizations:
+ * - Lazy loaded heavy analysis components to reduce initial bundle size
+ * - Lazy loaded modal components that aren't immediately needed
+ * - Added Suspense boundaries with loading states
+ * - Kept core map and context providers in main bundle for immediate availability
  */
 
 "use client";
-import React, { useState, ReactNode, useEffect } from "react";
-import Calculator from "./components/Calculator";
-import FlightPlanUploader from "./components/FlightPlanUploader";
-import AreaOpsUploader from "./components/AO/AreaOpsUploader";
+import React, { useState, ReactNode, useEffect, Suspense, lazy } from "react";
 import Map from "./components/Map";
 import {
   FlightPlanProvider,
@@ -29,28 +25,69 @@ import { LOSAnalysisProvider } from "./context/LOSAnalysisContext";
 import { FlightConfigurationProvider } from "./context/FlightConfigurationContext";
 import { AreaOfOpsProvider } from "./context/AreaOfOpsContext";
 import { ChecklistProvider } from "./context/ChecklistContext";
-import ToolsDashboard from "./components/VerificationToolbar/ToolsDashboard";
 import Card from "./components/UI/Card";
 import { ObstacleAnalysisProvider } from "./context/ObstacleAnalysisContext";
 import MapSidePanel from "./components/UI/MapSidePanel";
-import { Battery, Radio, Mountain, MapPin, Search } from "lucide-react";
+import { Battery, Radio, Mountain, MapPin, Search, Loader2 } from "lucide-react";
 import { trackEventWithForm as trackEvent } from "./components/tracking/tracking";
 import { MapProvider } from "./context/mapcontext";
 import { AnalysisControllerProvider, useAnalysisController } from "./context/AnalysisControllerContext";
-import AnalysisWizard from "./components/AnalysisWizard";
-import WelcomeMessage from "./components/WelcomeMessage";
-import ChecklistComponent from "./components/ChecklistComponent";
 import 'mapbox-gl/dist/mapbox-gl.css';
 import Image from "next/image";
-import ObstacleAnalysisDashboard from "./components/Analyses/ObstacleAnalysis/TerrainAnalysisDashboard";
-import AnalysisDashboard from "./components/Analyses/LOSAnalyses/UI/VisibilityAnalysisDashboard";
-import MapSelectionPanel from "./components/AO/MapSelectionPanel";
 import ReloadButton from "./components/UI/ReloadButton";
-import MarkerLocationsModal from "./components/UI/MarkerLocationsModal";
 
 //payment and premium access
 import { PremiumProvider } from "./context/PremiumContext";
-import UpgradeModal from "./components/UI/UpgradeModal";
+
+// ========================================
+// LAZY LOADED COMPONENTS
+// ========================================
+// Heavy analysis components - only loaded when panels are opened
+const ObstacleAnalysisDashboard = lazy(() => import("./components/Analyses/ObstacleAnalysis/TerrainAnalysisDashboard"));
+const AnalysisDashboard = lazy(() => import("./components/Analyses/LOSAnalyses/UI/VisibilityAnalysisDashboard"));
+const Calculator = lazy(() => import("./components/Calculator"));
+
+// Modal/overlay components - only loaded when needed
+const AnalysisWizard = lazy(() => import("./components/AnalysisWizard"));
+const FlightPlanUploader = lazy(() => import("./components/FlightPlanUploader"));
+const AreaOpsUploader = lazy(() => import("./components/AO/AreaOpsUploader"));
+const UpgradeModal = lazy(() => import("./components/UI/UpgradeModal"));
+const MarkerLocationsModal = lazy(() => import("./components/UI/MarkerLocationsModal"));
+
+// Conditional UI components
+const ChecklistComponent = lazy(() => import("./components/ChecklistComponent"));
+const WelcomeMessage = lazy(() => import("./components/WelcomeMessage"));
+const MapSelectionPanel = lazy(() => import("./components/AO/MapSelectionPanel"));
+const ToolsDashboard = lazy(() => import("./components/VerificationToolbar/ToolsDashboard"));
+
+// Heavy sub-components within ToolsDashboard that can be preloaded
+const CompactDisclaimerWidget = lazy(() => import("./components/CompactDisclaimerWidget"));
+
+// ========================================
+// LOADING COMPONENTS
+// ========================================
+/**
+ * Loading spinner for analysis panels
+ */
+const AnalysisLoadingSpinner: React.FC = () => (
+  <div className="flex items-center justify-center p-8">
+    <div className="flex flex-col items-center gap-2">
+      <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+      <span className="text-sm text-gray-600">Loading analysis tools...</span>
+    </div>
+  </div>
+);
+
+/**
+ * Loading placeholder for modals
+ */
+const ModalLoadingPlaceholder: React.FC = () => (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div className="bg-white p-4 rounded-lg">
+      <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+    </div>
+  </div>
+);
 
 /**
  * Main content component for the home page, managing UI layout and uploader/wizard overlays
@@ -161,10 +198,12 @@ const HomeContent = () => {
               {/* Welcome Message Overlay */}
               {(!showUploader && !showAreaOpsUploader && !showWizard && showWelcomeMessage && !flightPlan && !aoGeometry) && (
                 <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20 p-2">
-                  <WelcomeMessage
-                    onGetStarted={handleWizard}
-                    onClose={() => setShowWelcomeMessage(false)}
-                  />
+                  <Suspense fallback={<ModalLoadingPlaceholder />}>
+                    <WelcomeMessage
+                      onGetStarted={handleWizard}
+                      onClose={() => setShowWelcomeMessage(false)}
+                    />
+                  </Suspense>
                 </div>
               )}
               {/* Wizard Overlay */}
@@ -182,11 +221,13 @@ const HomeContent = () => {
                       <h3 className="text-xl font-semibold">Start Here</h3>
 
                     </div>
-                    <AnalysisWizard 
-                      onClose={() => setShowWizard(false)} 
-                      onStartMapSelection={handleStartMapSelection}
-                      onShowAreaOpsUploader={() => setShowAreaOpsUploader(true)}
-                    />
+                    <Suspense fallback={<AnalysisLoadingSpinner />}>
+                      <AnalysisWizard 
+                        onClose={() => setShowWizard(false)} 
+                        onStartMapSelection={handleStartMapSelection}
+                        onShowAreaOpsUploader={() => setShowAreaOpsUploader(true)}
+                      />
+                    </Suspense>
                   </div>
                 </div>
               )}
@@ -194,12 +235,14 @@ const HomeContent = () => {
                 <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20 p-2">
                   <div className="bg-white p-2 rounded-lg shadow-lg w-full max-w-5xl">
                     <h3 className="text-xl font-semibold mb-2">Flight Plan Upload</h3>
-                    <FlightPlanUploader
-                      onClose={() => setShowUploader(false)}
-                      onPlanUploaded={(flightData) => {
-                        setShowUploader(false);
-                      }}
-                    />
+                    <Suspense fallback={<AnalysisLoadingSpinner />}>
+                      <FlightPlanUploader
+                        onClose={() => setShowUploader(false)}
+                        onPlanUploaded={(flightData) => {
+                          setShowUploader(false);
+                        }}
+                      />
+                    </Suspense>
                   </div>
                 </div>
               )}
@@ -207,9 +250,11 @@ const HomeContent = () => {
                 <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20 p-2">
                   <div className="bg-white p-2 rounded-lg shadow-lg w-full max-w-5xl">
                     <h3 className="text-xl font-semibold mb-2">Area of Operations Upload</h3>
-                    <AreaOpsUploader
-                      onClose={() => setShowAreaOpsUploader(false)}
-                    />
+                    <Suspense fallback={<AnalysisLoadingSpinner />}>
+                      <AreaOpsUploader
+                        onClose={() => setShowAreaOpsUploader(false)}
+                      />
+                    </Suspense>
                   </div>
                 </div>
               )}
@@ -224,7 +269,9 @@ const HomeContent = () => {
                 <div className="space-y-4 h-full flex flex-col">
                   <h3 className="text-lg font-medium text-gray-900">Terrain and Visibility Toolbar</h3>
                   <div className="flex-1 overflow-y-auto">
-                    <ToolsDashboard onTogglePanel={togglePanel} />
+                    <Suspense fallback={<AnalysisLoadingSpinner />}>
+                      <ToolsDashboard onTogglePanel={togglePanel} />
+                    </Suspense>
                   </div>
                 </div>
               </Card>
@@ -249,11 +296,13 @@ const HomeContent = () => {
                       )}
                     </h3>
                     <div className="flex-1 overflow-y-auto">
-                      <MapSelectionPanel 
-                        mode={mapSelectionMode}
-                        onComplete={handleMapSelectionComplete}
-                        onCancel={handleMapSelectionCancel}
-                      />
+                      <Suspense fallback={<AnalysisLoadingSpinner />}>
+                        <MapSelectionPanel 
+                          mode={mapSelectionMode}
+                          onComplete={handleMapSelectionComplete}
+                          onCancel={handleMapSelectionCancel}
+                        />
+                      </Suspense>
                     </div>
                   </div>
                 </Card>
@@ -263,12 +312,14 @@ const HomeContent = () => {
             {/* Checklist Section */}
             {(flightPlan || aoGeometry) && !showWizard && !showUploader && !showAreaOpsUploader && (
               <div className="w-full relative z-10">
-                <ChecklistComponent className="relative" togglePanel={togglePanel} />
+                <Suspense fallback={<AnalysisLoadingSpinner />}>
+                  <ChecklistComponent className="relative" togglePanel={togglePanel} />
+                </Suspense>
               </div>
             )}            
           </div>
 
-          {/* Analysis Panels */}
+          {/* Analysis Panels - WITH LAZY LOADING */}
           <MapSidePanel
             title="Energy Analysis"
             icon={<Battery className="w-5 h-5" />}
@@ -276,7 +327,9 @@ const HomeContent = () => {
             onToggle={() => togglePanel("energy")}
             className="z-30"
           >
-            <Calculator />
+            <Suspense fallback={<AnalysisLoadingSpinner />}>
+              <Calculator />
+            </Suspense>
           </MapSidePanel>
 
           <MapSidePanel
@@ -286,7 +339,9 @@ const HomeContent = () => {
             onToggle={() => togglePanel("los")}
             className="z-30"
           >
-            <AnalysisDashboard initialSection={initialSection} />
+            <Suspense fallback={<AnalysisLoadingSpinner />}>
+              <AnalysisDashboard initialSection={initialSection} />
+            </Suspense>
           </MapSidePanel>
 
           <MapSidePanel
@@ -296,7 +351,9 @@ const HomeContent = () => {
             onToggle={() => togglePanel("terrain")}
             className="z-30"
           >
-            <ObstacleAnalysisDashboard />
+            <Suspense fallback={<AnalysisLoadingSpinner />}>
+              <ObstacleAnalysisDashboard />
+            </Suspense>
           </MapSidePanel>
         </div>
       </div>
@@ -305,18 +362,33 @@ const HomeContent = () => {
 };
 
 /**
- * Wrapper component for the MarkerLocationsModal
+ * Wrapper component for the MarkerLocationsModal - WITH LAZY LOADING
  * This ensures the modal has access to all necessary context
  * and is rendered at the application level
  */
 const MarkerLocationsModalWrapper: React.FC = () => {
   const { showMarkerLocationsModal, setShowMarkerLocationsModal } = useAnalysisController();
   
+  if (!showMarkerLocationsModal) return null;
+  
   return (
-    <MarkerLocationsModal
-      isOpen={showMarkerLocationsModal}
-      onClose={() => setShowMarkerLocationsModal(false)}
-    />
+    <Suspense fallback={<ModalLoadingPlaceholder />}>
+      <MarkerLocationsModal
+        isOpen={showMarkerLocationsModal}
+        onClose={() => setShowMarkerLocationsModal(false)}
+      />
+    </Suspense>
+  );
+};
+
+/**
+ * Lazy-loaded UpgradeModal wrapper
+ */
+const UpgradeModalWrapper: React.FC = () => {
+  return (
+    <Suspense fallback={null}>
+      <UpgradeModal />
+    </Suspense>
   );
 };
 
@@ -336,8 +408,8 @@ export default function Home() {
                     <ObstacleAnalysisProvider>
                       <ChecklistProvider>
                         <HomeContent />
-                        <UpgradeModal />
-                          <MarkerLocationsModalWrapper />
+                        <UpgradeModalWrapper />
+                        <MarkerLocationsModalWrapper />
                       </ChecklistProvider>
                     </ObstacleAnalysisProvider>
                   </LOSAnalysisProvider>

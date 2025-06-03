@@ -43,8 +43,8 @@ import CompactDisclaimerWidget from "../../components/CompactDisclaimerWidget";
 import dynamic from "next/dynamic";
 
 // Only load layer handlers on client
-const BYDALayerHandler = dynamic(
-  () => import("../Map/BYDALayerHandler").then(m => m.default),
+const DBYDLayerHandler = dynamic(
+  () => import("../Map/DBYDLayerHandler").then(m => m.default),
   { ssr: false }
 );
 
@@ -174,7 +174,7 @@ const ToolsDashboard: React.FC<ToolsDashboardProps & { activePanel?: string | nu
       )}
       
       <div className="hidden">
-        <BYDALayerHandler map={map || null} />
+        <DBYDLayerHandler map={map || null} />
       </div>
 
       <VisibilityAnalysisCard

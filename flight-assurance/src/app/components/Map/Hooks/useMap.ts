@@ -89,7 +89,24 @@ export const useMap = (containerId: string, options: mapboxgl.MapboxOptions) => 
               if (!isInitializing) return;
               mapRef.current = map;
               setTerrainLoaded(true);
-              setTimeout(() => map.resize(), 100);
+              setTimeout(() => {
+                // Add comprehensive validation before calling resize
+                if (map && map.loaded) {
+                  try {
+                    // Check if map is still loaded and container exists
+                    const container = map.getContainer();
+                    const canvas = map.getCanvas();
+                    
+                    if (container && canvas && map.loaded()) {
+                      map.resize();
+                    } else {
+                      console.warn("Map resize skipped: container or canvas not available");
+                    }
+                  } catch (resizeError) {
+                    console.warn("Error during map resize:", resizeError);
+                  }
+                }
+              }, 100);
             })
             .catch((error) => {
               setMapError(error instanceof Error ? error : new Error(String(error)));
@@ -106,7 +123,12 @@ export const useMap = (containerId: string, options: mapboxgl.MapboxOptions) => 
       isInitializing = false;
       if (mapInstance) {
         try {
-          mapInstance.remove();
+          // Check if map has a remove method and is still valid
+          if (mapInstance.remove && typeof mapInstance.remove === 'function') {
+            mapInstance.remove();
+          } else {
+            console.warn("Map already destroyed, skipping cleanup");
+          }
         } catch (err) {
           console.warn("Error removing map:", err);
         }

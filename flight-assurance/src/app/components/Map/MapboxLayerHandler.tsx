@@ -250,11 +250,36 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
       map.on("click", handleTreeHeightClick);
     }
 
+    // ADD HOVER HANDLERS HERE:
+    const handleTreeHover = (e: mapboxgl.MapMouseEvent) => {
+      if (!isInitialized || !map) return;
+      
+      const treeHeightVisible = layerManager.isLayerVisible("tree-height-raster");
+      if (!treeHeightVisible) return;
+      
+      // Simple hover effect - change cursor over map when tree layer is active
+      map.getCanvas().style.cursor = 'crosshair';
+    };
+
+    const handleTreeHoverLeave = () => {
+      if (!map) return;
+      map.getCanvas().style.cursor = '';
+    };
+
+    // Add hover listeners only when tree heights are visible
+    if (layerManager.isLayerVisible("tree-height-raster")) {
+      map.on('mousemove', handleTreeHover);
+      map.on('mouseleave', handleTreeHoverLeave);
+    }
+
     return () => {
       delete (map as any).toggleTreeHeights;
       if (handleTreeHeightClick) {
         map.off("click", handleTreeHeightClick);
       }
+      // Clean up hover listeners
+      map.off('mousemove', handleTreeHover);
+      map.off('mouseleave', handleTreeHoverLeave);
     };
   }, [map, isInitialized, toggleTreeHeights, handleTreeHeightClick]);
 

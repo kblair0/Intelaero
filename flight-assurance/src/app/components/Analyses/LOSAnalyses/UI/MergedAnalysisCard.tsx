@@ -84,7 +84,7 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
       const initialSelection: string[] = [];
       setSelectedMarkerIds(initialSelection);
     }
-  }, [availableStations.length]);
+  }, [availableStations.length, selectedMarkerIds.length]);
 
   const handleMarkerSelectionChange = (markerId: string, isSelected: boolean) => {
     if (isSelected) {
