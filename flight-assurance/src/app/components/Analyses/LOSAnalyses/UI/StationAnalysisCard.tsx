@@ -187,43 +187,10 @@ const StationAnalysisCard: React.FC<StationAnalysisCardProps> = ({ gridAnalysisR
     return `${displayName}${indexLabel} (${marker.location.lat.toFixed(3)}, ${marker.location.lng.toFixed(3)}, ${marker.elevationOffset}m above ground)`;
   };
 
-  const [, forceUpdate] = React.useReducer((x) => x + 1, 0);
-
-  // Listen for layer visibility changes
-  useEffect(() => {
-    const unsubscribe = layerManager.addEventListener((event, layerId) => {
-      // Check if this is a layer for any marker of our type
-      if (selectedMarkerId && 
-         (layerId === getLayerId(selectedMarkerId) || layerId.startsWith(MAP_LAYERS.GCS_GRID) || 
-          layerId.startsWith(MAP_LAYERS.OBSERVER_GRID) || layerId.startsWith(MAP_LAYERS.REPEATER_GRID)) &&
-         (event === "visibilityChange" || event === "layerAdded")
-      ) {
-        forceUpdate();
-      }
-    });
-    return () => {
-      unsubscribe();
-    };
-  }, [selectedMarkerId, getLayerId]);
-
   return (
     <div className="bg-white rounded shadow p-3 mb-4">
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-sm font-semibold">{getStationDisplayName()} Analysis</h2>
-        {selectedMarker && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-600">Show/Hide</span>
-            <label className="toggle-switch">
-              <input
-                type="checkbox"
-                checked={layerManager.isLayerVisible(getLayerId(selectedMarkerId))}
-                onChange={() => layerManager.toggleLayerVisibility(getLayerId(selectedMarkerId))}
-                disabled={isAnalyzing}
-              />
-              <span className="toggle-slider"></span>
-            </label>
-          </div>
-        )}
       </div>
       
       {typeMarkers.length === 0 ? (

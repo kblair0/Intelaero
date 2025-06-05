@@ -188,35 +188,37 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
       
       // Flight path analysis
       async runFlightPathAnalysis() {
-        if (!flightPlan) {
-          throw new Error('No flight plan available');
-        }
-        
-        try {
-          setIsAnalyzing(true);
-          cleanup();
-          
-          // Pass sampling resolution to analysis function
-          const internalResults = await runAnalysis(AnalysisType.FLIGHT_PATH, { 
-            flightPlan,
-            samplingResolution
-          });
+      if (!flightPlan) {
+        const message = 'No flight plan available';
+        setError(message);
+        return { cells: [], stats: null } as ContextAnalysisResults; // Return empty results
+      }
+  
+  try {
+    setIsAnalyzing(true);
+    cleanup();
+    
+    // Pass sampling resolution to analysis function
+    const internalResults = await runAnalysis(AnalysisType.FLIGHT_PATH, { 
+      flightPlan,
+      samplingResolution
+    });
 
-          // Convert to context format
-          const contextResults = adaptAnalysisResults(internalResults);
-          
-          setResults(contextResults);
-          if (onComplete) onComplete(contextResults);
-          return contextResults;
-        } catch (error: unknown) {
-          const message = error instanceof Error ? error.message : "Unknown error";
-          setError(message);
-          if (onError) onError(error instanceof Error ? error : new Error(message));
-          throw error;
-        } finally {
-          setIsAnalyzing(false);
-        }
-      },
+    // Convert to context format
+    const contextResults = adaptAnalysisResults(internalResults);
+    
+    setResults(contextResults);
+    if (onComplete) onComplete(contextResults);
+    return contextResults;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    setError(message);
+    if (onError) onError(error instanceof Error ? error : new Error(message));
+    return { cells: [], stats: null } as ContextAnalysisResults; // Return empty results
+  } finally {
+    setIsAnalyzing(false);
+  }
+},
       
       // Station analysis
       async runStationAnalysis(options) {
@@ -375,97 +377,97 @@ const GridAnalysisController = forwardRef<GridAnalysisRef, GridAnalysisControlle
 
       // Flight path visibility analysis - update to use markers collection
       async runFlightPathVisibilityAnalysis(options = {}) {
-        if (!flightPlan) {
-          throw new Error('No flight plan available');
-        }
+      if (!flightPlan) {
+        const message = 'No flight plan available';
+        setError(message);
+        return { cells: [], stats: null } as ContextAnalysisResults; // Return empty results
+      }
+      
+      try {
+        setIsAnalyzing(true);
         
-        try {
-          setIsAnalyzing(true);
-          
-          // Remove previous visibility layer
+        // Remove previous visibility layer
+        layerManager.removeLayer(MAP_LAYERS.FLIGHT_PATH_VISIBILITY);
+        
+        // Import the visibility analysis dynamically (only when needed)
+        const { analyzeFlightPathVisibility, addVisibilityLayer } = await import(
+          '../../LOSAnalyses/Utils/FlightPathVisibilityEngine');
+        
+        // Filter markers if markerIds is provided
+        const markersToUse = options.markerIds 
+          ? markers.filter(marker => options.markerIds?.includes(marker.id))
+          : markers;
+        
+        // Run the analysis with selected markers
+        const visibilityResults = await analyzeFlightPathVisibility(
+          map!,
+          flightPlan,
+          markersToUse,
+          elevationService,
+          {
+            sampleInterval: options.sampleInterval || 10,
+            minimumOffset: options.minimumOffset || 1,
+            onProgress: (progress) => {
+              setProgress(progress);
+              if (onProgress) onProgress(progress);
+            }
+          }
+        );
+        
+        // Always add the visibility layer when analysis completes
+        if (map) {
+          // First ensure any old layer is removed
           layerManager.removeLayer(MAP_LAYERS.FLIGHT_PATH_VISIBILITY);
           
-          // Import the visibility analysis dynamically (only when needed)
-          const { analyzeFlightPathVisibility, addVisibilityLayer } = await import(
-            '../../LOSAnalyses/Utils/FlightPathVisibilityEngine');
+          // Add the new visibility layer
+          addVisibilityLayer(map, visibilityResults.segments);
           
-          // Filter markers if markerIds is provided
-          const markersToUse = options.markerIds 
-            ? markers.filter(marker => options.markerIds?.includes(marker.id))
-            : markers;
-          
-          // Run the analysis with selected markers
-          const visibilityResults = await analyzeFlightPathVisibility(
-            map!,
-            flightPlan,
-            markersToUse,
-            elevationService,
-            {
-              sampleInterval: options.sampleInterval || 10,
-              minimumOffset: options.minimumOffset || 1,
-              onProgress: (progress) => {
-                setProgress(progress);
-                if (onProgress) onProgress(progress);
-              }
-            }
+          // Apply visibility based on option (visible by default)
+          layerManager.setLayerVisibility(
+            MAP_LAYERS.FLIGHT_PATH_VISIBILITY, 
+            options.showLayer !== false
           );
-          
-          // Always add the visibility layer when analysis completes
-          if (map) {
-            // First ensure any old layer is removed
-            layerManager.removeLayer(MAP_LAYERS.FLIGHT_PATH_VISIBILITY);
-            
-            // Add the new visibility layer
-            addVisibilityLayer(map, visibilityResults.segments);
-            
-            // Apply visibility based on option (visible by default)
-            layerManager.setLayerVisibility(
-              MAP_LAYERS.FLIGHT_PATH_VISIBILITY, 
-              options.showLayer !== false
-            );
-          }
-          
-          // Create the internal results object
-          // Note: This is handling a unique case where FlightPathVisibilityEngine already returns
-          // in the format expected by LOSAnalysisContext, so we need to convert it to our internal format first
-          const internalResults: TypesAnalysisResults = {
-            cells: [], // Not using cells for this analysis
-            stats: {
-              visibleCells: 0,
-              totalCells: 0,
-              averageVisibility: visibilityResults.stats.coveragePercentage,
-              analysisTime: visibilityResults.stats.analysisTime
-            },
-            flightPathVisibility: {
-              visibleLength: visibilityResults.stats.visibleLength,
-              totalLength: visibilityResults.stats.totalLength,
-              coveragePercentage: visibilityResults.stats.coveragePercentage,
-              // Convert the array-based stats to a Record format for internal use
-              stationStats: visibilityResults.stats.stationStats?.reduce((acc, stat) => {
-                acc[`${stat.stationType}-${Math.random().toString(36).substr(2, 9)}`] = stat.visibleLength;
-                return acc;
-              }, {} as Record<string, number>)
-            }
-          };
-          
-          // Convert back to context format
-          const contextResults = adaptAnalysisResults(internalResults);
-          
-          setResults(contextResults);
-          
-          if (onComplete) onComplete(contextResults);
-          return contextResults;
-          
-        } catch (error: unknown) {
-          const message = error instanceof Error ? error.message : "Unknown error";
-          setError(message);
-          if (onError) onError(error instanceof Error ? error : new Error(message));
-          throw error;
-        } finally {
-          setIsAnalyzing(false);
-          setProgress(0);
         }
-      },
+        
+        // Create the internal results object
+        const internalResults: TypesAnalysisResults = {
+          cells: [], // Not using cells for this analysis
+          stats: {
+            visibleCells: 0,
+            totalCells: 0,
+            averageVisibility: visibilityResults.stats.coveragePercentage,
+            analysisTime: visibilityResults.stats.analysisTime
+          },
+          flightPathVisibility: {
+            visibleLength: visibilityResults.stats.visibleLength,
+            totalLength: visibilityResults.stats.totalLength,
+            coveragePercentage: visibilityResults.stats.coveragePercentage,
+            // Convert the array-based stats to a Record format for internal use
+            stationStats: visibilityResults.stats.stationStats?.reduce((acc, stat) => {
+              acc[`${stat.stationType}-${Math.random().toString(36).substr(2, 9)}`] = stat.visibleLength;
+              return acc;
+            }, {} as Record<string, number>)
+          }
+        };
+        
+        // Convert to context format
+        const contextResults = adaptAnalysisResults(internalResults);
+        
+        setResults(contextResults);
+        
+        if (onComplete) onComplete(contextResults);
+        return contextResults;
+        
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "Unknown error";
+        setError(message);
+        if (onError) onError(error instanceof Error ? error : new Error(message));
+        return { cells: [], stats: null } as ContextAnalysisResults; // Return empty results
+      } finally {
+        setIsAnalyzing(false);
+        setProgress(0);
+      }
+    },
       
       /**
        * Analyzes a grid of terrain cells to generate elevation statistics

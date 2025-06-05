@@ -86,20 +86,22 @@ const WelcomeMessage: React.FC<WelcomeMessageProps> = ({ onGetStarted, onClose }
             <div className="absolute bottom-full mb-1 hidden group-hover:block bg-gray-800 text-white text-xs rounded-lg p-1 w-56 text-center z-10">
               ArduPilot's open-source autopilot powers professional drones. Intel.Aero's compatibility ensures seamless integration.
             </div>
+
           </div>
           <div className="flex flex-col items-center relative group">
             <Image
-              src="/logos/dji-logo.png"
-              alt="DJI Logo"
-              width={80}
+              src="/logos/skydio-logo.jpeg"
+              alt="Skydio Logo"
+              width={100}
               height={50}
               style={{ objectFit: "contain", width: "auto", height: "auto" }}
-              aria-label="DJI, the global leader in drone manufacturing, sets the standard for drones. Intel.Aero's support for the DJI SDK enables use with DJI's popular hardware."
+              aria-label="Skydio, a leader in autonomous drones, is AI-driven. Intel.Aero's support for Skydio enhances autonomous missions with connectivity analysis."
             />
             <div className="absolute bottom-full mb-1 hidden group-hover:block bg-gray-800 text-white text-xs rounded-lg p-1 w-56 text-center z-10">
-              DJI, the global leader in drones, sets the standard. Intel.Aero's DJI SDK support enables use with popular hardware.
+              Skydio, a leader in autonomous drones, is AI-driven. Intel.Aero's support enhances autonomous missions with connectivity analysis.
             </div>
           </div>
+
           <div className="flex flex-col items-center relative group">
             <Image
               src="/logos/dronedeploy-logo.png"
@@ -126,30 +128,18 @@ const WelcomeMessage: React.FC<WelcomeMessageProps> = ({ onGetStarted, onClose }
               MAVLink, the industry-standard protocol, enables Intel.Aero to integrate with autopilots for waypoint navigation.
             </div>
           </div>
-          <div className="flex flex-col items-center relative group">
+
+          <div className="flex flex-col items-center relative group p-4 max-w-[120px]">
             <Image
-              src="/logos/skydio-logo.jpeg"
-              alt="Skydio Logo"
-              width={100}
-              height={50}
-              style={{ objectFit: "contain", width: "auto", height: "auto" }}
-              aria-label="Skydio, a leader in autonomous drones, is AI-driven. Intel.Aero's support for Skydio enhances autonomous missions with connectivity analysis."
+              src="/logos/dji-logo.png"
+              alt="DJI Logo"
+              width={80}
+              height={38}
+              style={{ objectFit: "contain", height: "auto" }}
+              aria-label="DJI, the global leader in drone manufacturing, sets the standard for drones. Intel.Aero's support for the DJI SDK enables use with DJI's popular hardware."
             />
             <div className="absolute bottom-full mb-1 hidden group-hover:block bg-gray-800 text-white text-xs rounded-lg p-1 w-56 text-center z-10">
-              Skydio, a leader in autonomous drones, is AI-driven. Intel.Aero's support enhances autonomous missions with connectivity analysis.
-            </div>
-          </div>
-          <div className="flex flex-col items-center relative group">
-            <Image
-              src="/logos/PX4-Logo-Black.png"
-              alt="PX4 Logo"
-              width={90}
-              height={50}
-              style={{ objectFit: "contain", width: "auto", height: "auto" }}
-              aria-label="PX4, a leading open-source autopilot, powers advanced drones. Intel.Aero's PX4 compatibility ensures confident mission planning."
-            />
-            <div className="absolute bottom-full mb-1 hidden group-hover:block bg-gray-800 text-white text-xs rounded-lg p-1 w-56 text-center z-10">
-              PX4, a leading open-source autopilot, powers advanced drones. Intel.Aero's compatibility ensures confident planning.
+              DJI, the global leader in drones, sets the standard. Intel.Aero's DJI SDK support enables use with popular hardware.
             </div>
           </div>
 
@@ -157,8 +147,8 @@ const WelcomeMessage: React.FC<WelcomeMessageProps> = ({ onGetStarted, onClose }
             <Image
               src="/logos/pix4d-logo.png"
               alt="Pix4D Logo"
-              width={80}
-              height={50}
+              width={65}
+              height={30}
               style={{ objectFit: "contain", width: "auto", height: "auto" }}
               aria-label="Pix4D is renowned for photogrammetry. Intel.Aero's compatibility with Pix4D combines visibility analysis with high-precision mapping."
             />
@@ -166,6 +156,21 @@ const WelcomeMessage: React.FC<WelcomeMessageProps> = ({ onGetStarted, onClose }
               Pix4D is renowned for photogrammetry. Intel.Aero's compatibility combines visibility analysis with high-precision mapping.
             </div>
           </div>
+          <div className="flex flex-col items-center mt-4 relative group">
+            <Image
+              src="/logos/PX4-Logo-Black.png"
+              alt="PX4 Logo"
+              width={90}
+              height={45}
+              style={{ objectFit: "contain", height: "auto" }}
+              aria-label="PX4, a leading open-source autopilot, powers advanced drones. Intel.Aero's PX4 compatibility ensures confident mission planning."
+            />
+            <div className="absolute bottom-full mb-1 hidden group-hover:block bg-gray-800 text-white text-xs rounded-lg p-1 w-56 text-center z-10">
+              PX4, a leading open-source autopilot, powers advanced drones. Intel.Aero's compatibility ensures confident planning.
+            </div>
+          </div>
+
+
         </div>
       </div>
 

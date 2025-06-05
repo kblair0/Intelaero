@@ -205,34 +205,8 @@ const MergedAnalysisCard: React.FC<MergedAnalysisCardProps> = ({ gridAnalysisRef
     return baseNames[station.type];
   }, [availableStations]);
 
-  // Layer visibility listener - no issues here
-  useEffect(() => {
-    const unsubscribe = layerManager.addEventListener((event, layerId) => {
-      if (
-        layerId === MAP_LAYERS.MERGED_VISIBILITY &&
-        (event === "visibilityChange" || event === "layerAdded")
-      ) {
-        // No additional action needed here
-      }
-    });
-    return () => {
-      unsubscribe();
-    };
-  }, []);
-
   return (
     <div className="bg-white rounded shadow p-3 mb-4">
-      <div className="flex items-center gap-2 mt-2">
-        <span className="text-xs text-gray-600">Show/Hide</span>
-        <label className="toggle-switch">
-          <input
-            type="checkbox"
-            checked={layerManager.isLayerVisible(MAP_LAYERS.MERGED_VISIBILITY)}
-            onChange={() => layerManager.toggleLayerVisibility(MAP_LAYERS.MERGED_VISIBILITY)}
-          />
-          <span className="toggle-slider"></span>
-        </label>
-      </div>
       <p className="text-xs mb-2">
         This analysis combines visibility from selected stations.
       </p>

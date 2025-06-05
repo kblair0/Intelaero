@@ -47,10 +47,6 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
   
   const [localError, setLocalError] = useState<string | null>(null);
   
-  // States for layer visibility toggles
-  const [showGridLayer, setShowGridLayer] = useState<boolean>(true);
-  const [showVisibilityLayer, setShowVisibilityLayer] = useState<boolean>(true);
-  
   // Keep track of which markers to include in visibility analysis
   const [selectedMarkerIds, setSelectedMarkerIds] = useState<string[]>([]);
 
@@ -74,13 +70,6 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
     const limitedValue = Math.min(newValue, gridRangeLimits.max);
     setElosGridRange(limitedValue);
   };
-
-  useEffect(() => {
-    // Update toggle state when new results arrive
-    if (results?.flightPathVisibility) {
-      setShowVisibilityLayer(layerManager.isLayerVisible(MAP_LAYERS.FLIGHT_PATH_VISIBILITY));
-    }
-  }, [results]);
 
   // Initialize selected markers when available markers change
   useEffect(() => {
@@ -123,8 +112,14 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
         analysisType: "grid"
       });
 
-      // Call the controller to run the analysis
-      await gridAnalysisRef.current.runFlightPathAnalysis();
+      const results = await gridAnalysisRef.current.runFlightPathAnalysis();
+      
+      if (!results.stats) { // Check for empty results
+        const errorMsg = "No flight plan available";
+        setError(errorMsg);
+        setLocalError(errorMsg);
+        return;
+      }
 
       trackEvent("flight_path_analysis_success", {
         gridSize,
@@ -133,7 +128,7 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
         analysisType: "grid"
       });
     } catch (err: any) {
-      console.error("Flight path analysis error:", err);
+      console.error("Flight path analysis error:", err); // Keep for unexpected errors
       setError(err.message || "Flight path analysis failed");
       setLocalError(err.message || "Flight path analysis failed");
 
@@ -158,7 +153,6 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
       return;
     }
 
-    // Verify we have at least one marker selected
     if (selectedMarkers.length === 0) {
       const errorMsg = "At least one station (GCS, Observer, or Repeater) must be selected for analysis";
       setError(errorMsg);
@@ -177,12 +171,17 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
         usingElevationService: !!elevationService
       });
 
-      // Cast the parameter object as any to include markerIds
-      await gridAnalysisRef.current.runFlightPathVisibilityAnalysis({
-        sampleInterval: 10, // 10 meter intervals
-        showLayer: showVisibilityLayer,
+      const results = await gridAnalysisRef.current.runFlightPathVisibilityAnalysis({
+        sampleInterval: 10,
         markerIds: selectedMarkerIds
-      } as any);
+      });
+
+      if (!results.flightPathVisibility) { // Check for empty results
+        const errorMsg = "No flight plan available";
+        setError(errorMsg);
+        setLocalError(errorMsg);
+        return;
+      }
 
       trackEvent("flight_path_visibility_analysis_success", {
         markerCount: selectedMarkers.length,
@@ -190,7 +189,7 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
         usingElevationService: !!elevationService
       });
     } catch (err: any) {
-      console.error("Flight path visibility analysis error:", err);
+      console.error("Flight path visibility analysis error:", err); // Keep for unexpected errors
       setError(err.message || "Flight path visibility analysis failed");
       setLocalError(err.message || "Flight path visibility analysis failed");
 
@@ -231,42 +230,7 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
   const hasVisibilityResults = results?.flightPathVisibility !== undefined;
   // Check if grid analysis results are available
   const hasGridResults = (results?.cells?.length ?? 0) > 0;
-  
-  // Update layer visibility state when toggling layers
-  const toggleGridLayerVisibility = useCallback(() => {
-    layerManager.toggleLayerVisibility(MAP_LAYERS.ELOS_GRID);
-  }, []);
 
-  const toggleVisibilityLayerVisibility = useCallback(() => {
-    const newVisibility = !showVisibilityLayer;
-    setShowVisibilityLayer(newVisibility);
-    
-    // Ensure layer exists before trying to toggle it
-    if (hasVisibilityResults) {
-      layerManager.setLayerVisibility(MAP_LAYERS.FLIGHT_PATH_VISIBILITY, newVisibility);
-    }
-  }, [showVisibilityLayer, hasVisibilityResults]);
-
-  // Listen for layer visibility changes
-  useEffect(() => {
-    const unsubscribe = layerManager.addEventListener((event, layerId) => {
-      if (
-        (layerId === MAP_LAYERS.ELOS_GRID || layerId === MAP_LAYERS.FLIGHT_PATH_VISIBILITY) &&
-        (event === "visibilityChange" || event === "layerAdded")
-      ) {
-        // Update UI toggle states based on actual layer visibility
-        if (layerId === MAP_LAYERS.ELOS_GRID) {
-          setShowGridLayer(layerManager.isLayerVisible(layerId));
-        } else if (layerId === MAP_LAYERS.FLIGHT_PATH_VISIBILITY) {
-          setShowVisibilityLayer(layerManager.isLayerVisible(layerId));
-        }
-      }
-    });
-
-    return () => {
-      unsubscribe(); // Clean up listener
-    };
-  }, []);
 
   // Handle abort of running analysis
   const handleAbortAnalysis = useCallback(() => {
@@ -286,19 +250,6 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
       {/* Grid Analysis Section */}
       <div className="border-t border-gray-200 pt-3 mb-3">
         <p className="text-xs mb-2">This analysis shows which ground areas with the analysis range are visible from the flight path.</p>
-        
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-xs text-gray-600">Show Grid Layer</span>
-          <label className="toggle-switch">
-            <input
-              type="checkbox"
-              checked={showGridLayer}
-              onChange={toggleGridLayerVisibility}
-              disabled={!hasGridResults}
-            />
-            <span className="toggle-slider"></span>
-          </label>
-        </div>
         
         <div className="mb-2">
           <div className="flex justify-between items-center">
@@ -396,20 +347,7 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
           This analysis shows which parts of the flight path are visible from selected stations.
           Green sections are visible, red dashed sections are not visible from any station.
         </p>
-        
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-xs text-gray-600">Show Path Layer</span>
-          <label className="toggle-switch">
-            <input
-              type="checkbox"
-              checked={showVisibilityLayer}
-              onChange={toggleVisibilityLayerVisibility}
-              disabled={!hasVisibilityResults}
-            />
-            <span className="toggle-slider"></span>
-          </label>
-        </div>
-        
+
         {/* Marker selection for visibility analysis */}
         {markers.length > 0 ? (
           <div className="mb-3 border rounded p-2 bg-gray-50">

@@ -110,7 +110,7 @@ const ChecklistComponent: React.FC<ChecklistComponentProps> = ({
   className, 
   togglePanel 
 }) => {
-  const { checks, completeCheck: toggleCheck, actionToPanelMap } = useChecklistContext();
+  const { checks, completeCheck: toggleCheck, actionToPanelMap, setHighlightMarkers } = useChecklistContext();
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   // Early return for empty checklist to prevent unnecessary rendering
@@ -141,6 +141,13 @@ const ChecklistComponent: React.FC<ChecklistComponentProps> = ({
  * @param target - The target component and action from the checklist item.
  */
 const handleGuideMe = (target: { component: string; action: string }) => {
+    // Check if it's a marker-related action
+  if (['addObserver', 'addGCSorRepeater'].includes(target.action)) {
+    setHighlightMarkers(true);
+    // Auto-clear after 10 seconds
+    setTimeout(() => setHighlightMarkers(false), 10000);
+    return;
+  }
   const panel = actionToPanelMap[target.action];
   let section: 'flight' | 'station' | 'merged' | 'stationLOS' | null = null;
   if (panel === 'los') {

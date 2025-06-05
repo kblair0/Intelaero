@@ -20,11 +20,16 @@ import { useLOSAnalysis } from '../../context/LOSAnalysisContext';
 import { GridAnalysisRef } from '../Analyses/Services/GridAnalysis/GridAnalysisController';
 import { trackEventWithForm as trackEvent } from '../tracking/tracking';
 import PremiumButton from '../../components/UI/PremiumButton';
-import { Wifi, Radio, Eye, XCircle } from 'lucide-react'; // Using appropriate icons
+import { Wifi, Radio, Eye, XCircle } from 'lucide-react';
+import { useChecklistContext } from '../../context/ChecklistContext';
 
 const MarkerControls: React.FC = () => {
   const { map, terrainLoaded } = useMapContext();
   const { markerConfigs } = useLOSAnalysis();
+  const { highlightMarkers, setHighlightMarkers } = useChecklistContext();
+
+    // Clear highlight when any marker button is clicked
+  const clearHighlight = () => setHighlightMarkers(false);
   
   // Reference to the grid analysis controller
   const gridAnalysisRef = useRef<GridAnalysisRef | null>(null);
@@ -43,6 +48,7 @@ const MarkerControls: React.FC = () => {
 
   // Enhanced handlers to optionally trigger analysis
   const handleAddGroundStation = async () => {
+    clearHighlight();
     // Add marker and get location
     const location = await addGroundStation();
     
@@ -70,6 +76,8 @@ const MarkerControls: React.FC = () => {
       }
     }
   };
+  // Apply conditional class to all buttons:
+  const buttonClass = `map-button ${highlightMarkers ? 'pulse-highlight' : ''}`;
 
   const handleAddObserver = async () => {
     const location = await addObserver();
@@ -158,7 +166,7 @@ const MarkerControls: React.FC = () => {
         <PremiumButton 
           featureId="add_gcs"
           onClick={handleAddGroundStation} 
-          className="map-button ground-station-icon flex items-center justify-center"
+          className={`map-button ground-station-icon flex items-center justify-center ${highlightMarkers ? 'pulse-highlight' : ''}`}
           permissionParams={{ currentCount: gcsCount }}
           showIndicator={true}
         >
@@ -166,28 +174,28 @@ const MarkerControls: React.FC = () => {
           Add Ground Station
         </PremiumButton>
         
-        {/* Observer Button */}
-        <PremiumButton 
-          featureId="add_observer"
-          onClick={handleAddObserver}
-          className="map-button observer-icon flex items-center justify-center"
-          permissionParams={{ currentCount: observerCount }}
-          showIndicator={true}
-        >
-          <Eye size={16} className="mr-2" />
-          Add Observer
-        </PremiumButton>
-        
         {/* Repeater Button */}
         <PremiumButton 
           featureId="add_repeater"
           onClick={handleAddRepeater}
-          className="map-button repeater-icon flex items-center justify-center"
+          className={`map-button repeater-icon flex items-center justify-center ${highlightMarkers ? 'pulse-highlight' : ''}`}
           permissionParams={{ currentCount: repeaterCount }}
           showIndicator={true}
         >
           <Radio size={16} className="mr-2" />
           Add Repeater
+        </PremiumButton>
+     
+        {/* Observer Button */}
+        <PremiumButton 
+          featureId="add_observer"
+          onClick={handleAddObserver}
+          className={`map-button observer-icon flex items-center justify-center ${highlightMarkers ? 'pulse-highlight' : ''}`}
+          permissionParams={{ currentCount: observerCount }}
+          showIndicator={true}
+        >
+          <Eye size={16} className="mr-2" />
+          Add Observer
         </PremiumButton>
         
         {/* Clear Analysis Button - not premium restricted */}

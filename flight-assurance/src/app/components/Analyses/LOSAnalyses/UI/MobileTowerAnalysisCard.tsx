@@ -331,7 +331,7 @@ const MobileTowerAnalysisCard: React.FC<MobileTowerAnalysisCardProps> = () => {
                 <Loader className="w-4 h-4 mr-2 animate-spin" />
                 Loading...
               </span>
-            ) : "Show Mobile Towers"}
+            ) : "Toggle Mobile Towers"}
           </PremiumButton>
           
           <div className="mt-3 p-2 bg-blue-50 rounded-md border border-blue-100">

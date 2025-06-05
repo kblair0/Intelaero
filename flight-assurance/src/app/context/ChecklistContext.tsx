@@ -33,6 +33,8 @@ interface ChecklistContextProps {
   guidedTarget: { component: string; action: string } | null;
   setGuidedTarget: (target: { component: string; action: string } | null) => void;
   actionToPanelMap: Record<string, 'terrain' | 'los' | 'energy' | null>;
+  highlightMarkers: boolean;
+  setHighlightMarkers: (highlight: boolean) => void;
 }
 
 const ChecklistContext = createContext<ChecklistContextProps | undefined>(undefined);
@@ -133,7 +135,7 @@ const analysisToChecklistSteps: Record<string, ChecklistStep[]> = {
   mobileTowerCoverage: [
     {
       label: 'Show Mobile Tower Coverage',
-      action: 'Click the "Show Mobile Towers" button under Visibility Analysis Tools',
+      action: 'Click the "Toggle Mobile Towers" button under Visibility Analysis Tools',
       target: { component: 'VisibilityAnalysisDashboard', action: 'showMobileTowers' },
     },
   ],
@@ -180,6 +182,8 @@ const actionToPanelMap: Record<string, 'terrain' | 'los' | 'energy' | null> = {
 export const ChecklistProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [checks, setChecks] = useState<ChecklistItem[]>([]);
   const [guidedTarget, setGuidedTarget] = useState<{ component: string; action: string } | null>(null);
+  const [highlightMarkers, setHighlightMarkers] = useState(false);
+
 
   /**
    * Adds checklist items based on selected analyses
@@ -231,6 +235,8 @@ export const ChecklistProvider: React.FC<{ children: ReactNode }> = ({ children 
     guidedTarget,
     setGuidedTarget,
     actionToPanelMap,
+    highlightMarkers,
+    setHighlightMarkers,
   };
 
   return (

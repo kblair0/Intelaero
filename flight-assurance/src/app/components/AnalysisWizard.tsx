@@ -15,8 +15,6 @@ import { useAreaOfOpsContext } from "../context/AreaOfOpsContext";
 import { useChecklistContext } from "../context/ChecklistContext";
 import CompactDisclaimerWidget from "./CompactDisclaimerWidget";
 
-
-
 /**
  * Props for AnalysisWizard component
  */
@@ -203,19 +201,69 @@ const AnalysisButton: React.FC<AnalysisButtonProps> = ({
 }) => (
   <button
     onClick={onClick}
-    className={`px-3 py-2 rounded-lg transition-all flex items-center gap-3 w-full ${selected ? "bg-blue-50 border border-blue-300" : "border border-gray-200 hover:bg-gray-50"
-      }`}
+    className={`px-2 py-1.5 rounded-lg transition-all flex items-center gap-2 w-full ${
+      selected ? "bg-blue-50 border border-blue-300" : "border border-gray-200 hover:bg-gray-50"
+    }`}
     aria-label={`Toggle ${label}`}
   >
-    <div className={`flex-shrink-0 p-1.5 ${iconBg} rounded-full flex items-center justify-center`}>
-      {icon}
+    <div className={`flex-shrink-0 p-1 ${iconBg} rounded-full flex items-center justify-center`}>
+      {/* Clone the icon with smaller size */}
+      {React.cloneElement(icon as React.ReactElement, { className: "w-3.5 h-3.5" })}
     </div>
-    <span className="text-sm font-medium text-gray-700 flex-grow text-left">{label}</span>
+    <span className="text-xs font-medium text-gray-700 flex-grow text-left">{label}</span>
 
-    <div className="flex-shrink-0 flex items-center gap-2">
+    <div className="flex-shrink-0 flex items-center gap-1">
       <Tooltip content={description} />
-      {selected && <CheckCircle className="w-4 h-4 text-blue-600" />}
+      {selected && <CheckCircle className="w-3.5 h-3.5 text-blue-600" />}
     </div>
+  </button>
+);
+
+
+/**
+ * Button component for analysis presets
+ */
+interface PresetButtonProps {
+  presetKey: string;
+  preset: {
+    label: string;
+    icon: React.ReactNode;
+    iconBg: string;
+    description: string;
+    analyses: string[];
+  };
+  isSelected: boolean;
+  onClick: (presetKey: string) => void;
+}
+
+const PresetButton: React.FC<PresetButtonProps> = ({
+  presetKey,
+  preset,
+  isSelected,
+  onClick
+}) => (
+  <button
+    onClick={() => onClick(presetKey)}
+    className={`p-2 border rounded-lg transition-all flex flex-col items-center text-center ${
+      isSelected 
+        ? "border-blue-600 bg-blue-50 shadow-sm" 
+        : "border-gray-200 hover:bg-gray-50 hover:border-blue-200"
+    }`}
+    aria-label={`Select ${preset.label} preset`}
+  >
+    <div className={`p-1.5 ${preset.iconBg} rounded-full mb-1.5`}>
+      {preset.icon}
+    </div>
+    <h4 className="font-medium text-gray-800 text-xs mb-1">{preset.label}</h4>
+    <p className="text-xs text-gray-600 mb-1.5 leading-tight">{preset.description}</p>
+    <div className="text-xs text-gray-500">
+      {preset.analyses.length} analyses
+    </div>
+    {isSelected && (
+      <div className="mt-1">
+        <CheckCircle className="w-3.5 h-3.5 text-blue-600" />
+      </div>
+    )}
   </button>
 );
 
@@ -262,8 +310,9 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({
   const { aoGeometry, setAoGeometry, setBufferDistance: setContextBufferDistance } = useAreaOfOpsContext();
   const { addChecks } = useChecklistContext();
 
-
   const [showKmlUploader, setShowKmlUploader] = useState(false);
+
+  const [selectedPreset, setSelectedPreset] = useState<string | null>(null);
 
   /**
    * Toggles the analysis type selection
@@ -274,21 +323,12 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({
   }, [selectedAnalysisType]);
 
   /**
-   * Toggles the selection state of an analysis
-   */
-  const toggleAnalysis = useCallback((analysis: string) => {
-    setSelectedAnalyses((prev) =>
-      prev.includes(analysis) ? prev.filter((a) => a !== analysis) : [...prev, analysis]
-    );
-    trackEvent("wizard_analysis_toggled", { analysis });
-  }, []);
-
-  /**
    * Reset all selections and return to the first step
    */
   const resetWizard = useCallback(() => {
     setSelectedAnalysisType(null);
     setSelectedAnalyses([]);
+    setSelectedPreset(null); // Add this line
     setGridSize(30);
     setBufferDistance(500);
     setCommsAntennaHeight(2);
@@ -382,6 +422,7 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({
     }
   }, [currentStep]);
 
+
   /**
    * Check if the next button should be disabled
    */
@@ -390,6 +431,60 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({
     if (currentStep === WizardStep.SelectAnalyses) return selectedAnalyses.length === 0;
     return false;
   }, [currentStep, selectedAnalysisType, selectedAnalyses.length]);
+
+  /**
+   * Preset analysis configurations for common operation types
+   */
+  const analysisPresets = useMemo(() => ({
+    visual: {
+      label: "Visual (Local)",
+      icon: <Eye className="w-4 h-4 text-blue-600" />,
+      iconBg: "bg-blue-100",
+      description: "Visual Line of Sight operations - observer can see drone",
+      analyses: ["terrainProfile", "observerVsTerrain", "observerToDrone", "powerline", "airspace"]
+    },
+    evlos: {
+      label: "EVLOS",
+      icon: <Radio className="w-4 h-4 text-purple-600" />,
+      iconBg: "bg-purple-100", 
+      description: "Extended Visual Line of Sight - using observers or technology",
+      analyses: ["terrainProfile", "observerVsTerrain", "observerToDrone", "gcsRepeaterVsTerrain", "antennaToDrone", "antennaToAntenna", "powerline", "airspace"]
+    },
+    bvlos: {
+      label: "BVLOS",
+      icon: <Signal className="w-4 h-4 text-green-600" />,
+      iconBg: "bg-green-100",
+      description: "Beyond Visual Line of Sight - remote operations",
+      analyses: ["terrainProfile", "gcsRepeaterVsTerrain", "antennaToDrone", "droneToGround", "antennaToAntenna", "mobileTowerCoverage", "powerline", "airspace", "treeHeights"]
+    }
+  }), []);
+
+  /**
+   * Handles preset selection and auto-selects relevant analyses
+   */
+  const selectPreset = useCallback((presetKey: string) => {
+    const preset = analysisPresets[presetKey as keyof typeof analysisPresets];
+    if (preset) {
+      setSelectedPreset(presetKey);
+      setSelectedAnalyses(preset.analyses);
+      trackEvent("wizard_preset_selected", { preset: presetKey, analyses: preset.analyses });
+    }
+  }, [analysisPresets]);
+
+  /**
+   * Clears preset selection when individual analyses are manually changed
+   */
+  const toggleAnalysisWithPresetClear = useCallback((analysis: string) => {
+    // Clear preset if user manually toggles analyses
+    if (selectedPreset) {
+      setSelectedPreset(null);
+    }
+    
+    setSelectedAnalyses((prev) =>
+      prev.includes(analysis) ? prev.filter((a) => a !== analysis) : [...prev, analysis]
+    );
+    trackEvent("wizard_analysis_toggled", { analysis });
+  }, [selectedPreset]);
 
   /**
    * Get step title based on current step
@@ -529,32 +624,45 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({
    * Progress indicators for the wizard steps
    */
   const renderProgressIndicators = () => (
-    <div className="flex justify-around w-full mb-6">
-      {[WizardStep.AnalysisType, WizardStep.SelectAnalyses, WizardStep.ConfigureParameters, WizardStep.UploadData].map((step) => (
-        <div key={step} className="flex flex-col items-center">
-          <div
-            className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === step
-                ? "bg-blue-600 text-white"
-                : currentStep > step
-                  ? "bg-green-100 text-green-600 border border-green-600"
-                  : "bg-gray-100 text-gray-400"
+    <div className="flex items-center justify-center w-full mb-4">
+      {[WizardStep.AnalysisType, WizardStep.SelectAnalyses, WizardStep.ConfigureParameters, WizardStep.UploadData].map((step, index) => (
+        <React.Fragment key={step}>
+          {/* Step Circle */}
+          <div className="flex flex-col items-center">
+            <div
+              className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
+                currentStep === step
+                  ? "bg-blue-600 text-white"
+                  : currentStep > step
+                  ? "bg-green-500 text-white"
+                  : "bg-gray-200 text-gray-500"
               }`}
-          >
-            {currentStep > step ? (
-              <CheckCircle className="w-5 h-5" />
-            ) : (
-              <span>{step + 1}</span>
-            )}
-          </div>
-
-          <span className={`text-xs font-medium mt-2 text-center ${currentStep === step ? 'text-blue-600' : 'text-gray-500'
+            >
+              {currentStep > step ? (
+                <CheckCircle className="w-3.5 h-3.5" />
+              ) : (
+                <span>{step + 1}</span>
+              )}
+            </div>
+            
+            {/* Step Label */}
+            <span className={`text-xs font-medium mt-1 ${
+              currentStep === step ? 'text-blue-600' : 'text-gray-400'
             }`}>
-            {step === WizardStep.AnalysisType && "Type"}
-            {step === WizardStep.SelectAnalyses && "Analyses"}
-            {step === WizardStep.ConfigureParameters && "Parameters"}
-            {step === WizardStep.UploadData && "Upload"}
-          </span>
-        </div>
+              {step === WizardStep.AnalysisType && "Type"}
+              {step === WizardStep.SelectAnalyses && "Analyses"}
+              {step === WizardStep.ConfigureParameters && "Config"}
+              {step === WizardStep.UploadData && "Upload"}
+            </span>
+          </div>
+          
+          {/* Connector Line */}
+          {index < 3 && (
+            <div className={`flex-1 h-0.5 mx-2 ${
+              currentStep > step ? "bg-green-500" : "bg-gray-200"
+            }`} />
+          )}
+        </React.Fragment>
       ))}
     </div>
   );
@@ -634,9 +742,40 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({
       case WizardStep.SelectAnalyses:
         return (
           <div className="space-y-6">
+            {/* Quick Setup Presets Section */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-md font-medium text-gray-800">Quick Setup</h3>
+                <span className="text-xs text-gray-500">Choose a preset or select individual analyses below</span>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                {Object.entries(analysisPresets).map(([key, preset]) => (
+                  <PresetButton
+                    key={key}
+                    presetKey={key}
+                    preset={preset}
+                    isSelected={selectedPreset === key}
+                    onClick={selectPreset}
+                  />
+                ))}
+              </div>
+
+              {/* Separator */}
+              <div className="relative my-4">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-200" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-white px-2 text-gray-500">Or choose individual analyses</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Individual Analysis Selection */}
             <div>
               <h3 className="text-md font-medium text-gray-800 mb-3">Terrain Analysis</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                 {vsTerrainButtons.map((button) => (
                   <AnalysisButton
                     key={button.id}
@@ -646,7 +785,7 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({
                     iconBg={button.iconBg}
                     description={button.description}
                     selected={selectedAnalyses.includes(button.id)}
-                    onClick={() => toggleAnalysis(button.id)}
+                    onClick={() => toggleAnalysisWithPresetClear(button.id)}
                   />
                 ))}
               </div>
@@ -654,7 +793,7 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({
 
             <div>
               <h3 className="text-md font-medium text-gray-800 mb-3">Visibility Analysis</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                 {visibilityButtons.map((button) => (
                   <AnalysisButton
                     key={button.id}
@@ -664,17 +803,11 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({
                     iconBg={button.iconBg}
                     description={button.description}
                     selected={selectedAnalyses.includes(button.id)}
-                    onClick={() => toggleAnalysis(button.id)}
+                    onClick={() => toggleAnalysisWithPresetClear(button.id)}
                   />
                 ))}
               </div>
             </div>
-
-            {selectedAnalyses.length === 0 && (
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-md">
-                <p className="text-sm text-amber-700">Please select at least one analysis type to continue</p>
-              </div>
-            )}
           </div>
         );
 
@@ -866,9 +999,9 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({
   };
 
   return (
-    <div className="h-full w-full flex flex-col">
+    <div className="h-full max-h-[90vh] w-full flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="p-4 border-b border-gray-200 flex justify-between bg-white rounded-t-lg">
+      <div className="p-4 border-b border-gray-200 flex justify-between bg-white rounded-t-lg flex-shrink-0">
         <h2 className="text-lg font-semibold text-gray-800">{getStepTitle}</h2>
         <button
           onClick={onClose}
@@ -880,18 +1013,27 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({
       </div>
 
       {/* Main content area with progress indicators and step content */}
-      <div className="p-6 overflow-y-auto flex-grow">
-        {/* Progress indicators */}
-        {renderProgressIndicators()}
+      <div className="flex-grow overflow-y-auto min-h-0">
+        <div className="p-4">
+          {/* Progress indicators */}
+          {renderProgressIndicators()}
 
-        {/* Step content */}
-        {renderStepContent()}
+          {/* Step content */}
+          {renderStepContent()}
+        </div>
       </div>
 
       {/* Footer with action buttons and disclaimer */}
-      <div className="border-t border-gray-200 bg-white rounded-b-lg max-h-60 overflow-y-auto">
-        <div className="p-4 space-y-3">
-        {/* Navigation buttons */}
+      <div className="border-t border-gray-200 bg-white rounded-b-lg flex-shrink-0">
+        <div className="p-3 space-y-3">
+          {/* Warning message for SelectAnalyses step */}
+          {currentStep === WizardStep.SelectAnalyses && selectedAnalyses.length === 0 && (
+            <div className="px-3 py-2 bg-amber-50 border border-amber-200 rounded-md">
+              <p className="text-xs text-amber-700">Please select a preset or individual analyses to continue</p>
+            </div>
+          )}
+          
+          {/* Navigation buttons */}
           <div className="flex justify-between items-center">
             <button
               onClick={resetWizard}
