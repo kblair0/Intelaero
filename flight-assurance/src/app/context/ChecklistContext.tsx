@@ -113,18 +113,6 @@ const analysisToChecklistSteps: Record<string, ChecklistStep[]> = {
       target: { component: 'AnalysisDashboard', action: 'antennaToDrone' },
     },
   ],
-  droneToGround: [
-    {
-      label: 'Upload Flight Plan',
-      action: 'Click the "Upload Flight Plan" button and select a file',
-      target: { component: 'LayerControls', action: 'uploadFlightPlan' },
-    },
-    {
-      label: 'Run Drone to Ground Analysis',
-      action: 'Click the "Merged Analysis" section and run the analysis',
-      target: { component: 'AnalysisDashboard', action: 'droneToGround' },
-    },
-  ],
   treeHeights: [
     {
       label: 'Show Tree Heights',
@@ -169,7 +157,6 @@ const actionToPanelMap: Record<string, 'terrain' | 'los' | 'energy' | null> = {
   toggleAirspace: 'terrain',
   observerToDrone: 'los',
   antennaToDrone: 'los',
-  droneToGround: 'los',
   antennaToAntenna: 'los',
   toggleTreeHeights: 'terrain',
   showMobileTowers: 'los',

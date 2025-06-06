@@ -184,11 +184,11 @@ const HomeContent = () => {
   return (
     <div className="min-h-screen flex flex-col bg-white overflow-x-hidden">
       {/* Main Content Area */}
-      <div className="flex-1 w-full h-full mx-2">
+      <div className="flex-1 w-full h-full">
         <div className="flex flex-row h-full relative">
           {/* Map Section */}
           <div className="flex-grow relative h-full">
-            <div className="relative h-full rounded-r-xl overflow-hidden">
+            <div className="relative h-full rounded-r-lg overflow-hidden">
               <Map
                 activePanel={activePanel}
                 togglePanel={togglePanel}

@@ -208,7 +208,9 @@ const AnalysisButton: React.FC<AnalysisButtonProps> = ({
   >
     <div className={`flex-shrink-0 p-1 ${iconBg} rounded-full flex items-center justify-center`}>
       {/* Clone the icon with smaller size */}
-      {React.cloneElement(icon as React.ReactElement, { className: "w-3.5 h-3.5" })}
+      {React.cloneElement(icon as React.ReactElement, { 
+        className: `w-3.5 h-3.5 ${(icon as React.ReactElement).props.className?.split(' ').filter((c: string) => c.startsWith('text-')).join(' ') || ''}` 
+      })}
     </div>
     <span className="text-xs font-medium text-gray-700 flex-grow text-left">{label}</span>
 
@@ -455,7 +457,7 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({
       icon: <Signal className="w-4 h-4 text-green-600" />,
       iconBg: "bg-green-100",
       description: "Beyond Visual Line of Sight - remote operations",
-      analyses: ["terrainProfile", "gcsRepeaterVsTerrain", "antennaToDrone", "droneToGround", "antennaToAntenna", "mobileTowerCoverage", "powerline", "airspace", "treeHeights"]
+      analyses: ["terrainProfile", "gcsRepeaterVsTerrain", "antennaToDrone", "antennaToAntenna", "mobileTowerCoverage", "powerline", "airspace", "treeHeights"]
     }
   }), []);
 
@@ -571,13 +573,6 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({
       icon: <Radio className="w-4 h-4 text-purple-600" />,
       iconBg: "bg-purple-100",
       description: "Calculates radio frequency line of sight between control antennas and the drone, showing areas where signal may be compromised by terrain."
-    },
-    {
-      id: "droneToGround",
-      label: "Drone to Ground",
-      icon: <DroneIcon />,
-      iconBg: "bg-orange-100",
-      description: "Analyses what areas of the ground will be visible from the drone's perspective at the flight planned altitudes, important for survey and monitoring missions."
     },
     {
       id: "antennaToAntenna",

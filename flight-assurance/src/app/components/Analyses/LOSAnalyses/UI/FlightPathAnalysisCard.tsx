@@ -298,7 +298,7 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
         </PremiumButton>      
       </div>
 
-      {/* Grid Analysis Section */}
+      {/* Grid Analysis Section Commented out for now - I don't think it's very useful.
         <div className="border-t border-gray-200 pt-3 mb-3">
           <div className="mb-3">
         <h3 className="font-medium text-sm mb-2">Terrain Visibility Analysis</h3>
@@ -390,32 +390,12 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
             ? `Analysing... ${progress.toFixed(0)}%`
             : isAnalyzing 
               ? "Analysing..."
-              : "Run Grid Analysis"
+              : "Run Analysis"
           }
         </PremiumButton>
       </div>
+      */}
 
-      
-      {/* Analysis in Progress */}
-      {isAnalyzing && (
-        <div className="mt-2 mb-2">
-          <div className="w-full bg-gray-200 rounded-full h-2.5">
-            <div 
-              className="bg-blue-600 h-2.5 rounded-full" 
-              style={{ width: `${Math.min(100, Math.max(5, progress))}%` }}
-            ></div>
-          </div>
-          <div className="flex justify-between mt-1">
-            <span className="text-xs text-gray-600">{progress.toFixed(0)}% Complete</span>
-            <button
-              onClick={handleAbortAnalysis}
-              className="text-xs text-red-600 hover:underline"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Grid Analysis Results */}
       {results && results.stats && (
