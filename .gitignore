@@ -45,3 +45,4 @@ tsconfig.tsbuildinfo
 !.eslintrc.json
 !package.json
 !tsconfig.json
+emsdk/
