@@ -1,1 +1,118 @@
-{}
+{
+  "app/components/Analyses/ObstacleAnalysis/ObstacleChart.tsx -> chart.js": {
+    "id": "app/components/Analyses/ObstacleAnalysis/ObstacleChart.tsx -> chart.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_chart_js_dist_chart_js.js"
+    ]
+  },
+  "app/components/Analyses/ObstacleAnalysis/ObstacleChart.tsx -> chartjs-plugin-zoom": {
+    "id": "app/components/Analyses/ObstacleAnalysis/ObstacleChart.tsx -> chartjs-plugin-zoom",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_chartjs-plugin-zoom_dist_chartjs-plugin-zoom_esm_js.js"
+    ]
+  },
+  "app/components/Analyses/ObstacleAnalysis/ObstacleChart.tsx -> react-chartjs-2": {
+    "id": "app/components/Analyses/ObstacleAnalysis/ObstacleChart.tsx -> react-chartjs-2",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_react-chartjs-2_dist_index_js.js"
+    ]
+  },
+  "app/components/Analyses/Services/GridAnalysis/GridAnalysisController.tsx -> ../../LOSAnalyses/Utils/FlightPathVisibilityEngine": {
+    "id": "app/components/Analyses/Services/GridAnalysis/GridAnalysisController.tsx -> ../../LOSAnalyses/Utils/FlightPathVisibilityEngine",
+    "files": [
+      "static/chunks/_app-pages-browser_src_app_components_Analyses_LOSAnalyses_Utils_FlightPathVisibilityEngine_ts.js"
+    ]
+  },
+  "app/components/Map/MapboxLayerHandler.tsx -> mapbox-gl": {
+    "id": "app/components/Map/MapboxLayerHandler.tsx -> mapbox-gl",
+    "files": []
+  },
+  "app/components/VerificationToolbar/ToolsDashboard.tsx -> ../Map/DBYDLayerHandler": {
+    "id": "app/components/VerificationToolbar/ToolsDashboard.tsx -> ../Map/DBYDLayerHandler",
+    "files": []
+  },
+  "app/page.tsx -> ./components/AO/AreaOpsUploader": {
+    "id": "app/page.tsx -> ./components/AO/AreaOpsUploader",
+    "files": [
+      "static/chunks/_app-pages-browser_src_app_components_AO_AreaOpsUploader_tsx.js"
+    ]
+  },
+  "app/page.tsx -> ./components/AO/MapSelectionPanel": {
+    "id": "app/page.tsx -> ./components/AO/MapSelectionPanel",
+    "files": [
+      "static/chunks/_app-pages-browser_src_app_components_AO_MapSelectionPanel_tsx.js"
+    ]
+  },
+  "app/page.tsx -> ./components/Analyses/LOSAnalyses/UI/VisibilityAnalysisDashboard": {
+    "id": "app/page.tsx -> ./components/Analyses/LOSAnalyses/UI/VisibilityAnalysisDashboard",
+    "files": [
+      "static/chunks/_app-pages-browser_src_app_components_Analyses_LOSAnalyses_UI_VisibilityAnalysisDashboard_tsx.js"
+    ]
+  },
+  "app/page.tsx -> ./components/Analyses/ObstacleAnalysis/TerrainAnalysisDashboard": {
+    "id": "app/page.tsx -> ./components/Analyses/ObstacleAnalysis/TerrainAnalysisDashboard",
+    "files": [
+      "static/chunks/_app-pages-browser_src_app_components_Analyses_ObstacleAnalysis_TerrainAnalysisDashboard_tsx.js"
+    ]
+  },
+  "app/page.tsx -> ./components/AnalysisWizard": {
+    "id": "app/page.tsx -> ./components/AnalysisWizard",
+    "files": [
+      "static/chunks/_app-pages-browser_src_app_components_AnalysisWizard_tsx.js"
+    ]
+  },
+  "app/page.tsx -> ./components/Calculator": {
+    "id": "app/page.tsx -> ./components/Calculator",
+    "files": [
+      "static/chunks/_app-pages-browser_src_app_components_Calculator_tsx.js"
+    ]
+  },
+  "app/page.tsx -> ./components/ChecklistComponent": {
+    "id": "app/page.tsx -> ./components/ChecklistComponent",
+    "files": [
+      "static/chunks/_app-pages-browser_src_app_components_ChecklistComponent_tsx.js"
+    ]
+  },
+  "app/page.tsx -> ./components/CompactDisclaimerWidget": {
+    "id": "app/page.tsx -> ./components/CompactDisclaimerWidget",
+    "files": [
+      "static/chunks/_app-pages-browser_src_app_components_CompactDisclaimerWidget_tsx.js"
+    ]
+  },
+  "app/page.tsx -> ./components/FlightPlanUploader": {
+    "id": "app/page.tsx -> ./components/FlightPlanUploader",
+    "files": [
+      "static/chunks/_app-pages-browser_src_app_components_FlightPlanUploader_tsx.js"
+    ]
+  },
+  "app/page.tsx -> ./components/UI/MarkerLocationsModal": {
+    "id": "app/page.tsx -> ./components/UI/MarkerLocationsModal",
+    "files": [
+      "static/chunks/_app-pages-browser_src_app_components_UI_MarkerLocationsModal_tsx.js"
+    ]
+  },
+  "app/page.tsx -> ./components/UI/UpgradeModal": {
+    "id": "app/page.tsx -> ./components/UI/UpgradeModal",
+    "files": [
+      "static/chunks/_app-pages-browser_src_app_components_UI_UpgradeModal_tsx.js"
+    ]
+  },
+  "app/page.tsx -> ./components/VerificationToolbar/ToolsDashboard": {
+    "id": "app/page.tsx -> ./components/VerificationToolbar/ToolsDashboard",
+    "files": [
+      "static/chunks/_app-pages-browser_src_app_components_VerificationToolbar_ToolsDashboard_tsx.js"
+    ]
+  },
+  "app/page.tsx -> ./components/WelcomeMessage": {
+    "id": "app/page.tsx -> ./components/WelcomeMessage",
+    "files": [
+      "static/chunks/_app-pages-browser_src_app_components_WelcomeMessage_tsx.js"
+    ]
+  },
+  "app/services/BYDAService.ts -> @turf/turf": {
+    "id": "app/services/BYDAService.ts -> @turf/turf",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_turf_turf_dist_esm_index_js.js"
+    ]
+  }
+}
