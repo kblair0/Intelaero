@@ -307,7 +307,7 @@ function PaymentSuccessContent() {
         <div className="mt-6 text-center">
           <p className="text-sm text-gray-600">
             Need help? Contact our {' '}
-            <a href="mailto:support@domain.com" className="text-blue-600 hover:underline">
+            <a href="mailto:support@intel.aero" className="text-blue-600 hover:underline">
               support team
             </a>
           </p>

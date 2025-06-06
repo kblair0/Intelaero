@@ -200,19 +200,21 @@ const Map: FC<MapProps> = ({ activePanel, togglePanel, flightPlan, setShowUpload
         </>
       )}
       <MarkerControls />
-      <LayerControls
-        onToggleDBYD={() => {
-          if (DBYDLayerHandlerRef.current) {
-            trackEvent('dbyd_powerlines_requested', {});
-            DBYDLayerHandlerRef.current.fetchLayers();
-          }
-        }}
-        activePanel={activePanel}
-        togglePanel={togglePanel}
-        flightPlan={flightPlan}
-        setShowUploader={setShowUploader}
-      />
-      <MeasurementControls />
+      <div className="absolute top-4 left-4 z-10 flex flex-col gap-4">
+        <LayerControls
+          onToggleDBYD={() => {
+            if (DBYDLayerHandlerRef.current) {
+              trackEvent('dbyd_powerlines_requested', {});
+              DBYDLayerHandlerRef.current.fetchLayers();
+            }
+          }}
+          activePanel={activePanel}
+          togglePanel={togglePanel}
+          flightPlan={flightPlan}
+          setShowUploader={setShowUploader}
+        />
+        <MeasurementControls />
+      </div>
       <MapLegend />
       <AnalysisStatus 
         onStopLOS={() => {

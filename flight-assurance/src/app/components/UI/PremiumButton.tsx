@@ -7,9 +7,8 @@
  * 
  * If the user doesn't have access, it triggers the upgrade flow instead of performing the action.
  * This component maintains the original button styling and behavior for seamless integration.
- * 
-
  */
+
 /**
  * PremiumButton.tsx - Enhanced with subtle premium indicators
  */
@@ -36,7 +35,7 @@ const PremiumButton: React.FC<PremiumButtonProps> = ({
   disabled,
   className,
   showIndicator = true,
-  indicatorPosition = 'left',
+  indicatorPosition = 'right',
   ...props
 }) => {
   const { canUseFeature, requestUpgrade, getRequiredTierForFeature, tierLevel } = usePremium();

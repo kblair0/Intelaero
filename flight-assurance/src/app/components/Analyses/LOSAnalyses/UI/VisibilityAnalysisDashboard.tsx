@@ -85,7 +85,7 @@ const ViewAllLocationsButton: React.FC = () => {
         aria-label="View all marker locations"
       >
         <MapPin className="w-4 h-4" />
-        View All Marker Locations ({markers.length})
+        View All Marker Coordinates ({markers.length})
       </button>
     </div>
   );

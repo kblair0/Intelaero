@@ -21,7 +21,7 @@ const MeasurementControls: React.FC = () => {
   };
 
   return (
-    <div className="absolute bottom-4 left-4 z-10 flex flex-col space-y-2">
+    <div className="flex flex-col space-y-2">
       <div className="flex space-x-2">
         <button
           onClick={handleToggleMeasurement}

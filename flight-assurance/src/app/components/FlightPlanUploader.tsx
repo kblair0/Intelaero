@@ -631,24 +631,35 @@ const [status, setStatus] = useState<"idle" | "uploading" | "processed" | "error
     }
   });
 
-  const loadExample = useCallback(async () => {
+  const loadExample = useCallback(async (filePath: string) => {
     setStatus("uploading");
     setProgress(0);
     setCurrentStage("Loading example...");
-    
+
     try {
       setProgress(10);
-      const res = await fetch("/example.geojson");
-      const data = await res.json();
-      
-      setProgress(30);
-      setCurrentStage("Processing data...");
-      const raw = parseGeoJSONFile(JSON.stringify(data));
-      
+      const res = await fetch(filePath);
+      const ext = filePath.split('.').pop()?.toLowerCase();
+      let raw;
+
+      if (ext === 'geojson') {
+        const data = await res.json();
+        setProgress(30);
+        setCurrentStage("Processing data...");
+        raw = parseGeoJSONFile(JSON.stringify(data));
+      } else if (ext === 'waypoints') {
+        const text = await res.text();
+        setProgress(30);
+        setCurrentStage("Processing data...");
+        raw = parseQGCFile(text);
+      } else {
+        throw new Error('Unsupported example file type');
+      }
+
       setCurrentStage("Analyzing terrain...");
       await processAndStore(
         { ...raw, properties: { ...raw.properties, processed: false } },
-        "example.geojson"
+        filePath.split('/').pop() || "example.geojson"
       );
     } catch (error) {
       console.error("Example loading error:", error);
@@ -764,18 +775,29 @@ const [status, setStatus] = useState<"idle" | "uploading" | "processed" | "error
           )}
         </div>
   
-        {/* Better action buttons */}
-        <div className="mt-5 flex justify-center">
+        {/* Action buttons */}
+        <div className="mt-5 flex justify-center gap-4">
           <button
             onClick={() => {
               trackEvent("example_geojson_click", { panel: "flightplanuploader.tsx" });
-              loadExample();
+              loadExample("/example.geojson");
             }}
             className="flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-md shadow-sm hover:bg-blue-700 transition-all hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-blue-300"
             disabled={status === "uploading"}
           >
             <FileText className="w-5 h-5" />
-            <span>Load Example Flight Plan</span>
+            <span>Load Example 1 (GeoJSON)</span>
+          </button>
+          <button
+            onClick={() => {
+              trackEvent("example_waypoints_click", { panel: "flightplanuploader.tsx" });
+              loadExample("/example2.waypoints");
+            }}
+            className="flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-md shadow-sm hover:bg-blue-700 transition-all hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-blue-300"
+            disabled={status === "uploading"}
+          >
+            <FileText className="w-5 h-5" />
+            <span>Load Example 2 (Waypoints)</span>
           </button>
         </div>
       </MapLoadingGuard>

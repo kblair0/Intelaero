@@ -243,12 +243,67 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
 
   return (
     <div className="p-3 bg-white rounded shadow mb-4">
-      <div className="mb-3">
-        <h3 className="font-medium text-sm mb-2">Terrain Visibility Analysis</h3>
+
+      {/* Flight Path Visibility Section */}
+      
+        <h4 className="text-sm font-medium mb-2">Flight Path to Observer/Comms Visibilty</h4>
+       <div className="border-t border-gray-200 pt-3 mb-3">
+         <p className="text-xs mb-3">
+          This analysis shows which parts of the flight path are visible from selected stations.
+          Green sections are visible, red dashed sections are not visible from any station.
+        </p>
+
+        {/* Marker selection for visibility analysis */}
+        {markers.length > 0 ? (
+          <div className="mb-3 border rounded p-2 bg-gray-50">
+            <p className="text-xs font-medium mb-1">Select stations to include in analysis:</p>
+            {markers.map((marker) => (
+              <div key={marker.id} className="flex items-center mb-1">
+                <input
+                  type="checkbox"
+                  id={`vis-marker-${marker.id}`}
+                  checked={selectedMarkerIds.includes(marker.id)}
+                  onChange={(e) => handleMarkerSelectionChange(marker.id, e.target.checked)}
+                  className="mr-2"
+                  disabled={isAnalyzing}
+                />
+                <label htmlFor={`vis-marker-${marker.id}`} className="text-xs">
+                  {getMarkerDisplayName(marker)}
+                </label>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mb-3 text-xs text-amber-600">
+            Place at least one station (GCS, Observer, or Repeater) on the map to perform this analysis.
+          </div>
+        )}
+
+        <PremiumButton
+          featureId="flight_path_analysis" // Using the same feature ID since it's part of the same analysis
+          onClick={handleRunVisibilityAnalysis}
+          disabled={isAnalyzing || selectedMarkers.length === 0}
+          className={`w-full py-1 rounded ${
+            isAnalyzing || selectedMarkers.length === 0 
+              ? "bg-gray-300 text-sm cursor-not-allowed" 
+              : "bg-green-500 hover:bg-green-600 text-sm text-white"
+          }`}
+        >
+          {isAnalyzing && progress > 0 && progress < 100
+            ? `Analysing... ${progress.toFixed(0)}%`
+            : isAnalyzing 
+              ? "Analysing..."
+              : "Run Path Visibility Analysis"
+          }
+        </PremiumButton>      
       </div>
 
       {/* Grid Analysis Section */}
-      <div className="border-t border-gray-200 pt-3 mb-3">
+        <div className="border-t border-gray-200 pt-3 mb-3">
+          <div className="mb-3">
+        <h3 className="font-medium text-sm mb-2">Terrain Visibility Analysis</h3>
+      </div>
+      
         <p className="text-xs mb-2">This analysis shows which ground areas with the analysis range are visible from the flight path.</p>
         
         <div className="mb-2">
@@ -340,58 +395,6 @@ const FlightPathAnalysisCard: React.FC<FlightPathAnalysisCardProps> = ({ gridAna
         </PremiumButton>
       </div>
 
-      {/* Flight Path Visibility Section */}
-      <div className="border-t border-gray-200 pt-3 mb-3">
-        <h4 className="text-sm font-medium mb-2">Flight Path to Observer/Comms Visibilty</h4>
-        <p className="text-xs mb-3">
-          This analysis shows which parts of the flight path are visible from selected stations.
-          Green sections are visible, red dashed sections are not visible from any station.
-        </p>
-
-        {/* Marker selection for visibility analysis */}
-        {markers.length > 0 ? (
-          <div className="mb-3 border rounded p-2 bg-gray-50">
-            <p className="text-xs font-medium mb-1">Select stations to include in analysis:</p>
-            {markers.map((marker) => (
-              <div key={marker.id} className="flex items-center mb-1">
-                <input
-                  type="checkbox"
-                  id={`vis-marker-${marker.id}`}
-                  checked={selectedMarkerIds.includes(marker.id)}
-                  onChange={(e) => handleMarkerSelectionChange(marker.id, e.target.checked)}
-                  className="mr-2"
-                  disabled={isAnalyzing}
-                />
-                <label htmlFor={`vis-marker-${marker.id}`} className="text-xs">
-                  {getMarkerDisplayName(marker)}
-                </label>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="mb-3 text-xs text-amber-600">
-            Place at least one station (GCS, Observer, or Repeater) on the map to perform this analysis.
-          </div>
-        )}
-
-        <PremiumButton
-          featureId="flight_path_analysis" // Using the same feature ID since it's part of the same analysis
-          onClick={handleRunVisibilityAnalysis}
-          disabled={isAnalyzing || selectedMarkers.length === 0}
-          className={`w-full py-1 rounded ${
-            isAnalyzing || selectedMarkers.length === 0 
-              ? "bg-gray-300 text-sm cursor-not-allowed" 
-              : "bg-green-500 hover:bg-green-600 text-sm text-white"
-          }`}
-        >
-          {isAnalyzing && progress > 0 && progress < 100
-            ? `Analysing... ${progress.toFixed(0)}%`
-            : isAnalyzing 
-              ? "Analysing..."
-              : "Run Path Visibility Analysis"
-          }
-        </PremiumButton>      
-      </div>
       
       {/* Analysis in Progress */}
       {isAnalyzing && (

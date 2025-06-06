@@ -52,6 +52,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Extract validityDays from product metadata
+    const validityDays = product.metadata?.validityDays || '365';
+
     // Fetch active prices for the product
     console.log('Fetching prices for product:', productId);
     const prices = await stripe.prices.list({
@@ -73,7 +76,7 @@ export async function POST(request: NextRequest) {
 
     // Map productId to tierLevel - FIXED VERSION
     console.log('Available TierLevel values:', { FREE: TierLevel.FREE, COMMUNITY: TierLevel.COMMUNITY, COMMERCIAL: TierLevel.COMMERCIAL });
-    
+
 
     // Define valid product IDs for each tier
     const COMMUNITY_PRODUCT_IDS = [
@@ -123,6 +126,7 @@ export async function POST(request: NextRequest) {
         // Make sure tierLevel is never undefined before calling toString()
         tierLevel: String(tierLevel),
         featureId: featureId || '',
+        validityDays: validityDays, // Use extracted validityDays
       },
     });
 

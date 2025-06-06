@@ -208,7 +208,7 @@ const HomeContent = () => {
               )}
               {/* Wizard Overlay */}
               {(!showUploader && !showAreaOpsUploader && showWizard && !flightPlan && !aoGeometry) && (
-                <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20 p-4">
+                <div className="absolute inset-0 bg-black/50 flex items-start justify-center z-20 p-4 overflow-y-auto">
                   <div className="bg-white p-2 rounded-lg shadow-lg w-full max-w-3xl">
                     <div className="flex items-center mx-4 mt-4 gap-2">
                         <Image

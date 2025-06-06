@@ -79,133 +79,85 @@ const LayerControls: React.FC<LayerControlsProps> = ({
     return 'terrain_analysis';
   };
 
-  return (
-    <div className="absolute top-4 left-4 right-4 z-10 flex gap-4">
-      {/* Map Layer Controls */}
-      <div className="flex flex-col space-y-2">
-        {/* HV Powerlines - Available in all tiers */}
+return (
+  <div className="flex flex-col gap-2 w-fit rounded-md shadow-md">
+    {/* Map Layer Controls */}
+    <PremiumButton
+      featureId="hv_powerlines"
+      onClick={() => {
+        trackEvent('powerlines_add_overlay_click', { panel: 'layer-controls' });
+        toggleLayer(MAP_LAYERS.POWERLINES);
+        toggleLayer(MAP_LAYERS.POWERLINES_HITBOX);
+      }}
+      className="map-button bg-gray-100 hover:bg-gray-200 flex items-center justify-start"
+      showIndicator={false}
+    >
+      Toggle HV Powerlines ⚡️
+    </PremiumButton>
+
+    <PremiumButton
+      featureId="airspace_analysis"
+      onClick={() => {
+        trackEvent('airspace_add_overlay_click', { panel: 'layer-controls' });
+        toggleLayer(MAP_LAYERS.AIRFIELDS);
+        toggleLayer(MAP_LAYERS.AIRFIELDS_LABELS);
+      }}
+      className="map-button bg-gray-100 hover:bg-gray-200 flex items-center justify-start"
+      showIndicator={false}
+    >
+      Toggle Aerodrome Overlay ✈️
+    </PremiumButton>
+
+    <PremiumButton
+      featureId="local_powerlines"
+      onClick={handleDBYDPowerlines}
+      className="map-button bg-gray-100 hover:bg-gray-200 flex items-center justify-start"
+    >
+      Toggle Local Powerlines 🏡
+    </PremiumButton>
+
+    <PremiumButton
+      featureId={getTerrainFeatureId()}
+      onClick={handleToggleTerrainGrid}
+      className="map-button bg-gray-100 hover:bg-gray-200 flex items-center justify-start"
+      permissionParams={{ 
+        gridResolution: gridResolution,
+        gridRange: gridRange
+      }}
+    >
+      {isTerrainGridVisible ? 'Hide' : 'Show'} AO Terrain Grid 🌍
+    </PremiumButton>
+
+    {/* Analysis Controls */}
+    {togglePanel && setShowUploader && (
+      <>
+        {flightPlan && (
+          <PremiumButton
+            featureId="flight_path_analysis"
+            onClick={() => {
+              trackEvent('upload_flight_plan_click', { panel: 'layer-controls' });
+              setShowUploader(true);
+            }}
+            className="map-button bg-gray-100 hover:bg-gray-200 flex items-center justify-start gap-2"
+          >
+            Upload Flight Plan
+          </PremiumButton>
+        )}
+
         <PremiumButton
-          featureId="hv_powerlines"
+          featureId="merged_analysis"
           onClick={() => {
-            trackEvent('powerlines_add_overlay_click', { panel: 'layer-controls' });
-            toggleLayer(MAP_LAYERS.POWERLINES);
-            toggleLayer(MAP_LAYERS.POWERLINES_HITBOX);
+            trackEvent('own_dem_data_request', { panel: 'layer-controls' });
+            window.alert('Coming Soon!');
           }}
-          className="map-button"
-          // No premium indicator needed since available to all
-          showIndicator={false}
+          className="map-button bg-gray-100 hover:bg-gray-200 flex items-center justify-start gap-2"
         >
-          Toggle HV Powerlines ⚡️
+          Add Your Own DEM Data
         </PremiumButton>
-
-        {/* Airfields - Free feature */}
-        <PremiumButton
-          featureId="airspace_analysis"
-          onClick={() => {
-            trackEvent('airspace_add_overlay_click', { panel: 'layer-controls' });
-            toggleLayer(MAP_LAYERS.AIRFIELDS);
-            toggleLayer(MAP_LAYERS.AIRFIELDS_LABELS);
-          }}
-          className="map-button"
-          showIndicator={false}
-        >
-          Toggle Aerodrome Overlay ✈️
-        </PremiumButton>
-
-        {/* Local Powerlines - Commercial tier only */}
-        <PremiumButton
-          featureId="local_powerlines"
-          onClick={handleDBYDPowerlines}
-          className="map-button"
-          // Show premium indicator with default settings
-        >
-          Toggle Local Powerlines 🏡
-        </PremiumButton>
-
-
-        {/* Terrain Grid - Feature ID depends on grid parameters */}
-        <PremiumButton
-          featureId={getTerrainFeatureId()}
-          onClick={handleToggleTerrainGrid}
-          className="map-button"
-          permissionParams={{ 
-            gridResolution: gridResolution,
-            gridRange: gridRange
-          }}
-        >
-          {isTerrainGridVisible ? 'Hide' : 'Show'} AO Terrain Grid 🌍
-        </PremiumButton>
-      </div>
-  
-      {/* Analysis Controls: Now in a row */}
-      {togglePanel && setShowUploader && (
-        <div className="flex flex-row gap-2 items-start">
-          {/* Terrain Analysis Panel */}
-          <PremiumButton
-            featureId="terrain_analysis"
-            onClick={() => {
-              trackEvent('map_terrain_panel_click', { panel: 'layer-controls' });
-              togglePanel('terrain');
-            }}
-            className={`map-button flex items-center gap-2 transition-colors ${
-              activePanel === 'terrain'
-                ? 'bg-blue-100 border-blue-300 shadow-md'
-                : 'hover:bg-gray-300/80'
-            }`}
-            showIndicator={false}
-          >
-            <Mountain className="w-4 h-4" />
-            Terrain Analysis Tools
-          </PremiumButton>
-
-          {/* LOS Analysis Panel */}
-          <PremiumButton
-            featureId="station_los_analysis"
-            onClick={() => {
-              trackEvent('map_los_panel_click', { panel: 'layer-controls' });
-              togglePanel('los');
-            }}
-            className={`map-button flex items-center gap-2 transition-colors ${
-              activePanel === 'los'
-                ? 'bg-blue-100 border-blue-300 shadow-md'
-                : 'hover:bg-gray-300/80'
-            }`}
-            showIndicator={false}
-          >
-            <Radio className="w-4 h-4" />
-            Visibility Analysis Tools
-          </PremiumButton>
-
-          {/* Flight Plan Upload - Premium feature */}
-          {flightPlan && (
-            <PremiumButton
-              featureId="flight_path_analysis"
-              onClick={() => {
-                trackEvent('upload_flight_plan_click', { panel: 'layer-controls' });
-                setShowUploader(true);
-              }}
-              className="map-button flex items-center gap-2 transition-colors hover:bg-gray-300/80"
-            >
-              Upload Flight Plan
-            </PremiumButton>
-          )}
-
-          {/* DEM Data Upload - Premium feature */}
-          <PremiumButton
-            featureId="merged_analysis" // Using the most advanced feature for this premium content
-            onClick={() => {
-              trackEvent('own_dem_data_request', { panel: 'layer-controls' });
-              window.alert('Coming Soon!');
-            }}
-            className="map-button flex items-center gap-2 transition-colors hover:bg-gray-300/80"
-          >
-            <GripVertical className="w-4 h-4" />
-            Add Your Own DEM Data
-          </PremiumButton>
-        </div>
-      )}
-    </div>
-  );
+      </>
+    )}
+  </div>
+);
 };
 
 export default LayerControls;

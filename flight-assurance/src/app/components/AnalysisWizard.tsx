@@ -999,7 +999,7 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({
   };
 
   return (
-    <div className="h-full max-h-[90vh] w-full flex flex-col overflow-hidden">
+    <div className="w-full flex flex-col">
       {/* Header */}
       <div className="p-4 border-b border-gray-200 flex justify-between bg-white rounded-t-lg flex-shrink-0">
         <h2 className="text-lg font-semibold text-gray-800">{getStepTitle}</h2>
@@ -1013,7 +1013,7 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({
       </div>
 
       {/* Main content area with progress indicators and step content */}
-      <div className="flex-grow overflow-y-auto min-h-0">
+      <div className="flex-grow">
         <div className="p-4">
           {/* Progress indicators */}
           {renderProgressIndicators()}
