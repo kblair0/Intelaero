@@ -36,12 +36,14 @@ export async function GET(request: NextRequest) {
     const accessCode = metadata?.accessCode || null;
     const productId = metadata?.productId || null;
     
-    // Get product name from productId without using getProductById
+    // Get product name from productId
     let productName = 'Premium Access';
-    if (productId === 'prod_SL53TJIs0Fup3h') {
-      productName = 'Community Tier';
+    if (productId === 'prod_SRKdN515lrJ343') {
+      productName = 'Conference Demo - Free';
+    } else if (productId === 'prod_SL53TJIs0Fup3h') {
+      productName = 'DroneView Local Safety';
     } else if (productId === 'prod_NFFWRYSXrISHVK') {
-      productName = 'Commercial Tier';
+      productName = 'Full Droneview Commercial';
     }
     
     console.log('Returning session details:', { accessCode: !!accessCode, productName });

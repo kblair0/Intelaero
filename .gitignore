@@ -46,3 +46,5 @@ tsconfig.tsbuildinfo
 !package.json
 !tsconfig.json
 emsdk/
+.DS_Store
+.env*.local

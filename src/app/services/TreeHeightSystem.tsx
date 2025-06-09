@@ -11,13 +11,12 @@ import type mapboxgl from 'mapbox-gl';
 
 // Configuration constants - UPDATED for new rasterarray tileset
 const TREE_HEIGHT_CONFIG = {
-  MIN_ZOOM: 10, // Updated to match new tileset
-  MAX_ZOOM: 13, // Updated to match new tileset
+  MIN_ZOOM: 10,
+  MAX_ZOOM: 13,
   TILE_SIZE: 256,
   MAX_CACHED_TILES: 100,
-  // NEW RASTERARRAY TILESET ID
-  TILE_URL: 'https://api.mapbox.com/v4/intelaero.forest-height-aus-data/{z}/{x}/{y}.png',
-  ACCESS_TOKEN: 'sk.eyJ1IjoiaW50ZWxhZXJvIiwiYSI6ImNtYjdpcG51YTBhYmwyam4wd204ZXlmcHUifQ.hhR2MhgqopLEtNSg05zigg'
+  TILE_URL: `https://api.mapbox.com/v4/${process.env.NEXT_PUBLIC_MAPBOX_TILESET_ID}/{z}/{x}/{y}.png`,
+  ACCESS_TOKEN: process.env.NEXT_TILESET_MAPBOX_ACCESS_TOKEN || ''
 } as const;
 
 // Color mapping for tree heights

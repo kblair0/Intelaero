@@ -25,20 +25,16 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 // Valid product IDs and their corresponding tier levels
 const VALID_PRODUCTS = {
   'prod_SL53TJIs0Fup3h': {
-    name: 'Community Tier',
+    name: 'DroneView Local Safety',
     tierLevel: TierLevel.COMMUNITY
   },
   'prod_NFFWRYSXrISHVK': {
-    name: 'Commercial Tier',
+    name: 'Full Droneview Commercial',
     tierLevel: TierLevel.COMMERCIAL
   },
-  'prod_SKylAc6M8mjDeE': {
-    name: 'Commercial Tier (Test)',
-    tierLevel: TierLevel.COMMERCIAL
-  },
-    'prod_SL75lXG3bPfQWO': {
-    name: 'Community Tier',
-    tierLevel: TierLevel.COMMUNITY
+  'prod_SRKdN515lrJ343': {
+    name: 'Conference Demo - Free',
+    tierLevel: TierLevel.COMMERCIAL  // Commercial tier for demo
   }
 };
 

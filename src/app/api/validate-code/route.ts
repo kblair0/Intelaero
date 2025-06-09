@@ -14,7 +14,7 @@ import {
 } from '../../utils/codeGenerator';
 import { 
   getAccessCode, 
-  markCodeAsUsed 
+  updateAccessCode
 } from '../../utils/kv-storage';
 
 export async function POST(request: NextRequest) {
@@ -69,8 +69,10 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Mark code as used
-    await markCodeAsUsed(codeHash);
+    // Track usage without preventing reuse
+    await updateAccessCode(codeHash, {
+      lastUsedAt: new Date().toISOString()
+    });
     
     // Return successful response
     return NextResponse.json({

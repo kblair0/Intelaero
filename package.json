@@ -9,10 +9,12 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@mapbox/togeojson": "^0.16.2",
     "@turf/turf": "^7.1.0",
     "@types/mapbox-gl": "^3.4.1",
     "@vercel/kv": "^3.0.0",
     "chart.js": "^4.4.7",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.474.0",
     "mapbox-gl": "^3.9.4",
     "next": "^15.1.4",
@@ -20,7 +22,8 @@
     "react-chartjs-2": "^5.2.0",
     "react-dom": "^18.3.1",
     "react-dropzone": "^14.3.5",
-    "stripe": "^18.1.0"
+    "stripe": "^18.1.0",
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@types/node": "^20",

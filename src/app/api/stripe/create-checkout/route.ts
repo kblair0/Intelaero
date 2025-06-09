@@ -80,12 +80,11 @@ export async function POST(request: NextRequest) {
 
     // Define valid product IDs for each tier
     const COMMUNITY_PRODUCT_IDS = [
-      'prod_SL53TJIs0Fup3h', // Original Community product ID (production)
-      'prod_SL75lXG3bPfQWO'  // Test Community product ID
+      'prod_SL53TJIs0Fup3h', // DroneView Local Safety Subscription
     ];
     const COMMERCIAL_PRODUCT_IDS = [
-      'prod_NFFWRYSXrISHVK', // Original Commercial product ID (production)
-      'prod_SKylAc6M8mjDeE'  // Test Commercial product ID
+      'prod_NFFWRYSXrISHVK', // Full Droneview Commercial Subscription
+      'prod_SRKdN515lrJ343', // Conference Demo - Free
     ];
       // First, ensure we have a valid TierLevel by using a default value
     let tierLevel: TierLevel;
