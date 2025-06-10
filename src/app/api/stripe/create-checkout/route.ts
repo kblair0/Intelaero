@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
           quantity: 1,
         },
       ],
-      mode: 'subscription',
+      mode: productId === 'prod_SRKdN515lrJ343' ? 'payment' : 'subscription',
       success_url,
       cancel_url,
       metadata: {
