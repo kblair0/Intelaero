@@ -74,9 +74,8 @@ export async function POST(request: NextRequest) {
 
     const price = prices.data[0];
 
-    // Map productId to tierLevel - FIXED VERSION
+    // Map productId to tierLevel - MOVED HERE TO FIX UNDEFINED ISSUE
     console.log('Available TierLevel values:', { FREE: TierLevel.FREE, COMMUNITY: TierLevel.COMMUNITY, COMMERCIAL: TierLevel.COMMERCIAL });
-
 
     // Define valid product IDs for each tier
     const COMMUNITY_PRODUCT_IDS = [
@@ -86,17 +85,18 @@ export async function POST(request: NextRequest) {
       'prod_NFFWRYSXrISHVK', // Full Droneview Commercial Subscription
       'prod_SRKdN515lrJ343', // Conference Demo - Free
     ];
-      // First, ensure we have a valid TierLevel by using a default value
+    
+    // First, ensure we have a valid TierLevel by using a default value
     let tierLevel: TierLevel;
-        if (COMMUNITY_PRODUCT_IDS.includes(productId)) {
-          tierLevel = TierLevel.COMMUNITY; // Assign Community tier for recognized Community product IDs
-        } else if (COMMERCIAL_PRODUCT_IDS.includes(productId)) {
-          tierLevel = TierLevel.COMMERCIAL; // Assign Commercial tier for recognized Commercial product IDs
-        } else {
-          // Fallback to FREE tier for unrecognized product IDs
-          tierLevel = TierLevel.FREE;
-          console.log('Warning: Unknown product ID, defaulting to FREE tier:', productId);
-        }
+    if (COMMUNITY_PRODUCT_IDS.includes(productId)) {
+      tierLevel = TierLevel.COMMUNITY; // Assign Community tier for recognized Community product IDs
+    } else if (COMMERCIAL_PRODUCT_IDS.includes(productId)) {
+      tierLevel = TierLevel.COMMERCIAL; // Assign Commercial tier for recognized Commercial product IDs
+    } else {
+      // Fallback to FREE tier for unrecognized product IDs
+      tierLevel = TierLevel.FREE;
+      console.log('Warning: Unknown product ID, defaulting to FREE tier:', productId);
+    }
     
     console.log('Input productId:', productId);
     console.log('Mapped tierLevel:', tierLevel);
