@@ -38,11 +38,25 @@ const VALID_PRODUCTS = {
   }
 };
 
+export async function GET(request: NextRequest) {
+  return NextResponse.json({ 
+    message: 'Webhook endpoint is working!',
+    timestamp: new Date().toISOString()
+  });
+}
+
 export async function POST(request: NextRequest) {
+  console.log('=== WEBHOOK DEBUG START ===');
+  console.log('Request received at:', new Date().toISOString());
+  console.log('Headers:', Object.fromEntries(request.headers.entries()));
+  
   const body = await request.text();
   const signature = request.headers.get('stripe-signature')!;
   
-  console.log('Received webhook event');
+  console.log('Body length:', body.length);
+  console.log('Signature present:', !!signature);
+  console.log('Webhook secret present:', !!process.env.STRIPE_WEBHOOK_SECRET);
+  console.log('=== WEBHOOK DEBUG END ===');
   
   try {
     // Verify webhook signature
