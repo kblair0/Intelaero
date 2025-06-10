@@ -1,15 +1,19 @@
 /**
- * page.tsx - OPTIMIZED VERSION WITH LAZY LOADING
+ * page.tsx - UPDATED WITH MOBILE ORIENTATION GUARD
  * 
  * Purpose:
- * Main entry point for the application, orchestrating the layout and state management
- * for map, analysis panels, and verification tools. Wraps content with necessary providers.
+ * Main entry point for the application, now with mobile device orientation detection
+ * and guidance for optimal viewing experience. Forces landscape mode on mobile devices.
  * 
- * Optimizations:
- * - Lazy loaded heavy analysis components to reduce initial bundle size
- * - Lazy loaded modal components that aren't immediately needed
- * - Added Suspense boundaries with loading states
- * - Kept core map and context providers in main bundle for immediate availability
+ * Changes Made:
+ * - Added MobileOrientationGuard wrapper around entire app
+ * - Enhanced responsive design for landscape mobile users
+ * - Added mobile-specific styling improvements
+ * 
+ * Mobile Strategy:
+ * 1. Portrait mobile: Show "rotate device" message
+ * 2. Landscape mobile (if too small): Suggest larger device
+ * 3. Landscape mobile (adequate): Allow usage with responsive adjustments
  */
 
 "use client";
@@ -35,40 +39,31 @@ import { AnalysisControllerProvider, useAnalysisController } from "./context/Ana
 import 'mapbox-gl/dist/mapbox-gl.css';
 import Image from "next/image";
 import ReloadButton from "./components/UI/ReloadButton";
+import MobileOrientationGuard from "./components/UI/MobileOrientationGuard"; // NEW IMPORT
 
 //payment and premium access
 import { PremiumProvider } from "./context/PremiumContext";
 
 // ========================================
-// LAZY LOADED COMPONENTS
+// LAZY LOADED COMPONENTS (unchanged)
 // ========================================
-// Heavy analysis components - only loaded when panels are opened
 const ObstacleAnalysisDashboard = lazy(() => import("./components/Analyses/ObstacleAnalysis/TerrainAnalysisDashboard"));
 const AnalysisDashboard = lazy(() => import("./components/Analyses/LOSAnalyses/UI/VisibilityAnalysisDashboard"));
 const Calculator = lazy(() => import("./components/Calculator"));
-
-// Modal/overlay components - only loaded when needed
 const AnalysisWizard = lazy(() => import("./components/AnalysisWizard"));
 const FlightPlanUploader = lazy(() => import("./components/FlightPlanUploader"));
 const AreaOpsUploader = lazy(() => import("./components/AO/AreaOpsUploader"));
 const UpgradeModal = lazy(() => import("./components/UI/UpgradeModal"));
 const MarkerLocationsModal = lazy(() => import("./components/UI/MarkerLocationsModal"));
-
-// Conditional UI components
 const ChecklistComponent = lazy(() => import("./components/ChecklistComponent"));
 const WelcomeMessage = lazy(() => import("./components/WelcomeMessage"));
 const MapSelectionPanel = lazy(() => import("./components/AO/MapSelectionPanel"));
 const ToolsDashboard = lazy(() => import("./components/VerificationToolbar/ToolsDashboard"));
-
-// Heavy sub-components within ToolsDashboard that can be preloaded
 const CompactDisclaimerWidget = lazy(() => import("./components/CompactDisclaimerWidget"));
 
 // ========================================
-// LOADING COMPONENTS
+// LOADING COMPONENTS (unchanged)
 // ========================================
-/**
- * Loading spinner for analysis panels
- */
 const AnalysisLoadingSpinner: React.FC = () => (
   <div className="flex items-center justify-center p-8">
     <div className="flex flex-col items-center gap-2">
@@ -78,9 +73,6 @@ const AnalysisLoadingSpinner: React.FC = () => (
   </div>
 );
 
-/**
- * Loading placeholder for modals
- */
 const ModalLoadingPlaceholder: React.FC = () => (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
     <div className="bg-white p-4 rounded-lg">
@@ -90,7 +82,7 @@ const ModalLoadingPlaceholder: React.FC = () => (
 );
 
 /**
- * Main content component for the home page, managing UI layout and uploader/wizard overlays
+ * Main content component - ENHANCED FOR MOBILE LANDSCAPE
  */
 const HomeContent = () => {
   const [activePanel, setActivePanel] = useState<"energy" | "los" | "terrain" | null>(null);
@@ -107,44 +99,28 @@ const HomeContent = () => {
   const [isMapSelectionMode, setIsMapSelectionMode] = useState<boolean>(false);
   const [mapSelectionMode, setMapSelectionMode] = useState<"map" | "search">("map");
 
-  /**
-   * Toggles the active analysis panel and sets initial section
-   * @param panel - The panel to toggle
-   * @param section - Optional section to expand in AnalysisDashboard
-   */
+  // ... (all the existing handler functions remain unchanged)
   const togglePanel = (panel: "energy" | "los" | "terrain" | null, section?: 'flight' | 'station' | 'merged' | 'stationLOS' | null) => {
     setActivePanel((prev) => (prev === panel ? null : panel));
     setInitialSection(panel === 'los' ? section || null : null);
     trackEvent("toggle_analysis_panel", { panel, section });
   };
 
-  /**
-   * Handles opening the Area of Operations uploader
-   */
   const handleAreaOps = () => {
     setShowAreaOpsUploader(true);
     trackEvent('area_ops_uploader_opened', {});
   };
 
-  /**
-   * Handles opening the wizard
-   */
   const handleWizard = () => {
     setShowWizard(true);
     setShowWelcomeMessage(false);
     trackEvent('wizard_opened', {});
   };
 
-  /**
-   * Closes the checklist overlay
-   */
   const handleCloseChecklist = () => {
     setShowChecklist(false);
   };
 
-  /**
-   * Effect to show checklist when wizard closes and upload is complete
-   */
   useEffect(() => {
     if ((flightPlan || aoGeometry) && !showWizard && !showUploader && !showAreaOpsUploader) {
       setShowChecklist(true);
@@ -153,10 +129,6 @@ const HomeContent = () => {
     }
   }, [flightPlan, aoGeometry, showWizard, showUploader, showAreaOpsUploader]);
 
-  // Add handlers for map selection
-  /**
-   * Starts map selection mode
-   */
   const handleStartMapSelection = (mode: "map" | "search") => {
     setIsMapSelectionMode(true);
     setMapSelectionMode(mode);
@@ -164,17 +136,11 @@ const HomeContent = () => {
     trackEvent('map_selection_started', { mode });
   };
 
-  /**
-   * Completes map selection
-   */
   const handleMapSelectionComplete = () => {
     setIsMapSelectionMode(false);
     trackEvent('map_selection_completed', {});
   };
 
-  /**
-   * Cancels map selection
-   */
   const handleMapSelectionCancel = () => {
     setIsMapSelectionMode(false);
     setShowWizard(true);
@@ -183,7 +149,7 @@ const HomeContent = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-white overflow-x-hidden">
-      {/* Main Content Area */}
+      {/* Main Content Area - ENHANCED MOBILE RESPONSIVE */}
       <div className="flex-1 w-full h-full">
         <div className="flex flex-row h-full relative">
           {/* Map Section */}
@@ -195,17 +161,25 @@ const HomeContent = () => {
                 flightPlan={flightPlan}
                 setShowUploader={setShowUploader}
               />
+              
               {/* Welcome Message Overlay */}
               {(!showUploader && !showAreaOpsUploader && !showWizard && showWelcomeMessage && !flightPlan && !aoGeometry) && (
-                <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20 p-2">
-                  <Suspense fallback={<ModalLoadingPlaceholder />}>
-                    <WelcomeMessage
-                      onGetStarted={handleWizard}
-                      onClose={() => setShowWelcomeMessage(false)}
-                    />
-                  </Suspense>
+                <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20 p-2 sm:p-4">
+                  {/* Mobile-friendly container with proper height constraints */}
+                  <div className="w-full h-full max-h-screen flex items-center justify-center
+                                  sm:w-auto sm:h-auto sm:max-w-4xl sm:max-h-[90vh]
+                                  landscape:max-h-[85vh] landscape:w-full landscape:max-w-5xl">
+                    <Suspense fallback={<ModalLoadingPlaceholder />}>
+                      <WelcomeMessage
+                        onGetStarted={handleWizard}
+                        onClose={() => setShowWelcomeMessage(false)}
+                      />
+                    </Suspense>
+                  </div>
                 </div>
               )}
+              
+              {/* Other overlays remain unchanged... */}
               {/* Wizard Overlay */}
               {(!showUploader && !showAreaOpsUploader && showWizard && !flightPlan && !aoGeometry) && (
                 <div className="absolute inset-0 bg-black/50 flex items-start justify-center z-20 p-4 overflow-y-auto">
@@ -231,6 +205,8 @@ const HomeContent = () => {
                   </div>
                 </div>
               )}
+              
+              {/* Flight Plan Uploader */}
               {showUploader && (
                 <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20 p-2">
                   <div className="bg-white p-2 rounded-lg shadow-lg w-full max-w-5xl">
@@ -246,6 +222,8 @@ const HomeContent = () => {
                   </div>
                 </div>
               )}
+              
+              {/* Area Ops Uploader */}
               {showAreaOpsUploader && (
                 <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20 p-2">
                   <div className="bg-white p-2 rounded-lg shadow-lg w-full max-w-5xl">
@@ -261,13 +239,16 @@ const HomeContent = () => {
             </div>
           </div>
 
-          {/* Right Sidebar: Checklist and Plan Verification */}
-          <div className="w-80 h-full shrink-0 max-h-screen overflow-y-auto flex p-1 mr-2 flex-col gap-4 pb-4">
+          {/* Right Sidebar - RESPONSIVE MOBILE IMPROVEMENTS */}
+          <div className="w-80 sm:w-72 md:w-80 h-full shrink-0 max-h-screen overflow-y-auto flex p-1 mr-2 flex-col gap-4 pb-4 
+                          landscape:w-64 landscape:gap-2 landscape:p-0.5 landscape:mr-1">
             {/* Plan Verification Section */}
             <div className="w-full z-0">
               <Card className="w-full rounded-l-xl">
-                <div className="space-y-4 h-full flex flex-col">
-                  <h3 className="text-lg font-medium text-gray-900">Terrain and Visibility Toolbar</h3>
+                <div className="space-y-4 h-full flex flex-col landscape:space-y-2">
+                  <h3 className="text-lg font-medium text-gray-900 landscape:text-base">
+                    Terrain and Visibility Toolbar
+                  </h3>
                   <div className="flex-1 overflow-y-auto">
                     <Suspense fallback={<AnalysisLoadingSpinner />}>
                       <ToolsDashboard onTogglePanel={togglePanel} />
@@ -277,20 +258,20 @@ const HomeContent = () => {
               </Card>
             </div>
 
-            {/* Map Selection Panel - Only shown when in map selection mode */}
+            {/* Map Selection Panel */}
             {isMapSelectionMode && (
               <div className="w-full z-10">
                 <Card className="w-full rounded-l-xl">
-                  <div className="space-y-3 h-full flex flex-col">
-                    <h3 className="text-lg font-medium text-gray-900 flex items-center gap-2">
+                  <div className="space-y-3 h-full flex flex-col landscape:space-y-2">
+                    <h3 className="text-lg font-medium text-gray-900 flex items-center gap-2 landscape:text-base">
                       {mapSelectionMode === "map" ? (
                         <>
-                          <MapPin className="w-5 h-5 text-blue-600" />
+                          <MapPin className="w-5 h-5 text-blue-600 landscape:w-4 landscape:h-4" />
                           Select Area on Map
                         </>
                       ) : (
                         <>
-                          <Search className="w-5 h-5 text-blue-600" />
+                          <Search className="w-5 h-5 text-blue-600 landscape:w-4 landscape:h-4" />
                           Search Location
                         </>
                       )}
@@ -319,13 +300,13 @@ const HomeContent = () => {
             )}            
           </div>
 
-          {/* Analysis Panels - WITH LAZY LOADING */}
+          {/* Analysis Panels - MOBILE RESPONSIVE ADJUSTMENTS */}
           <MapSidePanel
             title="Energy Analysis"
-            icon={<Battery className="w-5 h-5" />}
+            icon={<Battery className="w-5 h-5 landscape:w-4 landscape:h-4" />}
             isExpanded={activePanel === "energy"}
             onToggle={() => togglePanel("energy")}
-            className="z-30"
+            className="z-30 landscape:w-72" // Smaller width on landscape mobile
           >
             <Suspense fallback={<AnalysisLoadingSpinner />}>
               <Calculator />
@@ -334,10 +315,10 @@ const HomeContent = () => {
 
           <MapSidePanel
             title="Visibility and Comms Tools"
-            icon={<Radio className="w-5 h-5" />}
+            icon={<Radio className="w-5 h-5 landscape:w-4 landscape:h-4" />}
             isExpanded={activePanel === "los"}
             onToggle={() => togglePanel("los")}
-            className="z-30"
+            className="z-30 landscape:w-72"
           >
             <Suspense fallback={<AnalysisLoadingSpinner />}>
               <AnalysisDashboard initialSection={initialSection} />
@@ -346,10 +327,10 @@ const HomeContent = () => {
 
           <MapSidePanel
             title="Terrain Analysis Tools"
-            icon={<Mountain className="w-5 h-5" />}
+            icon={<Mountain className="w-5 h-5 landscape:w-4 landscape:h-4" />}
             isExpanded={activePanel === "terrain"}
             onToggle={() => togglePanel("terrain")}
-            className="z-30"
+            className="z-30 landscape:w-72"
           >
             <Suspense fallback={<AnalysisLoadingSpinner />}>
               <ObstacleAnalysisDashboard />
@@ -361,11 +342,7 @@ const HomeContent = () => {
   );
 };
 
-/**
- * Wrapper component for the MarkerLocationsModal - WITH LAZY LOADING
- * This ensures the modal has access to all necessary context
- * and is rendered at the application level
- */
+// Wrapper components remain unchanged...
 const MarkerLocationsModalWrapper: React.FC = () => {
   const { showMarkerLocationsModal, setShowMarkerLocationsModal } = useAnalysisController();
   
@@ -381,9 +358,6 @@ const MarkerLocationsModalWrapper: React.FC = () => {
   );
 };
 
-/**
- * Lazy-loaded UpgradeModal wrapper
- */
 const UpgradeModalWrapper: React.FC = () => {
   return (
     <Suspense fallback={null}>
@@ -393,32 +367,37 @@ const UpgradeModalWrapper: React.FC = () => {
 };
 
 /**
- * Home page component, wrapping content with necessary providers
+ * Home page component - NOW WITH MOBILE ORIENTATION GUARD
  */
 export default function Home() {
   return (
-    <MapProvider>
-      <AnalysisControllerProvider> 
-        <AreaOfOpsProvider>
-          <FlightPlanProvider>
-            <FlightConfigurationProvider>
-              <PremiumProvider>
-                <MarkerProvider>
-                  <LOSAnalysisProvider>
-                    <ObstacleAnalysisProvider>
-                      <ChecklistProvider>
-                        <HomeContent />
-                        <UpgradeModalWrapper />
-                        <MarkerLocationsModalWrapper />
-                      </ChecklistProvider>
-                    </ObstacleAnalysisProvider>
-                  </LOSAnalysisProvider>
-                </MarkerProvider>
-              </PremiumProvider>
-            </FlightConfigurationProvider>
-          </FlightPlanProvider>
-        </AreaOfOpsProvider>
-      </AnalysisControllerProvider>
-    </MapProvider>
+    <MobileOrientationGuard 
+      minLandscapeWidth={640}  // Require at least 640px width in landscape
+      suggestLargerDevice={true} // Show "use larger device" for very small screens
+    >
+      <MapProvider>
+        <AnalysisControllerProvider> 
+          <AreaOfOpsProvider>
+            <FlightPlanProvider>
+              <FlightConfigurationProvider>
+                <PremiumProvider>
+                  <MarkerProvider>
+                    <LOSAnalysisProvider>
+                      <ObstacleAnalysisProvider>
+                        <ChecklistProvider>
+                          <HomeContent />
+                          <UpgradeModalWrapper />
+                          <MarkerLocationsModalWrapper />
+                        </ChecklistProvider>
+                      </ObstacleAnalysisProvider>
+                    </LOSAnalysisProvider>
+                  </MarkerProvider>
+                </PremiumProvider>
+              </FlightConfigurationProvider>
+            </FlightPlanProvider>
+          </AreaOfOpsProvider>
+        </AnalysisControllerProvider>
+      </MapProvider>
+    </MobileOrientationGuard>
   );
 }

@@ -5,6 +5,26 @@ import { X } from "lucide-react";
 import { trackEventWithForm as trackEvent } from "./tracking/tracking";
 
 /**
+ * WelcomeMessage.tsx - MOBILE-RESPONSIVE VERSION (SCROLLABLE + LOGO HIDING)
+ * 
+ * Purpose:
+ * Welcome component displaying Intel.Aero branding and guiding users to start.
+ * Made scrollable for all screen sizes and hides logos on small screens.
+ * 
+ * Relations:
+ * - Used in page.tsx as an overlay modal
+ * - Integrates with MobileOrientationGuard for optimal mobile experience
+ * - Works with existing tracking system
+ * 
+ * Mobile Optimizations:
+ * - Scrollable container with max-height constraints
+ * - Logos hidden on small screens (sm breakpoint)
+ * - Responsive container sizing
+ * - Original text sizes preserved for desktop
+ * - Touch-friendly interaction
+ */
+
+/**
  * Props for WelcomeMessage component
  */
 interface WelcomeMessageProps {
@@ -25,7 +45,9 @@ const WelcomeMessage: React.FC<WelcomeMessageProps> = ({ onGetStarted, onClose }
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-lg p-6 max-w-3xl mx-auto">
+    <div className="bg-white rounded-lg shadow-lg p-6 max-w-3xl mx-auto 
+                    max-h-[90vh] sm:max-h-[95vh] overflow-y-auto
+                    w-full sm:w-auto">
       {/* Header */}
       <div className="flex flex-col items-center text-center">
         <Image
@@ -55,8 +77,8 @@ const WelcomeMessage: React.FC<WelcomeMessageProps> = ({ onGetStarted, onClose }
         </p>
       </div>
 
-      {/* Social Proof Section */}
-      <div className="mt-4">
+      {/* Social Proof Section - Hidden on mobile/tablet, visible on desktop */}
+      <div className="mt-4 hidden md:block">
         <p className="text-center text-bold mb-2 text-md">
           Powered and Compatible with
         </p>
@@ -169,8 +191,6 @@ const WelcomeMessage: React.FC<WelcomeMessageProps> = ({ onGetStarted, onClose }
               PX4, a leading open-source autopilot, powers advanced drones. Intel.Aero's compatibility ensures confident planning.
             </div>
           </div>
-
-
         </div>
       </div>
 
@@ -178,8 +198,10 @@ const WelcomeMessage: React.FC<WelcomeMessageProps> = ({ onGetStarted, onClose }
       <div className="mt-6 flex justify-center gap-4">
         <button
           onClick={handleGetStarted}
-          className="px-4 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-d"
+          className="px-4 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-d
+                     min-h-[44px] min-w-[120px] touch-manipulation"
           aria-label="Get Started with Intel.Aero"
+          style={{ touchAction: 'manipulation' }}
         >
           Get Started
         </button>

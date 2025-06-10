@@ -109,3 +109,117 @@ box-shadow: 0 0 0 15px rgba(212, 175, 55, 0.2);
 border-color: #b8941f;
 }
 }
+
+/* Add these styles to your existing globals.css file */
+
+/* ========================================
+   MOBILE LANDSCAPE RESPONSIVE IMPROVEMENTS
+   ======================================== */
+
+/* Mobile landscape utilities */
+@media screen and (max-height: 500px) and (orientation: landscape) {
+  .landscape\:text-xs {
+    font-size: 0.75rem;
+    line-height: 1rem;
+  }
+  
+  .landscape\:text-sm {
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+  }
+  
+  .landscape\:text-base {
+    font-size: 1rem;
+    line-height: 1.5rem;
+  }
+  
+  .landscape\:w-64 {
+    width: 16rem;
+  }
+  
+  .landscape\:w-72 {
+    width: 18rem;
+  }
+  
+  .landscape\:w-4 {
+    width: 1rem;
+  }
+  
+  .landscape\:h-4 {
+    height: 1rem;
+  }
+  
+  .landscape\:gap-2 {
+    gap: 0.5rem;
+  }
+  
+  .landscape\:space-y-2 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0.5rem;
+  }
+  
+  .landscape\:p-0\.5 {
+    padding: 0.125rem;
+  }
+  
+  .landscape\:mr-1 {
+    margin-right: 0.25rem;
+  }
+}
+
+/* Mobile landscape specific map controls positioning */
+@media screen and (max-height: 500px) and (orientation: landscape) {
+  /* Make map controls smaller and more compact */
+  .map-button {
+    padding: 3px 10px;
+    font-size: 0.875rem;
+  }
+  
+  /* Reduce popup content size */
+  .measure-popup .mapboxgl-popup-content {
+    padding: 3px;
+    font-size: 10px;
+  }
+  
+  /* Compact analysis panels */
+  .mapboxgl-popup-content {
+    max-height: 200px;
+    overflow-y: auto;
+  }
+}
+
+/* Touch-friendly button sizing for mobile */
+@media (max-width: 768px) {
+  button, .map-button {
+    min-height: 44px; /* iOS recommended touch target */
+    min-width: 44px;
+  }
+  
+  /* Larger touch targets for important controls */
+  .mobile-friendly-button {
+    padding: 12px 16px;
+    font-size: 16px; /* Prevents zoom on iOS */
+  }
+}
+
+/* Prevent horizontal scrolling on mobile */
+@media (max-width: 768px) {
+  body {
+    overflow-x: hidden;
+  }
+  
+  .map-container {
+    touch-action: pan-x pan-y;
+  }
+}
+
+/* Hide less essential elements on very small landscape screens */
+@media screen and (max-height: 400px) and (orientation: landscape) {
+  .hide-on-tiny-landscape {
+    display: none;
+  }
+  
+  .compact-on-tiny-landscape {
+    padding: 0.25rem;
+    margin: 0.125rem;
+  }
+}
