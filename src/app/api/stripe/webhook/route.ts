@@ -15,7 +15,7 @@ import {
   createCodeMetadata
 } from '../../../utils/codeGenerator';
 import { storeAccessCode } from '../../../utils/kv-storage';
-import { TierLevel } from '../../../context/PremiumContext';
+import { TierLevel } from '../../../types/PremiumTypes';
 
 // Initialize Stripe with secret key
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
