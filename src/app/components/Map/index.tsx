@@ -13,7 +13,6 @@ import mapboxgl from 'mapbox-gl';
 import MarkerControls from './MarkerControls';
 import LayerControls from './LayerControls';
 import MeasurementControls from './MeasurementControls';
-import MapLegend from './MapLegend';
 import AnalysisStatus from './AnalysisStatus';
 import LOSModal from './LOSModal';
 import FlightPathDisplay from './FlightPathDisplay';
@@ -215,7 +214,6 @@ const Map: FC<MapProps> = ({ activePanel, togglePanel, flightPlan, setShowUpload
         />
         <MeasurementControls />
       </div>
-      <MapLegend />
       <AnalysisStatus 
         onStopLOS={() => {
           // LOS analysis cancel logic

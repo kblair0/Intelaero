@@ -57,7 +57,6 @@ export async function getReliableTerrainElevations(
           const elev = map.queryTerrainElevation([lon, lat]);
           if (elev !== null) {
             elevation = elev;
-            console.log(`[${new Date().toISOString()}] [TerrainUtils] Got elevation ${elevation.toFixed(1)}m for [${lon}, ${lat}] on attempt ${attempt}`);
             break;
           }
           console.warn(`[${new Date().toISOString()}] [TerrainUtils] Attempt ${attempt} returned null for [${lon}, ${lat}]`);

@@ -39,18 +39,17 @@ import {
   Move,
   Trees
 } from 'lucide-react';
-
 import PremiumButton from '../../UI/PremiumButton';
 import { usePremium, FeatureId } from '../../../context/PremiumContext';
-import { layerManager } from '../../../services/LayerManager';
-
+import { layerManager, MAP_LAYERS } from '../../../services/LayerManager';
+import { GridCell } from '../Analyses/Types/GridAnalysisTypes';
 
 interface TerrainAnalysisDashboardProps {
   onClose?: () => void;
 }
 
 /**
- * Simple analysis section with a button
+ * Simple analysis section with a button and optional terrain opacity slider
  */
 interface AnalysisSectionProps {
   title: string;
@@ -63,6 +62,10 @@ interface AnalysisSectionProps {
   prerequisitesMessage?: string;
   isLoading?: boolean;
   featureId: FeatureId;
+  terrainOpacity?: number;
+  onTerrainOpacityChange?: (opacity: number) => void;
+  isAnalyzing?: boolean;
+  aoTerrainGrid?: GridCell[] | null;
 }
 
 /**
@@ -94,7 +97,11 @@ const AnalysisSection: React.FC<AnalysisSectionProps> = ({
   prerequisitesMet,
   prerequisitesMessage,
   isLoading,
-  featureId
+  featureId,
+  terrainOpacity,
+  onTerrainOpacityChange,
+  isAnalyzing,
+  aoTerrainGrid
 }) => {
   const { checks } = useChecklistContext();
   
@@ -144,9 +151,8 @@ const AnalysisSection: React.FC<AnalysisSectionProps> = ({
         </div>
       )}
       
-      <div className="mt-3">
+      <div className="mt-3 space-y-2">
         {featureId ? (
-          // Use PremiumButton if featureId is provided
           <PremiumButton 
             featureId={featureId}
             onClick={onButtonClick}
@@ -166,7 +172,6 @@ const AnalysisSection: React.FC<AnalysisSectionProps> = ({
             ) : buttonText}
           </PremiumButton>
         ) : (
-          // Use regular button if no featureId is provided (free features)
           <button 
             className={`
               w-full py-2 px-4 rounded text-white text-xs font-medium
@@ -184,6 +189,27 @@ const AnalysisSection: React.FC<AnalysisSectionProps> = ({
               </span>
             ) : buttonText}
           </button>
+        )}
+        
+        {/* Slimline opacity slider for Terrain Profile Analysis */}
+        {title === "Terrain Profile Analysis" && terrainOpacity !== undefined && onTerrainOpacityChange && aoTerrainGrid && aoTerrainGrid.length > 0 && (
+          <div className="mt-2">
+            <label htmlFor="terrain-opacity-slider" className="text-xs text-gray-700 flex justify-between">
+              <span>Opacity:</span>
+              <span className="font-medium">{Math.round(terrainOpacity * 100)}%</span>
+            </label>
+            <input
+              id="terrain-opacity-slider"
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={terrainOpacity}
+              onChange={(e) => onTerrainOpacityChange(Number(e.target.value))}
+              className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer mt-1"
+              disabled={isAnalyzing || !layerManager.isLayerVisible(MAP_LAYERS.AOTERRAIN_GRID)}
+            />
+          </div>
         )}
       </div>
     </div>
@@ -207,12 +233,10 @@ const PowerlineAnalysisSection: React.FC<PowerlineAnalysisSectionProps> = ({
 }) => {
   const { checks } = useChecklistContext();
   
-  // Check if any checklist items for either HV or Local are pending
   const hasPendingChecks = [hvChecklistGroupId, localChecklistGroupId].some(groupId =>
     checks.some(check => check.group === groupId && check.status === 'pending')
   );
   
-  // Check if all checklist items for both HV and Local are completed
   const isCompleted = [hvChecklistGroupId, localChecklistGroupId].every(groupId =>
     checks.some(check => check.group === groupId) &&
     !checks.some(check => check.group === groupId && check.status === 'pending')
@@ -249,42 +273,42 @@ const PowerlineAnalysisSection: React.FC<PowerlineAnalysisSectionProps> = ({
       )}
       
       <div className="mt-3 flex flex-col gap-2">
-          <PremiumButton 
-            featureId="hv_powerlines"
-            className={`
-              py-2 px-4 rounded text-white text-xs font-medium
-              ${prerequisitesMet 
-                ? 'bg-blue-500 hover:bg-blue-600' 
-                : 'bg-gray-300 cursor-not-allowed'}
-            `}
-            onClick={onHVButtonClick}
-            disabled={!prerequisitesMet || isHVLoading}
-          >
-            {isHVLoading ? (
-              <span className="flex items-center justify-center">
-                <Loader className="w-4 h-4 mr-2 animate-spin" />
-                Loading...
-              </span>
-            ) : hvButtonText}
-          </PremiumButton>
-          <PremiumButton 
-            featureId="local_powerlines"
-            onClick={onLocalButtonClick}
-            disabled={!prerequisitesMet || isLocalLoading}
-            className={`
-              py-2 px-4 rounded text-white text-xs font-medium
-              ${prerequisitesMet 
-                ? 'bg-blue-500 hover:bg-blue-600' 
-                : 'bg-gray-300 cursor-not-allowed'}
-            `}
-          >
-            {isLocalLoading ? (
-              <span className="flex items-center justify-center">
-                <Loader className="w-4 h-4 mr-2 animate-spin" />
-                Loading...
-              </span>
-            ) : localButtonText}
-          </PremiumButton>
+        <PremiumButton 
+          featureId="hv_powerlines"
+          className={`
+            py-2 px-4 rounded text-white text-xs font-medium
+            ${prerequisitesMet 
+              ? 'bg-blue-500 hover:bg-blue-600' 
+              : 'bg-gray-300 cursor-not-allowed'}
+          `}
+          onClick={onHVButtonClick}
+          disabled={!prerequisitesMet || isHVLoading}
+        >
+          {isHVLoading ? (
+            <span className="flex items-center justify-center">
+              <Loader className="w-4 h-4 mr-2 animate-spin" />
+              Loading...
+            </span>
+          ) : hvButtonText}
+        </PremiumButton>
+        <PremiumButton 
+          featureId="local_powerlines"
+          onClick={onLocalButtonClick}
+          disabled={!prerequisitesMet || isLocalLoading}
+          className={`
+            py-2 px-4 rounded text-white text-xs font-medium
+            ${prerequisitesMet 
+              ? 'bg-blue-500 hover:bg-blue-600' 
+              : 'bg-gray-300 cursor-not-allowed'}
+          `}
+        >
+          {isLocalLoading ? (
+            <span className="flex items-center justify-center">
+              <Loader className="w-4 h-4 mr-2 animate-spin" />
+              Loading...
+            </span>
+          ) : localButtonText}
+        </PremiumButton>
       </div>
     </div>
   );
@@ -373,7 +397,6 @@ const InfoIcon = ({ className }: { className?: string }) => (
 );
 
 const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onClose }) => {
-  // Track focused section (from checklist guidance)
   const [focusedSection, setFocusedSection] = useState<string | null>(null);
   const [isLoadingHV, setIsLoadingHV] = useState(false);
   const [isLoadingDBYD, setIsLoadingDBYD] = useState(false);
@@ -382,6 +405,9 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [localBufferDistance, setLocalBufferDistance] = useState<number>(500);
   const { gridAnalysisRef } = useAnalysisController();
+
+  // Terrain layer opacity state
+  const [terrainOpacity, setTerrainOpacity] = useState<number>(0.7);
  
   const { 
     checks, 
@@ -406,15 +432,12 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
   const { generateTerrainGrid, generateAOFromFlightPlan } = useAreaOpsProcessor();
 
   const [localAnalyzing, setLocalAnalyzing] = useState(false);
-  // Combine context analyzing state with local analyzing state
   const isAnalyzing = aoIsAnalyzing || localAnalyzing;
   
-  // Track which checklist actions should focus sections
   useEffect(() => {
     if (guidedTarget) {
       const { action } = guidedTarget;
       
-      // Map actions to sections
       const actionToSection: Record<string, string> = {
         analyseTerrainInAO: 'terrainProfile',
         togglePowerlines: 'powerline',
@@ -429,12 +452,10 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
     }
   }, [guidedTarget]);
 
-  // Sync local buffer distance with context
   useEffect(() => {
     setLocalBufferDistance(bufferDistance ?? 500);
   }, [bufferDistance]);
 
-  // Clear success message after 3 seconds
   useEffect(() => {
     if (successMessage) {
       const timer = setTimeout(() => {
@@ -474,7 +495,6 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
     setLocalAnalyzing(true);
     
     try {
-      // Generate grid if needed (keep this part)
       let terrainGrid = aoTerrainGrid;
       if (!terrainGrid || terrainGrid.length === 0) {
         try {
@@ -490,65 +510,51 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
       
       console.log(`Running analysis on ${terrainGrid.length} grid cells`);
       
-      // Complete checklist item
       const checkId = checks.find(c => c.group === 'terrainProfile' && c.status === 'pending')?.id;
       if (checkId) completeCheck(checkId);
       
-      // Try using GridAnalysisController first
       if (gridAnalysisRef.current) {
         console.log("Using GridAnalysisController for terrain analysis");
         try {
           const results = await gridAnalysisRef.current.analyzeTerrainGrid(
             terrainGrid,
             {
-              referenceAltitude: 120, // Default value - could be configurable
-              onProgress: (progress) => {
-                // Handle progress updates if needed
-              },
-              // Add timeout to prevent hanging
-              timeout: 20000 // 20sec timeout
+              referenceAltitude: 120,
+              onProgress: (progress) => {},
+              timeout: 20000
             }
           );
           
-          // Check if visualization succeeded but we still have analysis results
           setSuccessMessage("Terrain analysis complete");
           return true;
         } catch (controllerError) {
           console.error("GridAnalysisController error:", controllerError);
           
-          // Special handling for stack overflow or timeout errors
           if (controllerError instanceof Error && 
               (controllerError.message.includes("Maximum call stack size") || 
               controllerError.message.includes("timeout"))) {
             
-            // Visualization might have failed but analysis could still succeed
             console.log("Attempting to continue with results despite visualization error");
             
-            // Check if we got analysis results despite the visualization error
             if (terrainAnalysisResult) {
               setSuccessMessage("Analysis complete, but visualization limited due to area size");
               return true;
             }
             
-            // If we have no results, try the context method as fallback
             console.log("Falling back to context method after controller visualization failure");
           } else {
-            // For other errors, just rethrow
             throw controllerError;
           }
         }
       }
       
-      // Fall back to the AreaOfOpsContext method
       console.log("Using context method for terrain analysis");
       try {
         const result = await analyzeTerrainElevation(120);
         
-        // Set appropriate success message
         if (result) {
           setSuccessMessage("Terrain analysis complete");
         } else if (aoGeometry) {
-          // If visualization worked but detailed analysis failed
           setSuccessMessage("Terrain visualization complete");
         } else {
           throw new Error("Analysis failed to produce results");
@@ -558,9 +564,7 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
       } catch (contextError) {
         console.error("Context method error:", contextError);
         
-        // Special handling for visualization errors
         if (contextError instanceof Error && contextError.message.includes("Maximum call stack size")) {
-          // We might still have useful information in terrainAnalysisResult
           if (terrainAnalysisResult) {
             setSuccessMessage("Analysis complete, but visualization limited due to area size");
             return true;
@@ -570,13 +574,11 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
         throw contextError;
       }
     } catch (error) {
-      // Improved error handling with more helpful messages
       let errorMessage = "Unknown error during analysis";
       
       if (error instanceof Error) {
         errorMessage = error.message;
         
-        // Provide more helpful messages for common errors
         if (error.message.includes("Maximum call stack size exceeded")) {
           errorMessage = "Visualization failed due to area size, but analysis may have succeeded. Click 'Reset and Try Again' to retry the visualization.";
         } else if (error.message.includes("timeout")) {
@@ -599,23 +601,28 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
     setLocalError(null);
     setSuccessMessage(null);
     
-    // Reset local state
     setLocalAnalyzing(false);
     setIsLoadingHV(false);
     setIsLoadingDBYD(false);
     setIsLoadingAirspace(false);
     
-    // Remove terrain grid visualization but keep the data
-    layerManager.removeLayer(layerManager.MAP_LAYERS.AOTERRAIN_GRID);
+    layerManager.removeLayer(MAP_LAYERS.AOTERRAIN_GRID);
     
     console.log("Terrain analysis reset, ready to try again");
     
-    // Optional: Notify user
     setSuccessMessage("Analysis reset. You can now try again.");
-    
   };
 
-
+  const handleTerrainOpacityChange = (opacity: number) => {
+    setTerrainOpacity(opacity);
+    const success = layerManager.updateLayerOpacity(MAP_LAYERS.AOTERRAIN_GRID, opacity);
+    if (success) {
+      trackEvent("terrain_opacity_changed", { 
+        panel: "TerrainAnalysisDashboard.tsx", 
+        opacity 
+      });
+    }
+  };
   /**
    * Handles toggling HV powerlines layer
    */
@@ -626,7 +633,6 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
     setSuccessMessage(null);
     
     try {
-      // Complete checklist item if available
       const checkId = checks.find(c => 
         c.group === 'hvPowerline' && 
         c.status === 'pending'
@@ -654,7 +660,6 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
     setSuccessMessage(null);
     
     try {
-      // Complete checklist item if available
       const checkId = checks.find(c => 
         c.group === 'localPowerline' && 
         c.status === 'pending'
@@ -685,7 +690,6 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
     setSuccessMessage(null);
     
     try {
-      // Complete checklist item if available
       const checkId = checks.find(c => 
         c.group === 'airspace' && 
         c.status === 'pending'
@@ -743,7 +747,6 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
         </div>
       )}
       
-      {/* Added AO Buffer Section */}
       {flightPlan && (
         <AOBufferSection 
           bufferDistance={localBufferDistance}
@@ -766,6 +769,10 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
           prerequisitesMessage={!aoGeometry ? "Please define an operating area first" : undefined}
           isLoading={isAnalyzing}
           featureId="terrain_analysis"
+          terrainOpacity={terrainOpacity}
+          onTerrainOpacityChange={handleTerrainOpacityChange}
+          isAnalyzing={isAnalyzing}
+          aoTerrainGrid={aoTerrainGrid}
         />
         
         {/* Powerline Analysis Section with Two Buttons */}

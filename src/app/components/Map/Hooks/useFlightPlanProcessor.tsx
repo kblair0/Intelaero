@@ -92,10 +92,9 @@ export const useFlightPlanProcessor = () => {
       }
       
       densified.push([lon, lat, elev + waypointAlt]);
-    }
-    
-    return densified;
-  }, [map]);
+    }        
+        return densified;
+      }, [map]);
 
 /**
  * Updates a flight plan with real terrain elevations
@@ -148,19 +147,33 @@ const updateFlightPlanElevations = useCallback(async (plan: FlightPlanData): Pro
   const segments: Array<Array<{ waypoint: WaypointData; coordinate: [number, number, number]; elevation: number }>> = [];
   let currentSegment: Array<{ waypoint: WaypointData; coordinate: [number, number, number]; elevation: number }> = [];
   
-  waypoints.forEach((wp, idx) => {
-    if (idx >= coordinates.length) return;
-    
-    const coord = coordinates[idx];
-    const elevation = waypointElevations[idx];
-    const item = { waypoint: wp, coordinate: coord, elevation };
-    
-    if (currentSegment.length && 
-        wp.altitudeMode !== currentSegment[currentSegment.length - 1].waypoint.altitudeMode) {
-      segments.push(currentSegment);
-      currentSegment = [item];
+  const navigationIndices = updatedPlan.properties.metadata?.metadata?.navigationIndices || [];
+  console.log(`[FlightPlanProcessor] Navigation indices from metadata:`, navigationIndices);
+  console.log(`[FlightPlanProcessor] Total waypoints: ${waypoints.length}, Total coordinates: ${coordinates.length}`);
+
+  // Build coordinate index mapping for navigation waypoints only
+  let coordinateIndex = 0;
+  waypoints.forEach((wp, waypointIndex) => {
+    // Only process waypoints that are navigation commands (have coordinates)
+    if (navigationIndices.includes(wp.index) && coordinateIndex < coordinates.length) {
+      const coord = coordinates[coordinateIndex];
+      const elevation = waypointElevations[coordinateIndex];
+      
+      console.log(`[FlightPlanProcessor] ✅ Processing navigation waypoint ${wp.index} (command ${wp.commandType}) with alt=${wp.originalAltitude}`);
+      
+      const item = { waypoint: wp, coordinate: coord, elevation };
+      
+      if (currentSegment.length && 
+          wp.altitudeMode !== currentSegment[currentSegment.length - 1].waypoint.altitudeMode) {
+        segments.push(currentSegment);
+        currentSegment = [item];
+      } else {
+        currentSegment.push(item);
+      }
+      
+      coordinateIndex++; // Only increment for navigation waypoints
     } else {
-      currentSegment.push(item);
+      console.log(`[FlightPlanProcessor] ⚠️ Skipping non-navigation waypoint ${wp.index} (command ${wp.commandType}, alt=${wp.originalAltitude})`);
     }
   });
   
@@ -259,6 +272,20 @@ const updateFlightPlanElevations = useCallback(async (plan: FlightPlanData): Pro
       const newPlan: FlightPlanData = structuredClone(flightPlan);
       const coordinates = newPlan.features[0].geometry.coordinates as [number, number, number][];
       const waypoints = newPlan.features[0].properties.waypoints;
+
+            console.log(`[FlightPlanProcessor] Processing ${waypoints.length} waypoints`);
+      console.log(`[FlightPlanProcessor] Waypoint 6 data:`, waypoints[5] ? {
+        index: waypoints[5].index,
+        altitudeMode: waypoints[5].altitudeMode,
+        originalAltitude: waypoints[5].originalAltitude,
+        coordinate: coordinates[5]
+      } : 'NOT FOUND');
+      console.log(`[FlightPlanProcessor] Waypoint 8 data:`, waypoints[7] ? {
+        index: waypoints[7].index,
+        altitudeMode: waypoints[7].altitudeMode,
+        originalAltitude: waypoints[7].originalAltitude,
+        coordinate: coordinates[7]
+      } : 'NOT FOUND');
       
       // Apply placeholder elevation of 25m for each coordinate
       // This is a reasonable default for urban areas like Sydney

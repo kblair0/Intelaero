@@ -140,6 +140,34 @@ class LayerManager {
   }
 
   /**
+     * Update the opacity of a terrain layer
+     * @param layerId - The layer ID to update
+     * @param opacity - Opacity value between 0 and 1
+     * @returns boolean indicating success
+     */
+    updateLayerOpacity(layerId: string, opacity: number): boolean {
+      if (!this.ensureMap()) return false;
+      
+      try {
+        if (!this.map!.getLayer(layerId)) {
+          console.warn(`Layer ${layerId} does not exist in the map`);
+          return false;
+        }
+        
+        // Clamp opacity between 0 and 1
+        const clampedOpacity = Math.max(0, Math.min(1, opacity));
+        
+        // Update the fill-opacity paint property
+        this.map!.setPaintProperty(layerId, 'fill-opacity', clampedOpacity);
+        
+        return true;
+      } catch (error) {
+        console.error(`Error updating opacity for layer ${layerId}:`, error);
+        return false;
+      }
+    }
+
+  /**
    * Remove a layer and its source
    */
   removeLayer(layerId: string): boolean {
