@@ -38,6 +38,15 @@ const VALID_PRODUCTS = {
   }
 };
 
+// DEBUG: Check TierLevel enum values
+console.log('=== TIERLEVEL DEBUG ===');
+console.log('TierLevel object:', TierLevel);
+console.log('TierLevel.FREE:', TierLevel.FREE);
+console.log('TierLevel.COMMUNITY:', TierLevel.COMMUNITY);
+console.log('TierLevel.COMMERCIAL:', TierLevel.COMMERCIAL);
+console.log('VALID_PRODUCTS:', VALID_PRODUCTS);
+console.log('=== END TIERLEVEL DEBUG ===');
+
 export async function GET(request: NextRequest) {
   return NextResponse.json({ 
     message: 'Webhook endpoint is working!',

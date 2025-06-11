@@ -133,6 +133,7 @@ export async function storeAccessCode(
 
 /**
  * Retrieves access code metadata
+ * FIXED: Handles both string and object responses from Vercel KV
  */
 export async function getAccessCode(
   codeHash: string
@@ -140,9 +141,27 @@ export async function getAccessCode(
   const key = `${CODE_PREFIX}${codeHash}`;
   
   if (await isKVAvailable()) {
-    // Get from Vercel KV
-    const data = await kv.get<string>(key);
-    return data ? JSON.parse(data) : null;
+    // Get from Vercel KV - remove type assertion since it can return objects
+    const data = await kv.get(key);
+    
+    if (!data) return null;
+    
+    // Handle both string and object responses
+    if (typeof data === 'string') {
+      try {
+        return JSON.parse(data);
+      } catch (error) {
+        console.error('Error parsing stored JSON:', error);
+        console.error('Invalid JSON data:', data);
+        return null;
+      }
+    } else if (typeof data === 'object' && data !== null) {
+      // Data is already an object, return it directly
+      return data as AccessCodeMetadata;
+    } else {
+      console.error('Unexpected data type from KV:', typeof data, data);
+      return null;
+    }
   } else {
     // Get from local encrypted file
     const storage = await getLocalStorage();
@@ -152,6 +171,7 @@ export async function getAccessCode(
 
 /**
  * Updates access code metadata
+ * FIXED: Improved error handling and JSON processing
  */
 export async function updateAccessCode(
   codeHash: string,
@@ -161,10 +181,27 @@ export async function updateAccessCode(
   
   if (await isKVAvailable()) {
     // Update in Vercel KV
-    const data = await kv.get<string>(key);
+    const data = await kv.get(key);
     if (!data) return false;
     
-    const metadata = { ...JSON.parse(data), ...updates };
+    let existingMetadata: AccessCodeMetadata;
+    
+    // Handle both string and object responses
+    if (typeof data === 'string') {
+      try {
+        existingMetadata = JSON.parse(data);
+      } catch (error) {
+        console.error('Error parsing existing JSON during update:', error);
+        return false;
+      }
+    } else if (typeof data === 'object' && data !== null) {
+      existingMetadata = data as AccessCodeMetadata;
+    } else {
+      console.error('Unexpected data type during update:', typeof data);
+      return false;
+    }
+    
+    const metadata = { ...existingMetadata, ...updates };
     await kv.set(key, JSON.stringify(metadata));
     return true;
   } else {

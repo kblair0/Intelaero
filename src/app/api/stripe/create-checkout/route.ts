@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
 
     const price = prices.data[0];
 
-    // Map productId to tierLevel - MOVED HERE TO FIX UNDEFINED ISSUE
+    // Map productId to tierLevel - FIXED TO PREVENT UNDEFINED
     console.log('Available TierLevel values:', { FREE: TierLevel.FREE, COMMUNITY: TierLevel.COMMUNITY, COMMERCIAL: TierLevel.COMMERCIAL });
 
     // Define valid product IDs for each tier
@@ -85,21 +85,27 @@ export async function POST(request: NextRequest) {
       'prod_NFFWRYSXrISHVK', // Full Droneview Commercial Subscription
       'prod_SRKdN515lrJ343', // Conference Demo - Free
     ];
-    
-    // First, ensure we have a valid TierLevel by using a default value
+
+    // Ensure we have a valid TierLevel by using explicit checks
     let tierLevel: TierLevel;
     if (COMMUNITY_PRODUCT_IDS.includes(productId)) {
-      tierLevel = TierLevel.COMMUNITY; // Assign Community tier for recognized Community product IDs
+      tierLevel = TierLevel.COMMUNITY;
     } else if (COMMERCIAL_PRODUCT_IDS.includes(productId)) {
-      tierLevel = TierLevel.COMMERCIAL; // Assign Commercial tier for recognized Commercial product IDs
+      tierLevel = TierLevel.COMMERCIAL;
     } else {
-      // Fallback to FREE tier for unrecognized product IDs
-      tierLevel = TierLevel.FREE;
-      console.log('Warning: Unknown product ID, defaulting to FREE tier:', productId);
+      // Fallback to COMMUNITY tier for unrecognized product IDs
+      tierLevel = TierLevel.COMMUNITY;
+      console.log('Warning: Unknown product ID, defaulting to COMMUNITY tier:', productId);
     }
-    
+
     console.log('Input productId:', productId);
     console.log('Mapped tierLevel:', tierLevel);
+
+    // Validate tierLevel is not undefined before proceeding
+    if (tierLevel === undefined || tierLevel === null) {
+      console.error('ERROR: tierLevel is undefined! Using COMMUNITY as fallback');
+      tierLevel = TierLevel.COMMUNITY;
+    }
 
     // Define success and cancel URLs
     const origin = request.headers.get('origin') || process.env.APP_URL || 'http://localhost:3000';
@@ -122,10 +128,10 @@ export async function POST(request: NextRequest) {
       cancel_url,
       metadata: {
         productId,
-        // Make sure tierLevel is never undefined before calling toString()
-        tierLevel: String(tierLevel),
+        // Ensure tierLevel is valid before converting to string
+        tierLevel: tierLevel !== undefined && tierLevel !== null ? String(tierLevel) : String(TierLevel.COMMUNITY),
         featureId: featureId || '',
-        validityDays: validityDays, // Use extracted validityDays
+        validityDays: validityDays,
       },
     });
 
