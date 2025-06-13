@@ -60,6 +60,7 @@ const WelcomeMessage = lazy(() => import("./components/WelcomeMessage"));
 const MapSelectionPanel = lazy(() => import("./components/AO/MapSelectionPanel"));
 const ToolsDashboard = lazy(() => import("./components/VerificationToolbar/ToolsDashboard"));
 const CompactDisclaimerWidget = lazy(() => import("./components/CompactDisclaimerWidget"));
+const ElegantPlaceholder = lazy(() => import("./components/UI/ElegantPlaceholder"));
 
 // ========================================
 // LOADING COMPONENTS (unchanged)
@@ -239,27 +240,13 @@ const HomeContent = () => {
             </div>
           </div>
 
-          {/* Right Sidebar - RESPONSIVE MOBILE IMPROVEMENTS */}
-          <div className="w-80 sm:w-72 md:w-80 h-full shrink-0 max-h-screen overflow-y-auto flex p-1 mr-2 flex-col gap-4 pb-4 
-                          landscape:w-64 landscape:gap-2 landscape:p-0.5 landscape:mr-1">
-            {/* Plan Verification Section */}
-            <div className="w-full z-0">
-              <Card className="w-full rounded-l-xl">
-                <div className="space-y-4 h-full flex flex-col landscape:space-y-2">
-                  <h3 className="text-lg font-medium text-gray-900 landscape:text-base">
-                    Terrain and Visibility Toolbar
-                  </h3>
-                  <div className="flex-1 overflow-y-auto">
-                    <Suspense fallback={<AnalysisLoadingSpinner />}>
-                      <ToolsDashboard onTogglePanel={togglePanel} />
-                    </Suspense>
-                  </div>
-                </div>
-              </Card>
-            </div>
-
-            {/* Map Selection Panel */}
-            {isMapSelectionMode && (
+          {/* Right Sidebar - FIXED CONDITIONAL RENDERING FOR MAP SELECTION */}
+          <div className="w-80 h-full shrink-0 max-h-screen overflow-y-auto flex p-1 mr-2 flex-col gap-4 pb-4 
+                          landscape:w-72 landscape:gap-2 landscape:p-0.5 landscape:mr-1">
+            
+            {/* Conditional Content Based on User State - PRIORITY ORDER FIXED */}
+            {isMapSelectionMode ? (
+              /* Map Selection Mode - HIGHEST PRIORITY */
               <div className="w-full z-10">
                 <Card className="w-full rounded-l-xl">
                   <div className="space-y-3 h-full flex flex-col landscape:space-y-2">
@@ -288,16 +275,42 @@ const HomeContent = () => {
                   </div>
                 </Card>
               </div>
-            )}
-
-            {/* Checklist Section */}
-            {(flightPlan || aoGeometry) && !showWizard && !showUploader && !showAreaOpsUploader && (
-              <div className="w-full relative z-10">
+            ) : !flightPlan && !aoGeometry ? (
+              /* Elegant Placeholder - Shows when no data is loaded */
+              <div className="w-full z-0 h-full">
                 <Suspense fallback={<AnalysisLoadingSpinner />}>
-                  <ChecklistComponent className="relative" togglePanel={togglePanel} />
+                  <ElegantPlaceholder className="h-full" />
                 </Suspense>
               </div>
-            )}            
+            ) : (
+              /* Working Tools - Shows when flight plan or AO is loaded */
+              <>
+                {/* Plan Verification Section */}
+                <div className="w-full z-0">
+                  <Card className="w-full rounded-l-xl">
+                    <div className="space-y-4 h-full flex flex-col landscape:space-y-2">
+                      <h3 className="text-lg font-medium text-gray-900 landscape:text-base">
+                        Terrain and Visibility Toolbar
+                      </h3>
+                      <div className="flex-1 overflow-y-auto">
+                        <Suspense fallback={<AnalysisLoadingSpinner />}>
+                          <ToolsDashboard onTogglePanel={togglePanel} />
+                        </Suspense>
+                      </div>
+                    </div>
+                  </Card>
+                </div>
+
+                {/* Checklist Section */}
+                {(flightPlan || aoGeometry) && !showWizard && !showUploader && !showAreaOpsUploader && (
+                  <div className="w-full relative z-10">
+                    <Suspense fallback={<AnalysisLoadingSpinner />}>
+                      <ChecklistComponent className="relative" togglePanel={togglePanel} />
+                    </Suspense>
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           {/* Analysis Panels - MOBILE RESPONSIVE ADJUSTMENTS */}

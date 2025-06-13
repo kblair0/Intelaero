@@ -430,6 +430,7 @@ const trackFlightPlan = async (
 interface FlightPlanUploaderProps {
   onPlanUploaded?: (fp: FlightPlanData) => void;
   onClose?: () => void;
+  compact?: boolean;
 }
 
 /**
@@ -472,7 +473,8 @@ const ProgressIndicator = ({ progress, currentStage }: { progress: number, curre
 /** IMPROVED FlightPlanUploader with better UX and layout */
 const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({
   onPlanUploaded,
-  onClose
+  onClose,
+  compact = false
 }) => {
 const [status, setStatus] = useState<"idle" | "uploading" | "processed" | "error">("idle");
   const [fileName, setFileName] = useState<string | null>(null);
@@ -671,24 +673,30 @@ const [status, setStatus] = useState<"idle" | "uploading" | "processed" | "error
   return (
     <div className="w-full bg-white py-2">
       {/* Header section */}
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-gray-800">Upload Flight Plan</h3>
-          <p className="text-sm text-gray-600">Upload your drone flight path for analysis</p>
+      {!compact ? (
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-800">Upload Flight Plan</h3>
+            <p className="text-sm text-gray-600">Upload your drone flight path for analysis</p>
+          </div>
+          <div className="flex items-center space-x-1">
+            <FileBadge type=".waypoints" />
+            <FileBadge type=".geojson" />
+            <FileBadge type=".kml" />
+            <FileBadge type=".kmz" />
+            <button 
+              className="ml-2 text-blue-600 hover:text-blue-800" 
+              aria-label="File format information"
+            >
+              <Info className="h-5 w-5" />
+            </button>
+          </div>
         </div>
-        <div className="flex items-center space-x-1">
-          <FileBadge type=".waypoints" />
-          <FileBadge type=".geojson" />
-          <FileBadge type=".kml" />
-          <FileBadge type=".kmz" />
-          <button 
-            className="ml-2 text-blue-600 hover:text-blue-800" 
-            aria-label="File format information"
-          >
-            <Info className="h-5 w-5" />
-          </button>
+      ) : (
+        <div className="mb-2">
+          <p className="text-xs text-gray-600">Drag & drop or click to upload (.waypoints, .geojson, .kml, .kmz)</p>
         </div>
-      </div>
+      )}
   
       <MapLoadingGuard
         fallback={
@@ -710,7 +718,7 @@ const [status, setStatus] = useState<"idle" | "uploading" | "processed" | "error
               status === "processed" ? "border-green-300 bg-green-50" : 
               "border-gray-300 bg-gray-50 hover:border-blue-300 hover:bg-blue-50"}
           `}
-          style={{ minHeight: "180px" }}
+          style={{ minHeight: compact ? "120px" : "180px" }}
         >
           <input {...getInputProps()} />
           
@@ -776,29 +784,45 @@ const [status, setStatus] = useState<"idle" | "uploading" | "processed" | "error
         </div>
   
         {/* Action buttons */}
-        <div className="mt-5 flex justify-center gap-4">
-          <button
-            onClick={() => {
-              trackEvent("example_geojson_click", { panel: "flightplanuploader.tsx" });
-              loadExample("/example.geojson");
-            }}
-            className="flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-md shadow-sm hover:bg-blue-700 transition-all hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-blue-300"
-            disabled={status === "uploading"}
-          >
-            <FileText className="w-5 h-5" />
-            <span>Load Example 1 (GeoJSON)</span>
-          </button>
-          <button
-            onClick={() => {
-              trackEvent("example_waypoints_click", { panel: "flightplanuploader.tsx" });
-              loadExample("/example2.waypoints");
-            }}
-            className="flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-md shadow-sm hover:bg-blue-700 transition-all hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-blue-300"
-            disabled={status === "uploading"}
-          >
-            <FileText className="w-5 h-5" />
-            <span>Load Example 2 (Waypoints)</span>
-          </button>
+        <div className={`${compact ? 'mt-3' : 'mt-5'} flex justify-center gap-4`}>
+          {!compact ? (
+            <>
+              <button
+                onClick={() => {
+                  trackEvent("example_geojson_click", { panel: "flightplanuploader.tsx" });
+                  loadExample("/example.geojson");
+                }}
+                className="flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-md shadow-sm hover:bg-blue-700 transition-all hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-blue-300"
+                disabled={status === "uploading"}
+              >
+                <FileText className="w-5 h-5" />
+                <span>Load Example 1 (GeoJSON)</span>
+              </button>
+              <button
+                onClick={() => {
+                  trackEvent("example_waypoints_click", { panel: "flightplanuploader.tsx" });
+                  loadExample("/example2.waypoints");
+                }}
+                className="flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-md shadow-sm hover:bg-blue-700 transition-all hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-blue-300"
+                disabled={status === "uploading"}
+              >
+                <FileText className="w-5 h-5" />
+                <span>Load Example 2 (Waypoints)</span>
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => {
+                trackEvent("example_geojson_click", { panel: "flightplanuploader.tsx", compact: true });
+                loadExample("/example.geojson");
+              }}
+              className="flex items-center justify-center gap-1 bg-blue-600 text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-blue-700 transition-colors"
+              disabled={status === "uploading"}
+            >
+              <FileText className="w-4 h-4" />
+              <span>Try Example</span>
+            </button>
+          )}
         </div>
       </MapLoadingGuard>
     </div>

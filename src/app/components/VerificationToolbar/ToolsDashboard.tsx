@@ -204,9 +204,6 @@ const ToolsDashboard: React.FC<ToolsDashboardProps & { activePanel?: string | nu
           }}
         />
       </div>
-
-      <CompactDisclaimerWidget />
-
       {/* Experimental Features Toggle */}
       <div className="flex justify-center py-1">
         <button

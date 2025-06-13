@@ -28,6 +28,7 @@ import {
 interface AreaOpsUploaderProps {
   onClose?: () => void;
   onAOUploaded?: (aoData: GeoJSON.FeatureCollection) => void;
+  compact?: boolean;
 }
 
 /**
@@ -39,7 +40,11 @@ const FileBadge = ({ type }: { type: string }) => (
   </span>
 );
 
-const AreaOpsUploader: React.FC<AreaOpsUploaderProps> = ({ onClose, onAOUploaded }) => {
+const AreaOpsUploader: React.FC<AreaOpsUploaderProps> = ({ 
+  onClose, 
+  onAOUploaded,
+  compact = false
+}) => {
   // Get KML processor from hook
   const { processKML } = useAreaOpsProcessor();
   
@@ -158,7 +163,7 @@ const AreaOpsUploader: React.FC<AreaOpsUploaderProps> = ({ onClose, onAOUploaded
             fileUploadStatus === "processed" ? "border-green-300 bg-green-50" : 
             "border-gray-300 bg-gray-50 hover:border-blue-300 hover:bg-blue-50"}
         `}
-        style={{ minHeight: "180px" }}
+        style={{ minHeight: compact ? "120px" : "180px" }}
       >
         <input {...getInputProps()} />
         
@@ -226,22 +231,25 @@ const AreaOpsUploader: React.FC<AreaOpsUploaderProps> = ({ onClose, onAOUploaded
       </div>
 
       {/* Action button for loading example */}
-      <div className="mt-5 flex justify-center">
+      <div className={`${compact ? 'mt-3' : 'mt-5'} flex justify-center`}>
         <button
           onClick={loadExampleAOFromFile}
-          className="flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-md shadow-sm hover:bg-blue-700 transition-all hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-blue-300"
+          className={`flex items-center justify-center gap-2 bg-blue-600 text-white rounded-md shadow-sm hover:bg-blue-700 transition-all hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-blue-300 ${
+            compact ? 'px-3 py-1.5 text-xs' : 'px-4 py-2'
+          }`}
           disabled={fileUploadStatus === "uploading"}
         >
-          <Map className="w-5 h-5" />
-          <span>Load Example Area</span>
+          <Map className={compact ? "w-4 h-4" : "w-5 h-5"} />
+          <span>{compact ? "Try Example" : "Load Example Area"}</span>
         </button>
       </div>
     </>
   );
 
   return (
-    <div className="w-full bg-white py-2">
-      {/* Header section */}
+    <div className={`w-full bg-white ${compact ? 'py-1' : 'py-2'}`}>
+    {/* Header section */}
+    {!compact ? (
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold text-gray-800">Upload Area of Operations</h3>
@@ -257,6 +265,11 @@ const AreaOpsUploader: React.FC<AreaOpsUploaderProps> = ({ onClose, onAOUploaded
           </button>
         </div>
       </div>
+    ) : (
+      <div className="mb-2">
+        <p className="text-xs text-gray-600">Drag & drop or click to upload KML file</p>
+      </div>
+    )}
 
       {/* File upload content */}
       {renderFileUploadContent()}

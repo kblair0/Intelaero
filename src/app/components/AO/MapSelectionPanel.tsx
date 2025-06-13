@@ -38,6 +38,7 @@ import {
   ChevronLeft,
   Info
 } from "lucide-react";
+import { useDraggableMapPoint } from "../../hooks/useDraggableMapPoint";
 
 interface MapSelectionPanelProps {
   mode: "map" | "search";
@@ -73,7 +74,7 @@ const MapSelectionPanel: React.FC<MapSelectionPanelProps> = ({
   const centerId = "temp-center-point";
   
   /**
-   * Shows temporary circle preview on the map
+   * Shows temporary circle preview on the map (without drag styling)
    */
   const showCirclePreview = useCallback((center: [number, number], radius: number) => {
     if (!map) return;
@@ -143,6 +144,39 @@ const MapSelectionPanel: React.FC<MapSelectionPanelProps> = ({
       });
     }
   }, [map, centerId, circleLayerId]);
+
+  // Draggable point hook
+  const { isDragging, isHovering } = useDraggableMapPoint({
+    map,
+    centerPoint,
+    radius,
+    onCenterChange: setCenterPoint,
+    onPreviewUpdate: showCirclePreview,
+    enabled: centerPoint !== null && status !== "processing" && status !== "complete",
+    centerId
+  });
+
+  /**
+   * Updates drag-specific visual styling
+   */
+  const updateDragStyling = useCallback(() => {
+    if (!map) return;
+    
+    // Update circle styling based on drag state
+    if (map.getLayer(circleLayerId)) {
+      map.setPaintProperty(circleLayerId, "fill-opacity", isDragging ? 0.3 : 0.2);
+    }
+    
+    if (map.getLayer(`${circleLayerId}-outline`)) {
+      map.setPaintProperty(`${circleLayerId}-outline`, "line-color", isDragging ? "#ef4444" : "#3b82f6");
+      map.setPaintProperty(`${circleLayerId}-outline`, "line-width", isDragging ? 3 : 2);
+    }
+  }, [map, circleLayerId, isDragging]);
+
+  // Effect to update styling when drag state changes
+  useEffect(() => {
+    updateDragStyling();
+  }, [updateDragStyling]);
   
   /**
    * Sets up map click listener for point selection
@@ -409,61 +443,90 @@ const MapSelectionPanel: React.FC<MapSelectionPanelProps> = ({
    * Renders map selection content
    */
   const renderMapSelectionContent = () => (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {status === "idle" || status === "selecting" ? (
-        <div className="p-3 bg-blue-50 border border-blue-100 rounded-md">
+        <div className="p-2 bg-blue-50 border border-blue-100 rounded-md">
           <div className="flex items-start">
-            <MapPin className="w-5 h-5 text-blue-500 mt-0.5 mr-2 flex-shrink-0" />
-            <p className="text-sm text-blue-800">
+            <MapPin className="w-4 h-4 text-blue-500 mt-0.5 mr-2 flex-shrink-0" />
+            <p className="text-xs text-blue-800">
               {status === "selecting" 
-                ? "Click anywhere on the map to set the center point of your area" 
-                : "Click the button below to start selecting a point on the map"}
+                ? "Click anywhere on the map to set center point" 
+                : "Click to start selecting a point on the map"}
             </p>
           </div>
           
           {status === "idle" && (
             <button
               onClick={setupMapClickListener}
-              className="mt-3 w-full flex items-center justify-center gap-2 bg-blue-600 text-white px-3 py-2 rounded-md hover:bg-blue-700 transition-colors"
+              className="mt-2 w-full flex items-center justify-center gap-1 bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700 transition-colors"
             >
-              <MapPin className="w-4 h-4" />
+              <MapPin className="w-3 h-3" />
               Start Selection
             </button>
           )}
           
           {status === "selecting" && (
             <div className="flex items-center mt-2">
-              <RotateCw className="w-4 h-4 text-blue-500 animate-spin mr-2" />
-              <span className="text-sm text-blue-600">Waiting for map click...</span>
+              <RotateCw className="w-3 h-3 text-blue-500 animate-spin mr-1" />
+              <span className="text-xs text-blue-600">Waiting for click...</span>
             </div>
           )}
         </div>
       ) : null}
       
-      {/* Point selected, adjust radius */}
+      {/* Point selected, adjust radius - COMPACT */}
       {centerPoint && status !== "processing" && status !== "complete" && (
-        <div className="space-y-3">
-          <div className="p-3 bg-green-50 border border-green-100 rounded-md">
+        <div className="space-y-2">
+          <div className={`p-2 border rounded-md ${
+            isDragging 
+              ? 'bg-blue-50 border-blue-200' 
+              : isHovering
+                ? 'bg-blue-50 border-blue-100'
+                : 'bg-green-50 border-green-100'
+          }`}>
             <div className="flex items-start">
-              <CheckCircle className="w-5 h-5 text-green-500 mt-0.5 mr-2 flex-shrink-0" />
+              <CheckCircle className={`w-4 h-4 mt-0.5 mr-2 flex-shrink-0 ${
+                isDragging 
+                  ? 'text-blue-500' 
+                  : isHovering
+                    ? 'text-blue-500'
+                    : 'text-green-500'
+              }`} />
               <div>
-                <p className="text-sm font-medium text-green-800">Center point selected</p>
-                <p className="text-xs text-green-700 mt-1">
-                  {centerPoint[0].toFixed(6)}, {centerPoint[1].toFixed(6)}
+                <p className={`text-xs font-medium ${
+                  isDragging 
+                    ? 'text-blue-800' 
+                    : isHovering
+                      ? 'text-blue-800'
+                      : 'text-green-800'
+                }`}>
+                  {isDragging ? 'Dragging point...' : isHovering ? 'Point selected (draggable)' : 'Point selected'}
                 </p>
+                <p className={`text-xs ${
+                  isDragging 
+                    ? 'text-blue-700' 
+                    : isHovering
+                      ? 'text-blue-700'
+                      : 'text-green-700'
+                }`}>
+                  {centerPoint[0].toFixed(4)}, {centerPoint[1].toFixed(4)}
+                </p>
+                {isHovering && !isDragging && (
+                  <p className="text-xs text-blue-600 mt-1">Click and drag to move</p>
+                )}
               </div>
             </div>
           </div>
 
-          {/* Radius adjustment */}
-          <div className="space-y-2">
+          {/* Compact Radius adjustment */}
+          <div className="space-y-1">
             <div className="flex justify-between items-center">
-              <label htmlFor="radius-slider" className="text-sm font-medium text-gray-700">
-                Radius: {radius} meters
+              <label htmlFor="radius-slider" className="text-xs font-medium text-gray-700">
+                Radius: {radius}m
               </label>
               <div className="flex items-center gap-1 text-xs text-gray-500">
                 <Circle className="w-3 h-3 text-blue-500" />
-                <span>{(Math.PI * Math.pow(radius / 1000, 2)).toFixed(2)} km²</span>
+                <span>{(Math.PI * Math.pow(radius / 1000, 2)).toFixed(1)}km²</span>
               </div>
             </div>
             <input
@@ -474,71 +537,71 @@ const MapSelectionPanel: React.FC<MapSelectionPanelProps> = ({
               step="100"
               value={radius}
               onChange={(e) => setRadius(Number(e.target.value))}
-              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+              className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer"
             />
-            <div className="flex justify-between text-xs text-gray-500">
+            <div className="flex justify-between text-xs text-gray-400">
               <span>100m</span>
-              <span>1km</span>
+              <span>2.5km</span>
               <span>5km</span>
             </div>
           </div>
         </div>
       )}
       
-      {/* Processing state */}
+      {/* Compact Processing state */}
       {status === "processing" && (
-        <div className="p-3 bg-blue-50 border border-blue-100 rounded-md flex items-center">
-          <RotateCw className="w-5 h-5 text-blue-500 animate-spin mr-2" />
-          <span className="text-sm text-blue-700">Creating area of operations...</span>
+        <div className="p-2 bg-blue-50 border border-blue-100 rounded-md flex items-center">
+          <RotateCw className="w-4 h-4 text-blue-500 animate-spin mr-2" />
+          <span className="text-xs text-blue-700">Creating area...</span>
         </div>
       )}
       
-      {/* Completion state */}
+      {/* Compact Completion state */}
       {status === "complete" && (
-        <div className="p-3 bg-green-50 border border-green-100 rounded-md flex items-center">
-          <CheckCircle className="w-5 h-5 text-green-500 mr-2" />
-          <span className="text-sm text-green-700">Area created successfully!</span>
+        <div className="p-2 bg-green-50 border border-green-100 rounded-md flex items-center">
+          <CheckCircle className="w-4 h-4 text-green-500 mr-2" />
+          <span className="text-xs text-green-700">Area created!</span>
         </div>
       )}
       
-      {/* Error state */}
+      {/* Compact Error state */}
       {status === "error" && (
-        <div className="p-3 bg-red-50 border border-red-100 rounded-md">
+        <div className="p-2 bg-red-50 border border-red-100 rounded-md">
           <div className="flex items-center">
-            <XCircle className="w-5 h-5 text-red-500 mr-2" />
-            <span className="text-sm text-red-700">Error creating area</span>
+            <XCircle className="w-4 h-4 text-red-500 mr-2" />
+            <span className="text-xs text-red-700">Error creating area</span>
           </div>
           {errorMessage && (
-            <p className="text-xs text-red-600 mt-1 pl-7">{errorMessage}</p>
+            <p className="text-xs text-red-600 mt-1">{errorMessage}</p>
           )}
         </div>
       )}
       
-      {/* Action buttons */}
+      {/* Compact Action buttons */}
       {status !== "complete" && (
-        <div className="flex justify-between">
+        <div className="flex justify-between gap-2">
           <button
             onClick={onCancel}
-            className="px-3 py-1.5 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors text-sm flex items-center gap-1"
+            className="px-2 py-1 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 transition-colors text-xs flex items-center gap-1"
           >
-            <ChevronLeft className="w-4 h-4" />
+            <ChevronLeft className="w-3 h-3" />
             Cancel
           </button>
           
           {centerPoint && status !== "processing" && (
-            <div className="flex gap-2">
+            <div className="flex gap-1">
               <button
                 onClick={resetSelection}
-                className="px-3 py-1.5 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors text-sm"
+                className="px-2 py-1 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 transition-colors text-xs"
               >
                 Reset
               </button>
               <button
                 onClick={generateCircleAO}
-                className="px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm flex items-center gap-1"
+                className="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-xs flex items-center gap-1"
               >
-                <Circle className="w-4 h-4" />
-                Create Area
+                <Circle className="w-3 h-3" />
+                Create
               </button>
             </div>
           )}
@@ -551,21 +614,21 @@ const MapSelectionPanel: React.FC<MapSelectionPanelProps> = ({
    * Renders location search content
    */
   const renderSearchContent = () => (
-    <div className="space-y-4">
-      {/* Search input */}
+    <div className="space-y-3">
+      {/* Compact Search input */}
       <div>
-        <label htmlFor="location-search" className="block text-sm font-medium text-gray-700 mb-1">
-          Search for Location
+        <label htmlFor="location-search" className="block text-xs font-medium text-gray-700 mb-1">
+          Search Location
         </label>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <div className="relative flex-1">
             <input
               id="location-search"
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Enter address, city, or place name..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              placeholder="Enter location..."
+              className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   handleLocationSearch();
@@ -573,46 +636,45 @@ const MapSelectionPanel: React.FC<MapSelectionPanelProps> = ({
               }}
             />
             {isSearching && (
-              <div className="absolute right-3 top-2.5">
-                <RotateCw className="w-4 h-4 text-blue-500 animate-spin" />
+              <div className="absolute right-2 top-1.5">
+                <RotateCw className="w-3 h-3 text-blue-500 animate-spin" />
               </div>
             )}
           </div>
           <button
             onClick={handleLocationSearch}
             disabled={isSearching || !searchQuery.trim()}
-            className={`px-3 py-2 rounded-md text-white flex items-center gap-1 transition-colors text-sm ${
+            className={`px-2 py-1 rounded text-white flex items-center gap-1 transition-colors text-xs ${
               isSearching || !searchQuery.trim()
                 ? "bg-gray-400 cursor-not-allowed"
                 : "bg-blue-600 hover:bg-blue-700"
             }`}
           >
-            <Search className="w-4 h-4" />
-            Search
+            <Search className="w-3 h-3" />
           </button>
         </div>
       </div>
 
-      {/* Search results */}
+      {/* Compact Search results - LIMITED HEIGHT */}
       {searchResults.length > 0 && !centerPoint && (
-        <div className="border border-gray-200 rounded-md overflow-hidden max-h-48">
-          <div className="bg-gray-50 px-3 py-1.5 border-b border-gray-200">
-            <h4 className="text-xs font-medium text-gray-700">Search Results</h4>
+        <div className="border border-gray-200 rounded overflow-hidden">
+          <div className="bg-gray-50 px-2 py-1 border-b border-gray-200">
+            <h4 className="text-xs font-medium text-gray-700">Results</h4>
           </div>
-          <div className="overflow-y-auto max-h-36">
-            {searchResults.map((result, index) => (
+          <div className="overflow-y-auto max-h-24"> {/* LIMITED HEIGHT */}
+            {searchResults.slice(0, 3).map((result, index) => ( /* LIMIT TO 3 RESULTS */
               <button
                 key={result.place_id || index}
-                className="w-full px-2 py-1.5 text-left hover:bg-blue-50 transition-colors border-b border-gray-100 last:border-b-0"
+                className="w-full px-2 py-1 text-left hover:bg-blue-50 transition-colors border-b border-gray-100 last:border-b-0"
                 onClick={() => handleSelectLocation(result)}
               >
                 <div className="flex items-start">
-                  <MapPin className="w-3 h-3 text-gray-500 mt-1 mr-1 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-800 line-clamp-1">
+                  <MapPin className="w-3 h-3 text-gray-500 mt-0.5 mr-1 flex-shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-gray-800 truncate">
                       {result.name || result.display_name.split(',')[0]}
                     </p>
-                    <p className="text-xs text-gray-500 line-clamp-1">{result.display_name}</p>
+                    <p className="text-xs text-gray-500 truncate">{result.display_name}</p>
                   </div>
                 </div>
               </button>
@@ -621,35 +683,59 @@ const MapSelectionPanel: React.FC<MapSelectionPanelProps> = ({
         </div>
       )}
 
-      {/* Selected location and radius adjustment */}
+      {/* Selected location and compact radius adjustment */}
       {centerPoint && status !== "processing" && status !== "complete" && (
-        <div className="space-y-3">
-          <div className="p-3 bg-green-50 border border-green-100 rounded-md">
+        <div className="space-y-2">
+          <div className={`p-2 border rounded-md ${
+            isDragging 
+              ? 'bg-blue-50 border-blue-200' 
+              : isHovering
+                ? 'bg-blue-50 border-blue-100'
+                : 'bg-green-50 border-green-100'
+          }`}>
             <div className="flex items-start">
-              <CheckCircle className="w-5 h-5 text-green-500 mt-0.5 mr-2 flex-shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-green-800">Location selected</p>
-                <p className="text-xs text-green-700 mt-1">
-                  {centerPoint[0].toFixed(6)}, {centerPoint[1].toFixed(6)}
+              <CheckCircle className={`w-4 h-4 mt-0.5 mr-2 flex-shrink-0 ${
+                isDragging 
+                  ? 'text-blue-500' 
+                  : isHovering
+                    ? 'text-blue-500'
+                    : 'text-green-500'
+              }`} />
+              <div className="min-w-0">
+                <p className={`text-xs font-medium ${
+                  isDragging 
+                    ? 'text-blue-800' 
+                    : isHovering
+                      ? 'text-blue-800'
+                      : 'text-green-800'
+                }`}>
+                  {isDragging ? 'Dragging point...' : isHovering ? 'Location selected (draggable)' : 'Location selected'}
                 </p>
-                {selectedLocation && (
-                  <p className="text-xs text-green-700 mt-1 line-clamp-2">
-                    {selectedLocation.display_name}
-                  </p>
+                <p className={`text-xs ${
+                  isDragging 
+                    ? 'text-blue-700' 
+                    : isHovering
+                      ? 'text-blue-700'
+                      : 'text-green-700'
+                }`}>
+                  {centerPoint[0].toFixed(4)}, {centerPoint[1].toFixed(4)}
+                </p>
+                {isHovering && !isDragging && (
+                  <p className="text-xs text-blue-600 mt-1">Click and drag to move</p>
                 )}
               </div>
             </div>
           </div>
           
-          {/* Radius adjustment */}
-          <div className="space-y-2">
+          {/* Compact Radius adjustment */}
+          <div className="space-y-1">
             <div className="flex justify-between items-center">
-              <label htmlFor="search-radius-slider" className="text-sm font-medium text-gray-700">
-                Radius: {radius} meters
+              <label htmlFor="search-radius-slider" className="text-xs font-medium text-gray-700">
+                Radius: {radius}m
               </label>
               <div className="flex items-center gap-1 text-xs text-gray-500">
                 <Circle className="w-3 h-3 text-blue-500" />
-                <span>{(Math.PI * Math.pow(radius / 1000, 2)).toFixed(2)} km²</span>
+                <span>{(Math.PI * Math.pow(radius / 1000, 2)).toFixed(1)}km²</span>
               </div>
             </div>
             <input
@@ -660,89 +746,89 @@ const MapSelectionPanel: React.FC<MapSelectionPanelProps> = ({
               step="100"
               value={radius}
               onChange={(e) => setRadius(Number(e.target.value))}
-              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+              className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer"
             />
-            <div className="flex justify-between text-xs text-gray-500">
+            <div className="flex justify-between text-xs text-gray-400">
               <span>100m</span>
-              <span>1km</span>
+              <span>2.5km</span>
               <span>5km</span>
             </div>
           </div>
         </div>
       )}
       
-      {/* No results message */}
+      {/* No results message - COMPACT */}
       {searchResults.length === 0 && searchQuery.trim() !== "" && !isSearching && !centerPoint && !errorMessage && (
-        <div className="p-2 bg-gray-50 border border-gray-200 rounded-md">
-          <p className="text-sm text-gray-600">No locations found. Try a different search term.</p>
+        <div className="p-2 bg-gray-50 border border-gray-200 rounded">
+          <p className="text-xs text-gray-600">No locations found.</p>
         </div>
       )}
       
-      {/* Processing state */}
+      {/* Compact Processing state */}
       {status === "processing" && (
-        <div className="p-3 bg-blue-50 border border-blue-100 rounded-md flex items-center">
-          <RotateCw className="w-5 h-5 text-blue-500 animate-spin mr-2" />
-          <span className="text-sm text-blue-700">Creating area of operations...</span>
+        <div className="p-2 bg-blue-50 border border-blue-100 rounded-md flex items-center">
+          <RotateCw className="w-4 h-4 text-blue-500 animate-spin mr-2" />
+          <span className="text-xs text-blue-700">Creating area...</span>
         </div>
       )}
       
-      {/* Completion state */}
+      {/* Compact Completion state */}
       {status === "complete" && (
-        <div className="p-3 bg-green-50 border border-green-100 rounded-md flex items-center">
-          <CheckCircle className="w-5 h-5 text-green-500 mr-2" />
-          <span className="text-sm text-green-700">Area created successfully!</span>
+        <div className="p-2 bg-green-50 border border-green-100 rounded-md flex items-center">
+          <CheckCircle className="w-4 h-4 text-green-500 mr-2" />
+          <span className="text-xs text-green-700">Area created!</span>
         </div>
       )}
       
-      {/* Error message */}
+      {/* Compact Error message */}
       {errorMessage && status !== "error" && (
-        <div className="p-2 bg-red-50 border border-red-100 rounded-md">
-          <p className="text-sm text-red-600">{errorMessage}</p>
+        <div className="p-2 bg-red-50 border border-red-100 rounded">
+          <p className="text-xs text-red-600">{errorMessage}</p>
         </div>
       )}
       
-      {/* Error state */}
+      {/* Compact Error state */}
       {status === "error" && (
-        <div className="p-3 bg-red-50 border border-red-100 rounded-md">
+        <div className="p-2 bg-red-50 border border-red-100 rounded-md">
           <div className="flex items-center">
-            <XCircle className="w-5 h-5 text-red-500 mr-2" />
-            <span className="text-sm text-red-700">Error creating area</span>
+            <XCircle className="w-4 h-4 text-red-500 mr-2" />
+            <span className="text-xs text-red-700">Error creating area</span>
           </div>
           {errorMessage && (
-            <p className="text-xs text-red-600 mt-1 pl-7">{errorMessage}</p>
+            <p className="text-xs text-red-600 mt-1">{errorMessage}</p>
           )}
         </div>
       )}
       
-      {/* Action buttons */}
+      {/* Compact Action buttons */}
       {status !== "complete" && (
-        <div className="flex justify-between">
+        <div className="flex justify-between gap-2">
           <button
             onClick={onCancel}
-            className="px-3 py-1.5 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors text-sm flex items-center gap-1"
+            className="px-2 py-1 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 transition-colors text-xs flex items-center gap-1"
           >
-            <ChevronLeft className="w-4 h-4" />
+            <ChevronLeft className="w-3 h-3" />
             Cancel
           </button>
           
           {centerPoint && status !== "processing" && (
-            <div className="flex gap-2">
+            <div className="flex gap-1">
               <button
                 onClick={() => {
                   setCenterPoint(null);
                   setSelectedLocation(null);
                   cleanupMapLayers();
                 }}
-                className="px-3 py-1.5 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors text-sm"
+                className="px-2 py-1 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 transition-colors text-xs"
               >
                 Reset
               </button>
               <button
                 onClick={generateCircleAO}
-                className="px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm flex items-center gap-1"
+                className="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-xs flex items-center gap-1"
               >
-                <Circle className="w-4 h-4" />
-                Create Area
+                <Circle className="w-3 h-3" />
+                Create
               </button>
             </div>
           )}
