@@ -20,7 +20,7 @@
  * - BYDAService.ts: Provides DBYD data fetching
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { useChecklistContext } from '../../../context/ChecklistContext';
 import { useFlightPlanContext } from '../../../context/FlightPlanContext';
 import { useAreaOfOpsContext } from '../../../context/AreaOfOpsContext';
@@ -42,10 +42,14 @@ import {
 import PremiumButton from '../../UI/PremiumButton';
 import { usePremium, FeatureId } from '../../../context/PremiumContext';
 import { layerManager, MAP_LAYERS } from '../../../services/LayerManager';
-import { GridCell } from '../Analyses/Types/GridAnalysisTypes';
+import { GridCell } from '../Types/GridAnalysisTypes';
 
 interface TerrainAnalysisDashboardProps {
   onClose?: () => void;
+}
+
+export interface TerrainAnalysisDashboardRef {
+  runAnalysis: () => Promise<boolean>;
 }
 
 /**
@@ -396,7 +400,8 @@ const InfoIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onClose }) => {
+const TerrainAnalysisDashboard = forwardRef<TerrainAnalysisDashboardRef, TerrainAnalysisDashboardProps>(
+  ({ onClose }, ref) => {
   const [focusedSection, setFocusedSection] = useState<string | null>(null);
   const [isLoadingHV, setIsLoadingHV] = useState(false);
   const [isLoadingDBYD, setIsLoadingDBYD] = useState(false);
@@ -433,6 +438,7 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
 
   const [localAnalyzing, setLocalAnalyzing] = useState(false);
   const isAnalyzing = aoIsAnalyzing || localAnalyzing;
+  
   
   useEffect(() => {
     if (guidedTarget) {
@@ -479,7 +485,7 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
 
     if (flightPlan) {
       console.log(`Regenerating AO with buffer distance: ${newDistance}m`);
-      generateAOFromFlightPlan(flightPlan, true);
+      generateAOFromFlightPlan(flightPlan, true, newDistance); // Pass newDistance directly
     }
   };
 
@@ -592,6 +598,18 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
       setLocalAnalyzing(false);
     }
   };
+
+    useImperativeHandle(ref, () => ({
+    runAnalysis: async (): Promise<boolean> => {
+      console.log('[TerrainAnalysisDashboard] Programmatic analysis triggered');
+      try {
+        return await handleRunAOAnalysis();
+      } catch (error) {
+        console.error('[TerrainAnalysisDashboard] Programmatic analysis failed:', error);
+        return false;
+      }
+    }
+  }), [handleRunAOAnalysis]);
 
       /**
    * Reset analysis state to recover from errors
@@ -829,6 +847,7 @@ const TerrainAnalysisDashboard: React.FC<TerrainAnalysisDashboardProps> = ({ onC
       </div>
     </div>
   );
-};
+});
+TerrainAnalysisDashboard.displayName = 'TerrainAnalysisDashboard';
 
 export default TerrainAnalysisDashboard;

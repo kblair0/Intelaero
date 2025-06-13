@@ -6,8 +6,6 @@ import {
   ChevronRight, ChevronLeft, CheckCircle, Settings, PlayCircle, Navigation, Map, Compass, ChevronDown, ChevronUp
 } from "lucide-react";
 import { trackEventWithForm as trackEvent } from "../components/tracking/tracking";
-import FlightPlanUploader from "./FlightPlanUploader";
-import AreaOpsUploader from "./AO/AreaOpsUploader";
 import { useMarkersContext } from "../context/MarkerContext";
 import { useLOSAnalysis } from "../context/LOSAnalysisContext";
 import { useFlightPlanContext } from "../context/FlightPlanContext";
@@ -15,6 +13,9 @@ import { useAreaOfOpsContext } from "../context/AreaOfOpsContext";
 import { useChecklistContext } from "../context/ChecklistContext";
 import CompactDisclaimerWidget from "./CompactDisclaimerWidget";
 import SmartUploader, { UploadResult } from './SmartUploader';
+
+//demo
+import { useDemoOrchestration } from '../context/DemoOrchestrationContext';
 
 /**
  * Props for AnalysisWizard component
@@ -81,40 +82,17 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({
   const { addChecks } = useChecklistContext();
 
   /**
-   * Handles demo flight plan loading - straight to map with Visual preset
+   * Handles demo using DemoOrchestrationContext
    */
+  const { startDemo } = useDemoOrchestration();
+
   const handleTryDemo = useCallback(async () => {
-    trackEvent("wizard_try_demo", { source: "quick_start" });
+    trackEvent('wizard_try_demo', { source: 'quick_start' });
     
-    // Set smart defaults for demo
-    setDefaultElevationOffset('observer', 2);
-    setDefaultElevationOffset('gcs', 2);
-    setDefaultElevationOffset('repeater', 2);
-    setGridSize(30);
-    setBufferDistance(500);
-    
-    // Set up Visual preset checklist
-    const visualAnalyses = ["terrainProfile", "observerVsTerrain", "observerToDrone", "powerline", "airspace"];
-    addChecks(visualAnalyses);
-    
-    // Load example.geojson using fetch (similar to existing pattern)
-    try {
-      const response = await fetch("/example.geojson");
-      if (!response.ok) {
-        throw new Error("Failed to fetch example flight plan");
-      }
-      
-      const exampleData = await response.json();
-      setFlightPlan(exampleData);
-      
-      // Close wizard immediately - user goes straight to map
-      onClose();
-    } catch (error) {
-      console.error("Error loading demo:", error);
-      // Fallback to flight mission setup if example loading fails
-      setCurrentStep(WizardStep.FlightMission);
-    }
-  }, [setDefaultElevationOffset, setGridSize, setBufferDistance, addChecks, setFlightPlan, onClose]);
+    // Start the demo and immediately close the wizard
+    await startDemo();
+    onClose(); // Close wizard immediately after starting demo
+  }, [startDemo, onClose]);
 
   /**
    * Handles flight mission analysis setup
@@ -394,7 +372,6 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({
             </div>
           </div>
         );
-
       case WizardStep.FlightMission:
         return (
           <div className="space-y-4">
@@ -581,10 +558,10 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({
       <div className="p-3 border-b border-gray-200 bg-white rounded-t-lg flex-shrink-0">
         <h2 className="text-base font-semibold text-gray-800">
           {currentStep === WizardStep.QuickStart ? "Analysis Wizard" : 
-           currentStep === WizardStep.FlightMission ? "Flight Mission Setup" : "Geographic Survey Setup"}
+          currentStep === WizardStep.FlightMission ? "Flight Mission Setup" : "Geographic Survey Setup"}
         </h2>
       </div>
-
+      
       {/* Main content area */}
       <div className="flex-grow overflow-y-auto">
         <div className="p-4">
@@ -602,6 +579,6 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({
       )}
     </div>
   );
-};
+}
 
 export default AnalysisWizard;

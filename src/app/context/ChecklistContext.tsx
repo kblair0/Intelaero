@@ -35,6 +35,7 @@ interface ChecklistContextProps {
   actionToPanelMap: Record<string, 'terrain' | 'los' | 'energy' | null>;
   highlightMarkers: boolean;
   setHighlightMarkers: (highlight: boolean) => void;
+  completeDemoChecks: () => void;
 }
 
 const ChecklistContext = createContext<ChecklistContextProps | undefined>(undefined);
@@ -214,6 +215,74 @@ export const ChecklistProvider: React.FC<{ children: ReactNode }> = ({ children 
     console.log('[ChecklistContext] Reset checks');
   }, []);
 
+/**
+ * Auto-completes demo-specific checks to show progress during the Try Demo feature
+ * Adds demo analyses and auto-completes some to show immediate progress
+ */
+const completeDemoChecks = useCallback(() => {
+  console.log('[ChecklistContext] Completing demo checks');
+  
+  // Demo analyses to add to checklist
+  const demoAnalyses = ["terrainProfile", "observerVsTerrain", "observerToDrone", "powerline", "airspace"];
+  
+  // FIXED: Add checks and auto-complete in a single state update to avoid race condition
+  const newChecks: ChecklistItem[] = demoAnalyses
+    .filter((id) => analysisToChecklistSteps[id]) // Ensure valid analysis IDs
+    .flatMap((analysisId) => {
+      const steps = analysisToChecklistSteps[analysisId];
+      return steps.map((step, index) => ({
+        id: `${analysisId}-${index}`,
+        group: analysisId,
+        ...step,
+        status: 'pending' as const,
+      }));
+    });
+  
+  // Set all checks at once
+  setChecks(newChecks);
+  
+  // FIXED: Use a longer delay and ensure we're working with the newly set checks
+  setTimeout(() => {
+    setChecks(currentChecks => {
+      const updatedChecks = [...currentChecks];
+      
+      // Auto-complete terrainProfile checks to show immediate progress
+      const terrainProfileChecks = updatedChecks.filter(check => 
+        check.group === 'terrainProfile' && check.status === 'pending'
+      );
+      
+      terrainProfileChecks.forEach(check => {
+        const index = updatedChecks.findIndex(c => c.id === check.id);
+        if (index >= 0) {
+          updatedChecks[index] = { ...check, status: 'completed' };
+          console.log(`[ChecklistContext] Auto-completed demo check: ${check.id}`);
+        }
+      });
+      
+      // Also auto-complete observer placement check if it exists
+      const observerChecks = updatedChecks.filter(check => 
+        check.group === 'observerVsTerrain' && 
+        check.target.action === 'addObserver' && 
+        check.status === 'pending'
+      );
+      
+      observerChecks.forEach(check => {
+        const index = updatedChecks.findIndex(c => c.id === check.id);
+        if (index >= 0) {
+          updatedChecks[index] = { ...check, status: 'completed' };
+          console.log(`[ChecklistContext] Auto-completed observer check: ${check.id}`);
+        }
+      });
+      
+      const completedCount = updatedChecks.filter(c => c.status === 'completed').length;
+      console.log(`[ChecklistContext] Demo completed with ${completedCount} completed checks out of ${updatedChecks.length} total`);
+      
+      return updatedChecks;
+    });
+  }, 1000); //: Increased delay to 1000ms to ensure state is settled
+  
+}, []); 
+
   const contextValue: ChecklistContextProps = {
     checks,
     addChecks,
@@ -224,6 +293,7 @@ export const ChecklistProvider: React.FC<{ children: ReactNode }> = ({ children 
     actionToPanelMap,
     highlightMarkers,
     setHighlightMarkers,
+    completeDemoChecks,
   };
 
   return (

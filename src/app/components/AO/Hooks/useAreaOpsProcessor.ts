@@ -75,7 +75,7 @@ export const useAreaOpsProcessor = () => {
   }, [map, terrainLoaded, setAoGeometry]);
 
   const generateAOFromFlightPlan = useCallback(
-    (flightPlan: FlightPlanData, makeVisible = false) => {
+    (flightPlan: FlightPlanData, makeVisible = false, customBufferDistance?: number)=> {
       console.log("Generating AO from flight plan...");
       
       if (!flightPlan?.features?.[0]?.geometry?.coordinates) {
@@ -103,6 +103,7 @@ export const useAreaOpsProcessor = () => {
         const line = turf.lineString(coordinates.map(coord => [coord[0], coord[1]]));
         const cleanedLine = cleanCoords(line);
         
+        const buffer = customBufferDistance !== undefined ? customBufferDistance : bufferDistance;
         const buffered = turf.buffer(cleanedLine, bufferDistance / 1000, { units: 'kilometers' });
         
         if (!buffered) {
@@ -112,6 +113,7 @@ export const useAreaOpsProcessor = () => {
         const featureCollection = turf.featureCollection([buffered]);
         
         console.log(`Generated AO from flight plan with ${coordinates.length} points and ${bufferDistance}m buffer`);
+        console.log('generateAOFromFlightPlan:', { bufferDistance, coordinateCount: coordinates.length });
         
         setAoGeometry(featureCollection);
         

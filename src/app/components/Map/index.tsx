@@ -31,12 +31,13 @@ interface MapProps {
   togglePanel?: (panel: 'energy' | 'los' | 'terrain') => void;
   flightPlan?: any;
   setShowUploader?: (show: boolean) => void;
+  onCreateDemoObserver?: () => Promise<void>;
 }
 
 /**
  * Map component that renders the Mapbox map and associated controls
  */
-const Map: FC<MapProps> = ({ activePanel, togglePanel, flightPlan, setShowUploader }) => {
+const Map: FC<MapProps> = ({ activePanel, togglePanel, flightPlan, setShowUploader, onCreateDemoObserver }) => {
   const { setMap, elevationService } = useMapContext();
   const { setFlightPlan, setDistance, setProcessed } = useFlightPlanContext();
   const { isAnalyzing, setIsAnalyzing, setResults, setError, error, resetAnalysis } = useLOSAnalysis();
@@ -198,7 +199,10 @@ const Map: FC<MapProps> = ({ activePanel, togglePanel, flightPlan, setShowUpload
           {aoGeometry && <DBYDLayerHandler ref={DBYDLayerHandlerRef} map={map} />}
         </>
       )}
-      <MarkerControls />
+      <MarkerControls 
+        onCreateDemoObserver={onCreateDemoObserver}
+        gridAnalysisRef={gridAnalysisRef}
+      />
       <div className="absolute top-4 left-4 z-10 flex flex-col gap-4">
         <LayerControls
           onToggleDBYD={() => {

@@ -13,7 +13,7 @@
  * - LOSAnalysisContext (analysis configuration)
  */
 // components/Map/Controls/MarkerControls.tsx
-import React, { useRef, useState } from 'react';
+import React, { useRef, useCallback, useEffect } from 'react';
 import { useMarkers } from './Hooks/useMarkers';
 import { useMapContext } from '../../context/mapcontext';
 import { useLOSAnalysis } from '../../context/LOSAnalysisContext';
@@ -22,17 +22,22 @@ import { trackEventWithForm as trackEvent } from '../tracking/tracking';
 import PremiumButton from '../../components/UI/PremiumButton';
 import { Wifi, Radio, Eye, XCircle } from 'lucide-react';
 import { useChecklistContext } from '../../context/ChecklistContext';
+import { useMarkersContext } from '../../context/MarkerContext';
 
-const MarkerControls: React.FC = () => {
+const MarkerControls: React.FC<{ 
+  onCreateDemoObserver?: () => Promise<void>;
+  gridAnalysisRef: React.RefObject<GridAnalysisRef>;
+}> = ({ 
+  onCreateDemoObserver,
+  gridAnalysisRef
+}) => {
   const { map, terrainLoaded } = useMapContext();
   const { markerConfigs } = useLOSAnalysis();
   const { highlightMarkers, setHighlightMarkers } = useChecklistContext();
+  const { addMarker } = useMarkersContext();
 
     // Clear highlight when any marker button is clicked
   const clearHighlight = () => setHighlightMarkers(false);
-  
-  // Reference to the grid analysis controller
-  const gridAnalysisRef = useRef<GridAnalysisRef | null>(null);
   
   const {
     markers, // Get all markers from hook
@@ -147,6 +152,50 @@ const MarkerControls: React.FC = () => {
   const gcsCount = markers.filter(m => m.type === 'gcs').length;
   const observerCount = markers.filter(m => m.type === 'observer').length;
   const repeaterCount = markers.filter(m => m.type === 'repeater').length;
+
+//demo observer creation handler
+const createDemoObserver = useCallback(async (): Promise<void> => {
+  // Clear any previous errors
+  clearHighlight();
+  
+  // Demo coordinates from DemoOrchestrationContext
+  const demoCoords = {
+    lat: -33.85361,    // Sydney Harbour
+    lng: 151.24677
+  };
+  
+  // First, pan the map to the demo coordinates
+  if (map) {
+    console.log('[MarkerControls] Panning map to demo coordinates:', demoCoords);
+    map.flyTo({
+      center: [demoCoords.lng, demoCoords.lat],
+      zoom: 12,
+      duration: 1000
+    });
+    
+    // Wait for the map to finish moving
+    await new Promise(resolve => {
+      const onMoveEnd = () => {
+        map.off('moveend', onMoveEnd);
+        resolve(void 0);
+      };
+      map.on('moveend', onMoveEnd);
+    });
+  }
+  
+  // Use the FULL handler that includes analysis, not just addObserver()
+  await handleAddObserver();
+  
+  console.log('[MarkerControls] Demo observer created with analysis');
+}, [handleAddObserver, clearHighlight, map]);
+
+  // ADD this useEffect to expose the function to parent:
+  useEffect(() => {
+    if (onCreateDemoObserver) {
+      // This is a bit of a hack, but we need to expose the function to the parent
+      (window as any).createDemoObserver = createDemoObserver;
+    }
+  }, [createDemoObserver, onCreateDemoObserver]);  
 
   return (
     <>

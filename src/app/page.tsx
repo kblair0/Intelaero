@@ -1,23 +1,27 @@
 /**
- * page.tsx - UPDATED WITH MOBILE ORIENTATION GUARD
+ * page.tsx 
  * 
  * Purpose:
- * Main entry point for the application, now with mobile device orientation detection
- * and guidance for optimal viewing experience. Forces landscape mode on mobile devices.
+ * Main entry point for the application, now with demo progress visualization
+ * that persists across component lifecycle changes (wizard closing, etc.)
  * 
  * Changes Made:
- * - Added MobileOrientationGuard wrapper around entire app
- * - Enhanced responsive design for landscape mobile users
- * - Added mobile-specific styling improvements
+ * - Added DemoProgress import and DemoOrchestrationContext usage
+ * - Added demo progress indicator as bottom-positioned toast
+ * - Non-intrusive design that doesn't block user interaction with the map
+ * - Consistent with existing overlay styling and responsive design
  * 
- * Mobile Strategy:
- * 1. Portrait mobile: Show "rotate device" message
- * 2. Landscape mobile (if too small): Suggest larger device
- * 3. Landscape mobile (adequate): Allow usage with responsive adjustments
+ * Demo Flow:
+ * 1. User clicks "Try Demo" in AnalysisWizard
+ * 2. AnalysisWizard calls startDemo() from DemoOrchestrationContext
+ * 3. AnalysisWizard closes immediately  
+ * 4. DemoOrchestrationContext executes demo steps
+ * 5. Bottom toast shows progress without blocking user interaction
+ * 6. Demo completes, toast disappears automatically
  */
 
 "use client";
-import React, { useState, ReactNode, useEffect, Suspense, lazy } from "react";
+import React, { useState, ReactNode, useEffect, useCallback, Suspense, lazy } from "react";
 import Map from "./components/Map";
 import {
   FlightPlanProvider,
@@ -36,16 +40,17 @@ import { Battery, Radio, Mountain, MapPin, Search, Loader2 } from "lucide-react"
 import { trackEventWithForm as trackEvent } from "./components/tracking/tracking";
 import { MapProvider } from "./context/mapcontext";
 import { AnalysisControllerProvider, useAnalysisController } from "./context/AnalysisControllerContext";
+import { DemoOrchestrationProvider, useDemoOrchestration } from "./context/DemoOrchestrationContext"; // ADDED IMPORT
 import 'mapbox-gl/dist/mapbox-gl.css';
 import Image from "next/image";
 import ReloadButton from "./components/UI/ReloadButton";
-import MobileOrientationGuard from "./components/UI/MobileOrientationGuard"; // NEW IMPORT
+import MobileOrientationGuard from "./components/UI/MobileOrientationGuard";
 
 //payment and premium access
 import { PremiumProvider } from "./context/PremiumContext";
 
 // ========================================
-// LAZY LOADED COMPONENTS (unchanged)
+// LAZY LOADED COMPONENTS
 // ========================================
 const ObstacleAnalysisDashboard = lazy(() => import("./components/Analyses/ObstacleAnalysis/TerrainAnalysisDashboard"));
 const AnalysisDashboard = lazy(() => import("./components/Analyses/LOSAnalyses/UI/VisibilityAnalysisDashboard"));
@@ -61,9 +66,10 @@ const MapSelectionPanel = lazy(() => import("./components/AO/MapSelectionPanel")
 const ToolsDashboard = lazy(() => import("./components/VerificationToolbar/ToolsDashboard"));
 const CompactDisclaimerWidget = lazy(() => import("./components/CompactDisclaimerWidget"));
 const ElegantPlaceholder = lazy(() => import("./components/UI/ElegantPlaceholder"));
+const DemoProgress = lazy(() => import("./components/DemoProgress")); // ADDED IMPORT
 
 // ========================================
-// LOADING COMPONENTS (unchanged)
+// LOADING COMPONENTS
 // ========================================
 const AnalysisLoadingSpinner: React.FC = () => (
   <div className="flex items-center justify-center p-8">
@@ -83,9 +89,9 @@ const ModalLoadingPlaceholder: React.FC = () => (
 );
 
 /**
- * Main content component - ENHANCED FOR MOBILE LANDSCAPE
+ * Inner content component that uses the demo context
  */
-const HomeContent = () => {
+const HomeContentInner = () => {
   const [activePanel, setActivePanel] = useState<"energy" | "los" | "terrain" | null>(null);
   const [initialSection, setInitialSection] = useState<'flight' | 'station' | 'merged' | 'stationLOS' | null>(null);
   const [showUploader, setShowUploader] = useState(false);
@@ -100,7 +106,9 @@ const HomeContent = () => {
   const [isMapSelectionMode, setIsMapSelectionMode] = useState<boolean>(false);
   const [mapSelectionMode, setMapSelectionMode] = useState<"map" | "search">("map");
 
-  // ... (all the existing handler functions remain unchanged)
+  // ✅ Now this hook is called INSIDE the provider
+  const { demoState } = useDemoOrchestration();
+
   const togglePanel = (panel: "energy" | "los" | "terrain" | null, section?: 'flight' | 'station' | 'merged' | 'stationLOS' | null) => {
     setActivePanel((prev) => (prev === panel ? null : panel));
     setInitialSection(panel === 'los' ? section || null : null);
@@ -148,6 +156,13 @@ const HomeContent = () => {
     trackEvent('map_selection_cancelled', {});
   };
 
+  // Demo Features - need to get this from parent
+  const handleCreateDemoObserver = useCallback(async (): Promise<void> => {
+    if ((window as any).createDemoObserver) {
+      await (window as any).createDemoObserver();
+    }
+  }, []);
+
   return (
     <div className="min-h-screen flex flex-col bg-white overflow-x-hidden">
       {/* Main Content Area - ENHANCED MOBILE RESPONSIVE */}
@@ -161,12 +176,12 @@ const HomeContent = () => {
                 togglePanel={togglePanel}
                 flightPlan={flightPlan}
                 setShowUploader={setShowUploader}
+                onCreateDemoObserver={handleCreateDemoObserver}
               />
               
               {/* Welcome Message Overlay */}
               {(!showUploader && !showAreaOpsUploader && !showWizard && showWelcomeMessage && !flightPlan && !aoGeometry) && (
                 <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20 p-2 sm:p-4">
-                  {/* Mobile-friendly container with proper height constraints */}
                   <div className="w-full h-full max-h-screen flex items-center justify-center
                                   sm:w-auto sm:h-auto sm:max-w-4xl sm:max-h-[90vh]
                                   landscape:max-h-[85vh] landscape:w-full landscape:max-w-5xl">
@@ -180,7 +195,6 @@ const HomeContent = () => {
                 </div>
               )}
               
-              {/* Other overlays remain unchanged... */}
               {/* Wizard Overlay */}
               {(!showUploader && !showAreaOpsUploader && showWizard && !flightPlan && !aoGeometry) && (
                 <div className="absolute inset-0 bg-black/50 flex items-start justify-center z-20 p-4 overflow-y-auto">
@@ -237,10 +251,22 @@ const HomeContent = () => {
                   </div>
                 </div>
               )}
+
+              {/* ADDED: Demo Progress Overlay - Bottom positioned, non-intrusive */}
+              {demoState.isRunning && (
+                <Suspense fallback={null}>
+                  <DemoProgress 
+                    step={demoState.currentStep} 
+                    message={demoState.message} 
+                    progress={demoState.progress}
+                    isVisible={true} 
+                  />
+                </Suspense>
+              )}
             </div>
           </div>
 
-          {/* Right Sidebar - FIXED CONDITIONAL RENDERING FOR MAP SELECTION */}
+          {/* Right Sidebar - UNCHANGED */}
           <div className="w-80 h-full shrink-0 max-h-screen overflow-y-auto flex p-1 mr-2 flex-col gap-4 pb-4 
                           landscape:w-72 landscape:gap-2 landscape:p-0.5 landscape:mr-1">
             
@@ -313,13 +339,13 @@ const HomeContent = () => {
             )}
           </div>
 
-          {/* Analysis Panels - MOBILE RESPONSIVE ADJUSTMENTS */}
+          {/* Analysis Panels - UNCHANGED */}
           <MapSidePanel
             title="Energy Analysis"
             icon={<Battery className="w-5 h-5 landscape:w-4 landscape:h-4" />}
             isExpanded={activePanel === "energy"}
             onToggle={() => togglePanel("energy")}
-            className="z-30 landscape:w-72" // Smaller width on landscape mobile
+            className="z-30 landscape:w-72"
           >
             <Suspense fallback={<AnalysisLoadingSpinner />}>
               <Calculator />
@@ -355,6 +381,26 @@ const HomeContent = () => {
   );
 };
 
+/**
+ * Outer content component that provides the demo context
+ */
+const HomeContent = () => {
+  // Demo Features
+  const handleCreateDemoObserver = useCallback(async (): Promise<void> => {
+    // This function will be called from the demo context
+    // The actual implementation is in MarkerControls via the window hack
+    if ((window as any).createDemoObserver) {
+      await (window as any).createDemoObserver();
+    }
+  }, []);
+
+  return (
+    <DemoOrchestrationProvider onCreateObserver={handleCreateDemoObserver}>
+      <HomeContentInner />
+    </DemoOrchestrationProvider>
+  );
+};
+
 // Wrapper components remain unchanged...
 const MarkerLocationsModalWrapper: React.FC = () => {
   const { showMarkerLocationsModal, setShowMarkerLocationsModal } = useAnalysisController();
@@ -380,13 +426,13 @@ const UpgradeModalWrapper: React.FC = () => {
 };
 
 /**
- * Home page component - NOW WITH MOBILE ORIENTATION GUARD
+ * Home page component
  */
 export default function Home() {
   return (
     <MobileOrientationGuard 
-      minLandscapeWidth={640}  // Require at least 640px width in landscape
-      suggestLargerDevice={true} // Show "use larger device" for very small screens
+      minLandscapeWidth={640}
+      suggestLargerDevice={true}
     >
       <MapProvider>
         <AnalysisControllerProvider> 

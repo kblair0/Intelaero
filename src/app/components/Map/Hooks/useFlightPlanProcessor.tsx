@@ -147,20 +147,18 @@ const updateFlightPlanElevations = useCallback(async (plan: FlightPlanData): Pro
   const segments: Array<Array<{ waypoint: WaypointData; coordinate: [number, number, number]; elevation: number }>> = [];
   let currentSegment: Array<{ waypoint: WaypointData; coordinate: [number, number, number]; elevation: number }> = [];
   
-  const navigationIndices = updatedPlan.properties.metadata?.metadata?.navigationIndices || [];
-  console.log(`[FlightPlanProcessor] Navigation indices from metadata:`, navigationIndices);
-  console.log(`[FlightPlanProcessor] Total waypoints: ${waypoints.length}, Total coordinates: ${coordinates.length}`);
 
-  // Build coordinate index mapping for navigation waypoints only
+  const navigationIndices = updatedPlan.properties.metadata?.metadata?.navigationIndices || [];
+  // Build coordinate index mapping
   let coordinateIndex = 0;
   waypoints.forEach((wp, waypointIndex) => {
-    // Only process waypoints that are navigation commands (have coordinates)
-    if (navigationIndices.includes(wp.index) && coordinateIndex < coordinates.length) {
+    if (coordinateIndex >= coordinates.length) return;
+
+    // Process waypoint if in navigationIndices or if navigationIndices is empty (e.g., GeoJSON)
+    if (navigationIndices.length === 0 || navigationIndices.includes(wp.index)) {
       const coord = coordinates[coordinateIndex];
       const elevation = waypointElevations[coordinateIndex];
-      
-      console.log(`[FlightPlanProcessor] ✅ Processing navigation waypoint ${wp.index} (command ${wp.commandType}) with alt=${wp.originalAltitude}`);
-      
+     
       const item = { waypoint: wp, coordinate: coord, elevation };
       
       if (currentSegment.length && 
@@ -171,9 +169,8 @@ const updateFlightPlanElevations = useCallback(async (plan: FlightPlanData): Pro
         currentSegment.push(item);
       }
       
-      coordinateIndex++; // Only increment for navigation waypoints
+      coordinateIndex++;
     } else {
-      console.log(`[FlightPlanProcessor] ⚠️ Skipping non-navigation waypoint ${wp.index} (command ${wp.commandType}, alt=${wp.originalAltitude})`);
     }
   });
   

@@ -7,12 +7,27 @@
  * processes it (resolves altitudes, queries terrain, calculates distances), and stores the result in context.
  * In production it also tracks uploads via a Google Form.
  * 
+ * Relationships:
+ * - Integrates with FlightPlanContext to store processed flight plan data
+ * - Uses MapContext for map instance and elevation service access
+ * - Utilizes useFlightPlanProcessor hook for terrain processing and altitude resolution
+ * - Imports various parsing utilities for different file formats (KML, KMZ, GeoJSON, QGC waypoints)
+ * - Integrates with tracking system for analytics in production
+ * 
+ * Key Features:
+ * - Drag-and-drop file upload with visual feedback
+ * - Support for multiple flight plan formats
+ * - Progress tracking during processing
+ * - Example flight plan loading
+ * - Robust error handling and user feedback
+ * - Programmatic access via ref for demo orchestration
+ * 
  * Optimized to use ElevationService instead of TerrainUtils for more efficient terrain handling.
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useImperativeHandle, forwardRef } from "react";
 import { useDropzone } from "react-dropzone";
 import { useFlightPlanContext } from "../context/FlightPlanContext";
 import { useMapContext } from "../context/mapcontext";
@@ -42,6 +57,9 @@ import type {
 } from "geojson";
 import * as turf from '@turf/turf';
 
+export interface FlightPlanUploaderRef {
+  loadExampleProgrammatically: (filePath: string) => Promise<boolean>;
+}
 
 // DOMParser for KML/KMZ -> only in browser
 const parser = typeof window !== "undefined" ? new DOMParser() : null;
@@ -216,25 +234,70 @@ function parseKMLFile(kmlText: string, file?: File): FlightPlanData {
   };
 }
 
-/** Parse raw GeoJSON text */
+/**
+ * Parse raw GeoJSON text
+ */
 function parseGeoJSONFile(geojsonText: string): FlightPlanData {
-  const geojsonResult = JSON.parse(geojsonText) as FeatureCollection;
+  console.log('parseGeoJSONFile: Input geojsonText', {
+    textLength: geojsonText.length,
+    snippet: geojsonText.slice(0, 100) + (geojsonText.length > 100 ? '...' : ''),
+  });
+
+  let geojsonResult;
+  try {
+    geojsonResult = JSON.parse(geojsonText) as FeatureCollection;
+    console.log('parseGeoJSONFile: Parsed geojsonResult', {
+      featureCount: geojsonResult.features.length,
+      features: geojsonResult.features.map(f => ({
+        type: f.type,
+        geometryType: f.geometry?.type,
+      })),
+    });
+  } catch (error) {
+    console.error('parseGeoJSONFile: JSON parse error', error);
+    throw new Error(`Invalid GeoJSON: Failed to parse JSON - ${error instanceof Error ? error.message : String(error)}`);
+  }
+
   if (!geojsonResult.features.length) {
+    console.error('parseGeoJSONFile: No features found');
     throw new Error("Invalid GeoJSON: No features found.");
   }
 
   const flightFeature = geojsonResult.features.find(
     (f): f is Feature<LineString> => f.geometry?.type === "LineString"
   );
+  console.log('parseGeoJSONFile: flightFeature', {
+    found: !!flightFeature,
+    geometryType: flightFeature?.geometry?.type,
+    properties: flightFeature?.properties,
+  });
+
   if (!flightFeature) {
+    console.error('parseGeoJSONFile: No valid LineString feature found');
     throw new Error("No valid flight path found in GeoJSON.");
   }
 
   // Narrow coords
   const raw = (flightFeature.geometry as LineString).coordinates;
+  console.log('parseGeoJSONFile: Raw coordinates', {
+    rawCount: raw.length,
+    rawSample: raw.slice(0, 5),
+  });
+
   const coordinates: [number, number, number][] = raw
-    .filter((c): c is Position => Array.isArray(c) && c.length === 3)
+    .filter((c): c is Position => {
+      const isValid = Array.isArray(c) && c.length === 3 && c.every(n => typeof n === 'number' && !isNaN(n));
+      if (!isValid) {
+        console.warn('parseGeoJSONFile: Filtered invalid coordinate', c);
+      }
+      return isValid;
+    })
     .map((c) => [c[0], c[1], c[2]] as [number, number, number]);
+
+  console.log('parseGeoJSONFile: Filtered coordinates', {
+    filteredCount: coordinates.length,
+    filteredSample: coordinates.slice(0, 5),
+  });
 
   const waypoints: WaypointData[] = coordinates.map((coord, idx) => ({
     index: idx,
@@ -242,7 +305,7 @@ function parseGeoJSONFile(geojsonText: string): FlightPlanData {
     originalAltitude: coord[2]
   }));
 
-  return {
+  const flightPlanData: FlightPlanData = {
     type: "FeatureCollection",
     properties: {
       homePosition: inferHomePosition(coordinates),
@@ -264,6 +327,15 @@ function parseGeoJSONFile(geojsonText: string): FlightPlanData {
       }
     ]
   };
+
+  console.log('parseGeoJSONFile: Output FlightPlanData', {
+    featureCount: flightPlanData.features.length,
+    coordinateCount: flightPlanData.features[0].geometry.coordinates.length,
+    coordinates: flightPlanData.features[0].geometry.coordinates.slice(0, 5),
+    waypointsCount: flightPlanData.features[0].properties.waypoints.length,
+  });
+
+  return flightPlanData;
 }
 
 /** Parse DJI .kmz -> FlightPlanData */
@@ -394,7 +466,9 @@ const trackFlightPlan = async (
     const res = await fetch("https://api.ipify.org?format=json");
     const j = await res.json();
     audit.ipAddress = j.ip;
-  } catch {}
+  } catch {
+    // Silently fail IP detection
+  }
   const formData: Record<string, string> = {
     "entry.2094842776": new Date().toISOString(),
     "entry.1248754852": fileName,
@@ -471,19 +545,18 @@ const ProgressIndicator = ({ progress, currentStage }: { progress: number, curre
 );
 
 /** IMPROVED FlightPlanUploader with better UX and layout */
-const FlightPlanUploader: React.FC<FlightPlanUploaderProps> = ({
+const FlightPlanUploader = forwardRef<FlightPlanUploaderRef, FlightPlanUploaderProps>(({
   onPlanUploaded,
   onClose,
   compact = false
-}) => {
-const [status, setStatus] = useState<"idle" | "uploading" | "processed" | "error">("idle");
+}, ref) => {
+  const [status, setStatus] = useState<"idle" | "uploading" | "processed" | "error">("idle");
   const [fileName, setFileName] = useState<string | null>(null);
   const { setFlightPlan } = useFlightPlanContext();
   const { map, elevationService } = useMapContext();
   const { processFlightPlan, isProcessing, error } = useFlightPlanProcessor();
   const [progress, setProgress] = useState(0);
   const [currentStage, setCurrentStage] = useState("Preparing...");
-
 
   /**
    * Processes and stores the flight plan, ensuring terrain data is loaded.
@@ -537,11 +610,13 @@ const [status, setStatus] = useState<"idle" | "uploading" | "processed" | "error
 
         // Progress indicator
         setProgress(10);
+        setCurrentStage("Preparing terrain data...");
 
         // Ensure terrain data is ready and preload the flight plan area using ElevationService
         if (elevationService) {
           await elevationService.ensureDEM();
           setProgress(20);
+          setCurrentStage("Loading elevation data...");
           
           // Extract 2D coordinates for preloading
           const coordsFor2D = updatedRaw.features[0].geometry.coordinates.map(
@@ -551,13 +626,16 @@ const [status, setStatus] = useState<"idle" | "uploading" | "processed" | "error
           // Use the preloadArea method from ElevationService
           await elevationService.preloadArea(coordsFor2D);
           setProgress(40);
+          setCurrentStage("Processing flight path...");
           
           console.log(`[${new Date().toISOString()}] [FlightPlanUploader.tsx] Preload completed for ${coordsFor2D.length} coordinates`);
         }
 
         setProgress(50);
+        setCurrentStage("Analyzing terrain...");
         const proc = await processFlightPlan(updatedRaw);
         setProgress(90);
+        setCurrentStage("Finalizing...");
         setFlightPlan(proc);
         onPlanUploaded?.(proc); // Notify parent before closing
         
@@ -566,6 +644,7 @@ const [status, setStatus] = useState<"idle" | "uploading" | "processed" | "error
         }
         
         setProgress(100);
+        setCurrentStage("Complete!");
         setStatus("processed");
         onClose?.(); // Close after notifying parent
       } catch (error: any) {
@@ -585,12 +664,14 @@ const [status, setStatus] = useState<"idle" | "uploading" | "processed" | "error
       setFileName(f.name);
       setStatus("uploading");
       setProgress(0);
+      setCurrentStage("Reading file...");
 
       try {
         let raw: FlightPlanData;
         const ext = f.name.split(".").pop()?.toLowerCase();
         
         setProgress(10);
+        setCurrentStage("Parsing file...");
         
         if (ext === "kmz") {
           raw = await parseKMZFile(f);
@@ -598,7 +679,7 @@ const [status, setStatus] = useState<"idle" | "uploading" | "processed" | "error
           const txt = await new Promise<string>((res, rej) => {
             const r = new FileReader();
             r.onload = () => res(r.result as string);
-            r.onerror = () => rej();
+            r.onerror = () => rej(new Error("Failed to read file"));
             r.readAsText(f);
           });
           
@@ -609,6 +690,7 @@ const [status, setStatus] = useState<"idle" | "uploading" | "processed" | "error
         }
         
         setProgress(20);
+        setCurrentStage("Processing flight plan...");
         
         await processAndStore(
           { ...raw, properties: { ...raw.properties, processed: false } },
@@ -619,10 +701,12 @@ const [status, setStatus] = useState<"idle" | "uploading" | "processed" | "error
         alert(`❌ Upload failed:\n${error?.message ?? String(error)}`);
         setStatus("error");
         setProgress(0);
+        setCurrentStage("Error");
       }
     },
     [processAndStore]
   );
+
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
@@ -667,8 +751,38 @@ const [status, setStatus] = useState<"idle" | "uploading" | "processed" | "error
       console.error("Example loading error:", error);
       setStatus("error");
       setProgress(0);
+      setCurrentStage("Error");
     }
   }, [processAndStore]);
+
+   useImperativeHandle(ref, () => ({
+    loadExampleProgrammatically: async (filePath: string): Promise<boolean> => {
+      try {
+        console.log(`[FlightPlanUploader] Loading example programmatically: ${filePath}`);
+        await loadExample(filePath);
+        return true;
+      } catch (error) {
+        console.error('[FlightPlanUploader] Programmatic load failed:', error);
+        return false;
+      }
+    }
+  }), [loadExample]);
+
+  /**
+   * Programmatic version of loadExample for demo use
+   * @param filePath Path to the example file to load
+   * @returns Promise<boolean> indicating success/failure
+   */
+  const loadExampleProgrammatically = useCallback(async (filePath: string): Promise<boolean> => {
+    try {
+      console.log(`[FlightPlanUploader] Loading example programmatically: ${filePath}`);
+      await loadExample(filePath);
+      return true;
+    } catch (error) {
+      console.error('[FlightPlanUploader] Programmatic load failed:', error);
+      return false;
+    }
+  }, [loadExample]);
 
   return (
     <div className="w-full bg-white py-2">
@@ -775,6 +889,8 @@ const [status, setStatus] = useState<"idle" | "uploading" | "processed" | "error
                 onClick={(e) => {
                   e.stopPropagation();
                   setStatus("idle");
+                  setProgress(0);
+                  setCurrentStage("Preparing...");
                 }}
               >
                 Try again
@@ -827,6 +943,9 @@ const [status, setStatus] = useState<"idle" | "uploading" | "processed" | "error
       </MapLoadingGuard>
     </div>
   );
-};
+});
+
+
+FlightPlanUploader.displayName = 'FlightPlanUploader';
 
 export default FlightPlanUploader;

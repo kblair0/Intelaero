@@ -1,6 +1,6 @@
 // src/app/context/MarkerContext.tsx
 
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, ReactNode, useCallback } from 'react';
 import { LocationData } from '../types/LocationData';
 import { v4 as uuidv4 } from 'uuid';
 import { usePremium, TierLevel } from './PremiumContext';

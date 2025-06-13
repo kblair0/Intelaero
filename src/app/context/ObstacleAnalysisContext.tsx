@@ -19,7 +19,6 @@ import { useFlightPlanContext } from './FlightPlanContext';
 import { useAreaOfOpsContext } from './AreaOfOpsContext';
 import { sampleFlightPath } from '../hooks/useFlightPathSampling';
 import * as turf from '@turf/turf';
-import { GridCell } from './AreaOfOpsContext';
 import { getReliableTerrainElevations, ensureDEMLoaded } from '../utils/TerrainUtils';
 
 /**

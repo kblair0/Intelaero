@@ -1,19 +1,12 @@
-// src/components/SmartUploader.tsx
+// File: src/components/SmartUploader.tsx
+
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import FlightPlanUploader from './FlightPlanUploader';
 import AreaOpsUploader from './AO/AreaOpsUploader';
 import { FileUp, Navigation, Map } from 'lucide-react';
 import { trackEventWithForm as trackEvent } from './tracking/tracking';
-
-/**
- * SmartUploader Component
- * 
- * Purpose:
- * Provides a unified upload interface that intelligently routes files
- * to the appropriate uploader based on file type or user selection.
- * Optimized for wizard integration with compact mode.
- */
+import MapLoadingGuard from './Map/MapLoadingGuard';
 
 export type UploadType = 'flight-plan' | 'area' | 'auto';
 export type UploadResult = {
@@ -26,7 +19,6 @@ interface SmartUploaderProps {
   acceptedTypes?: UploadType[];
   onUploadComplete?: (result: UploadResult) => void;
   onClose?: () => void;
-  // Specific upload type if we want to force one uploader
   uploadType?: 'flight-plan' | 'area';
 }
 
@@ -41,7 +33,6 @@ const detectFileType = (filename: string): 'flight-plan' | 'area' | 'unknown' =>
     case 'geojson':
       return 'flight-plan';
     case 'kml':
-      // KML can be either - we'll need user clarification or smart detection
       return 'unknown';
     case 'kmz':
       return 'flight-plan';
@@ -61,13 +52,12 @@ const SmartUploader: React.FC<SmartUploaderProps> = ({
     uploadType || null
   );
   const [showTypeSelector, setShowTypeSelector] = useState(false);
-
   const isCompact = mode === 'compact';
 
   /**
    * Handle file drop/selection when in auto mode
    */
-  const handleSmartUpload = (files: FileList) => {
+  const handleSmartUpload = useCallback((files: FileList) => {
     if (files.length === 0) return;
     
     const file = files[0];
@@ -80,23 +70,36 @@ const SmartUploader: React.FC<SmartUploaderProps> = ({
     });
 
     if (detectedType === 'unknown' || (detectedType === 'area' && file.name.endsWith('.kml'))) {
-      // For KML files, show type selector since they could be either
       setShowTypeSelector(true);
     } else {
       setActiveUploader(detectedType);
     }
-  };
+  }, [mode]);
 
   /**
-   * Handle upload completion from child uploaders
+   * Handle flight plan upload completion
    */
-  const handleFlightPlanUploaded = (data: any) => {
-    onUploadComplete?.({ data, type: 'flight-plan' });
-  };
+  const handleFlightPlanUploaded = useCallback((data: any) => {
+    console.log('SmartUploader: Uploaded FlightPlanData', {
+      featureCount: data?.features?.length,
+      geometryType: data?.features[0]?.geometry?.type,
+      coordinateCount: data?.features[0]?.geometry?.coordinates?.length,
+      coordinates: data?.features[0]?.geometry?.coordinates?.slice(0, 5),
+    });
 
-  const handleAreaUploaded = (data: any) => {
+    onUploadComplete?.({ data, type: 'flight-plan' });
+    trackEvent('smart_uploader_flight_plan_success', { mode });
+    onClose?.();
+  }, [onUploadComplete, onClose, mode]);
+
+  /**
+   * Handle area upload completion
+   */
+  const handleAreaUploaded = useCallback((data: any) => {
     onUploadComplete?.({ data, type: 'area' });
-  };
+    trackEvent('smart_uploader_area_success', { mode });
+    onClose?.();
+  }, [onUploadComplete, onClose, mode]);
 
   /**
    * Type selector for ambiguous files
@@ -173,29 +176,34 @@ const SmartUploader: React.FC<SmartUploaderProps> = ({
     return <TypeSelector />;
   }
 
-  // Show specific uploader if selected
-  if (activeUploader === 'flight-plan') {
-    return (
-      <FlightPlanUploader
-        compact={isCompact}
-        onClose={onClose}
-        onPlanUploaded={handleFlightPlanUploaded}
-      />
-    );
-  }
-
-  if (activeUploader === 'area') {
-    return (
-      <AreaOpsUploader
-        compact={isCompact}
-        onClose={onClose}
-        onAOUploaded={handleAreaUploaded}
-      />
-    );
-  }
-
-  // Default: show auto uploader
-  return <AutoUploader />;
+  // Wrap uploaders in MapLoadingGuard
+  return (
+    <MapLoadingGuard
+      fallback={
+        <div className="flex flex-col items-center justify-center p-6 bg-gray-50 rounded-lg border border-gray-300">
+          <p className="text-sm text-gray-600">Waiting for map resources...</p>
+          <div className="mt-4 w-8 h-8 border-t-2 border-b-2 border-blue-500 rounded-full animate-spin" />
+          <p className="mt-2 text-xs text-gray-400">This may take a moment</p>
+        </div>
+      }
+    >
+      {activeUploader === 'flight-plan' ? (
+        <FlightPlanUploader
+          compact={isCompact}
+          onClose={onClose}
+          onPlanUploaded={handleFlightPlanUploaded}
+        />
+      ) : activeUploader === 'area' ? (
+        <AreaOpsUploader
+          compact={isCompact}
+          onClose={onClose}
+          onAOUploaded={handleAreaUploaded}
+        />
+      ) : (
+        <AutoUploader />
+      )}
+    </MapLoadingGuard>
+  );
 };
 
 export default SmartUploader;
