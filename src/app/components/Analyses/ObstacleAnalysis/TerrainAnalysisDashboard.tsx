@@ -1,16 +1,16 @@
 /**
- * TerrainAnalysisDashboard.tsx
+ * TerrainAnalysisDashboard.tsx - Enhanced Visual Design
  * 
  * Purpose:
  * A streamlined dashboard for obstacle-related analyses, presenting simple
  * buttons for each analysis type that integrate with the checklist workflow.
  * 
- * This component:
- * - Provides direct button access to obstacle analysis features
- * - Integrates with the checklist system
- * - Manages the Area of Operations buffer distance
- * - Includes terrain profile, powerline (HV and DBYD), and airspace analysis
- * - Uses a clear, non-collapsible section layout
+ * Visual Enhancements:
+ * - Modern card design with gradients and improved shadows
+ * - Enhanced visual hierarchy and spacing
+ * - Better color coding for different states
+ * - Improved button designs and hover effects
+ * - Consistent with compact design theme
  * 
  * Related Files:
  * - ChecklistContext.tsx: Provides state and steps for guided workflow
@@ -37,7 +37,8 @@ import {
   Signal,
   Loader,
   Move,
-  Trees
+  Trees,
+  Info
 } from 'lucide-react';
 import PremiumButton from '../../UI/PremiumButton';
 import { usePremium, FeatureId } from '../../../context/PremiumContext';
@@ -53,7 +54,7 @@ export interface TerrainAnalysisDashboardRef {
 }
 
 /**
- * Simple analysis section with a button and optional terrain opacity slider
+ * Enhanced analysis section with modern visual design
  */
 interface AnalysisSectionProps {
   title: string;
@@ -73,7 +74,7 @@ interface AnalysisSectionProps {
 }
 
 /**
- * Powerline analysis section with two buttons (HV and DBYD)
+ * Enhanced powerline analysis section with modern design
  */
 interface PowerlineAnalysisSectionProps {
   title: string;
@@ -127,50 +128,53 @@ const AnalysisSection: React.FC<AnalysisSectionProps> = ({
 
   return (
     <div className={`
-      bg-white rounded-lg p-4 border border-gray-200
-      ${hasPendingChecks ? 'border-l-4 border-yellow-300' : ''}
-      ${isCompleted ? 'border-l-4 border-green-300' : ''}
+      bg-white rounded-xl p-4 border-2 shadow-sm hover:shadow-md transition-all duration-200
+      ${hasPendingChecks ? 'border-l-4 border-yellow-400 bg-gradient-to-r from-yellow-50 to-white' : ''}
+      ${isCompleted ? 'border-l-4 border-green-400 bg-gradient-to-r from-green-50 to-white' : 'border-gray-200'}
     `}>
-      <div className="flex items-start mb-3">
+      <div className="flex items-start mb-4">
         <div className={`
-          flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full mr-3
-          ${isCompleted ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600'}
-          ${hasPendingChecks ? 'bg-yellow-50 text-yellow-600' : ''}
+          flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl mr-3 shadow-sm transition-all duration-200
+          ${isCompleted ? 'bg-gradient-to-br from-green-500 to-green-600 text-white' : 
+            hasPendingChecks ? 'bg-gradient-to-br from-yellow-500 to-yellow-600 text-white' : 
+            'bg-gradient-to-br from-blue-50 to-blue-100 text-blue-600'}
         `}>
           {icon}
         </div>
-        <div>
-          <div className="flex items-center">
-            <h3 className="font-medium text-sm text-gray-900">{title}</h3>
-            {isCompleted && <CheckCircle className="w-4 h-4 text-green-500 ml-2" />}
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold text-sm text-gray-900">{title}</h3>
+            {isCompleted && <CheckCircle className="w-4 h-4 text-green-500" />}
           </div>
-          <p className="text-xs text-gray-500 mt-1">{description}</p>
+          <p className="text-xs text-gray-600 mt-1 leading-relaxed">{description}</p>
         </div>
       </div>
       
       {!prerequisitesMet && prerequisitesMessage && (
-        <div className="mb-3 p-2 bg-yellow-50 rounded text-xs text-yellow-700">
-          <AlertTriangle className="inline-block w-4 h-4 mr-1" />
-          {prerequisitesMessage}
+        <div className="mb-4 p-3 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg border border-yellow-200">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-yellow-800 leading-relaxed">{prerequisitesMessage}</p>
+          </div>
         </div>
       )}
       
-      <div className="mt-3 space-y-2">
+      <div className="space-y-2">
         {featureId ? (
           <PremiumButton 
             featureId={featureId}
             onClick={onButtonClick}
             disabled={!prerequisitesMet || isLoading}
             className={`
-              w-full py-2 px-4 rounded text-white text-xs font-medium
+              w-full py-2 px-2 rounded-lg text-white text-xs font-medium transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-[1.02]
               ${prerequisitesMet 
-                ? 'bg-blue-500 hover:bg-blue-600' 
+                ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700' 
                 : 'bg-gray-300 cursor-not-allowed'}
             `}
           >
             {isLoading ? (
-              <span className="flex items-center justify-center">
-                <Loader className="w-4 h-4 mr-2 animate-spin" />
+              <span className="flex items-center justify-center gap-2">
+                <Loader className="w-4 h-4 animate-spin" />
                 Loading...
               </span>
             ) : buttonText}
@@ -178,29 +182,29 @@ const AnalysisSection: React.FC<AnalysisSectionProps> = ({
         ) : (
           <button 
             className={`
-              w-full py-2 px-4 rounded text-white text-xs font-medium
+              w-full py-2 px-2 rounded-lg text-white text-xs font-medium transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-[1.02]
               ${prerequisitesMet 
-                ? 'bg-blue-500 hover:bg-blue-600' 
+                ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700' 
                 : 'bg-gray-300 cursor-not-allowed'}
             `}
             onClick={onButtonClick}
             disabled={!prerequisitesMet || isLoading}
           >
             {isLoading ? (
-              <span className="flex items-center justify-center">
-                <Loader className="w-4 h-4 mr-2 animate-spin" />
+              <span className="flex items-center justify-center gap-2">
+                <Loader className="w-4 h-4 animate-spin" />
                 Loading...
               </span>
             ) : buttonText}
           </button>
         )}
         
-        {/* Slimline opacity slider for Terrain Profile Analysis */}
+        {/* Enhanced opacity slider for Terrain Profile Analysis */}
         {title === "Terrain Profile Analysis" && terrainOpacity !== undefined && onTerrainOpacityChange && aoTerrainGrid && aoTerrainGrid.length > 0 && (
-          <div className="mt-2">
-            <label htmlFor="terrain-opacity-slider" className="text-xs text-gray-700 flex justify-between">
-              <span>Opacity:</span>
-              <span className="font-medium">{Math.round(terrainOpacity * 100)}%</span>
+          <div className="mt-3 p-3 bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg border border-gray-200">
+            <label htmlFor="terrain-opacity-slider" className="text-xs text-gray-700 flex justify-between items-center mb-2">
+              <span className="font-medium">Terrain Opacity:</span>
+              <span className="font-semibold text-blue-600">{Math.round(terrainOpacity * 100)}%</span>
             </label>
             <input
               id="terrain-opacity-slider"
@@ -210,7 +214,7 @@ const AnalysisSection: React.FC<AnalysisSectionProps> = ({
               step="0.05"
               value={terrainOpacity}
               onChange={(e) => onTerrainOpacityChange(Number(e.target.value))}
-              className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer mt-1"
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
               disabled={isAnalyzing || !layerManager.isLayerVisible(MAP_LAYERS.AOTERRAIN_GRID)}
             />
           </div>
@@ -248,49 +252,52 @@ const PowerlineAnalysisSection: React.FC<PowerlineAnalysisSectionProps> = ({
 
   return (
     <div className={`
-      bg-white rounded-lg p-4 border border-gray-200
-      ${hasPendingChecks ? 'border-l-4 border-yellow-300' : ''}
-      ${isCompleted ? 'border-l-4 border-green-300' : ''}
+      bg-white rounded-xl p-4 border-2 shadow-sm hover:shadow-md transition-all duration-200
+      ${hasPendingChecks ? 'border-l-4 border-yellow-400 bg-gradient-to-r from-yellow-50 to-white' : ''}
+      ${isCompleted ? 'border-l-4 border-green-400 bg-gradient-to-r from-green-50 to-white' : 'border-gray-200'}
     `}>
-      <div className="flex items-start mb-3">
+      <div className="flex items-start mb-4">
         <div className={`
-          flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full mr-3
-          ${isCompleted ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600'}
-          ${hasPendingChecks ? 'bg-yellow-50 text-yellow-600' : ''}
+          flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl mr-3 shadow-sm transition-all duration-200
+          ${isCompleted ? 'bg-gradient-to-br from-green-500 to-green-600 text-white' : 
+            hasPendingChecks ? 'bg-gradient-to-br from-yellow-500 to-yellow-600 text-white' : 
+            'bg-gradient-to-br from-blue-50 to-blue-100 text-blue-600'}
         `}>
           {icon}
         </div>
-        <div>
-          <div className="flex items-center">
-            <h3 className="font-medium text-sm text-gray-900">{title}</h3>
-            {isCompleted && <CheckCircle className="w-4 h-4 text-green-500 ml-2" />}
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold text-sm text-gray-900">{title}</h3>
+            {isCompleted && <CheckCircle className="w-4 h-4 text-green-500" />}
           </div>
-          <p className="text-xs text-gray-500 mt-1">{description}</p>
+          <p className="text-xs text-gray-600 mt-1 leading-relaxed">{description}</p>
         </div>
       </div>
       
       {!prerequisitesMet && prerequisitesMessage && (
-        <div className="mb-3 p-2 bg-yellow-50 rounded text-xs text-yellow-700">
-          <AlertTriangle className="inline-block w-4 h-4 mr-1" />
-          {prerequisitesMessage}
+        <div className="mb-4 p-3 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg border border-yellow-200">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-yellow-800 leading-relaxed">{prerequisitesMessage}</p>
+          </div>
         </div>
       )}
       
-      <div className="mt-3 flex flex-col gap-2">
+      <div className="space-y-3">
         <PremiumButton 
           featureId="hv_powerlines"
           className={`
-            py-2 px-4 rounded text-white text-xs font-medium
+            w-full py-2 px-2 rounded-lg text-white text-xs font-medium transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-[1.02]
             ${prerequisitesMet 
-              ? 'bg-blue-500 hover:bg-blue-600' 
+              ? 'bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700' 
               : 'bg-gray-300 cursor-not-allowed'}
           `}
           onClick={onHVButtonClick}
           disabled={!prerequisitesMet || isHVLoading}
         >
           {isHVLoading ? (
-            <span className="flex items-center justify-center">
-              <Loader className="w-4 h-4 mr-2 animate-spin" />
+            <span className="flex items-center justify-center gap-2">
+              <Loader className="w-4 h-4 animate-spin" />
               Loading...
             </span>
           ) : hvButtonText}
@@ -300,15 +307,15 @@ const PowerlineAnalysisSection: React.FC<PowerlineAnalysisSectionProps> = ({
           onClick={onLocalButtonClick}
           disabled={!prerequisitesMet || isLocalLoading}
           className={`
-            py-2 px-4 rounded text-white text-xs font-medium
+            w-full py-2 px-2 rounded-lg text-white text-xs font-medium transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-[1.02]
             ${prerequisitesMet 
-              ? 'bg-blue-500 hover:bg-blue-600' 
+              ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700' 
               : 'bg-gray-300 cursor-not-allowed'}
           `}
         >
           {isLocalLoading ? (
-            <span className="flex items-center justify-center">
-              <Loader className="w-4 h-4 mr-2 animate-spin" />
+            <span className="flex items-center justify-center gap-2">
+              <Loader className="w-4 h-4 animate-spin" />
               Loading...
             </span>
           ) : localButtonText}
@@ -319,7 +326,7 @@ const PowerlineAnalysisSection: React.FC<PowerlineAnalysisSectionProps> = ({
 };
 
 /**
- * AO Buffer Section Component 
+ * Enhanced AO Buffer Section Component 
  */
 interface AOBufferSectionProps {
   bufferDistance: number;
@@ -335,30 +342,34 @@ const AOBufferSection: React.FC<AOBufferSectionProps> = ({
   isAnalyzing
 }) => {
   return (
-    <div className="bg-white rounded-lg p-4 border border-gray-200 mb-4">
-      <div className="flex items-start mb-3">
-        <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full mr-3 bg-blue-50 text-blue-600">
-          <Move className="w-4 h-4" />
+    <div className="bg-white rounded-xl p-4 border border-gray-200 mb-4 shadow-sm hover:shadow-md transition-all duration-200">
+      <div className="flex items-start mb-4">
+        <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl mr-3 bg-gradient-to-br from-blue-50 to-blue-100 text-blue-600 shadow-sm">
+          <Move className="w-5 h-5" />
         </div>
-        <div>
-          <h3 className="font-medium text-sm text-gray-900">Area of Operations Buffer</h3>
-          <p className="text-xs text-gray-500 mt-1">
+        <div className="flex-1">
+          <h3 className="font-semibold text-sm text-gray-900">Area of Operations Buffer</h3>
+          <p className="text-xs text-gray-600 mt-1 leading-relaxed">
             Adjust the safety margin around your flight path or operating area
           </p>
         </div>
       </div>
       
       {!hasFlightPlan && (
-        <div className="mb-3 p-2 bg-yellow-50 rounded text-xs text-yellow-700">
-          <AlertTriangle className="inline-block w-4 h-4 mr-1" />
-          No flight plan loaded. Buffer will apply to manually defined areas.
+        <div className="mb-4 p-3 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg border border-yellow-200">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-yellow-800 leading-relaxed">
+              No flight plan loaded. Buffer will apply to manually defined areas.
+            </p>
+          </div>
         </div>
       )}
       
-      <div className="mt-3">
-        <label htmlFor="ao-buffer-slider" className="text-sm text-gray-700 flex justify-between">
-          <span>Buffer Distance:</span>
-          <span className="font-medium">{bufferDistance}m</span>
+      <div className="p-3 bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg border border-gray-200">
+        <label htmlFor="ao-buffer-slider" className="text-sm text-gray-700 flex justify-between items-center mb-3">
+          <span className="font-medium">Buffer Distance:</span>
+          <span className="font-semibold text-blue-600">{bufferDistance}m</span>
         </label>
         <input
           id="ao-buffer-slider"
@@ -368,10 +379,10 @@ const AOBufferSection: React.FC<AOBufferSectionProps> = ({
           step="50"
           value={bufferDistance}
           onChange={(e) => onBufferDistanceChange(Number(e.target.value))}
-          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer mt-2"
+          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
           disabled={isAnalyzing}
         />
-        <div className="flex justify-between text-xs text-gray-500 mt-1">
+        <div className="flex justify-between text-xs text-gray-500 mt-2">
           <span>100m</span>
           <span>500m</span>
           <span>1000m</span>
@@ -726,9 +737,16 @@ const TerrainAnalysisDashboard = forwardRef<TerrainAnalysisDashboardRef, Terrain
   };
 
   return (
-    <div className="space-y-4 p-1">
-      <div className="mb-4">
-        <p className="text-sm text-gray-600">
+    <div className="space-y-4">
+      {/* Enhanced Header */}
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-2">
+          <div className="p-2 bg-gradient-to-br from-green-500 to-green-600 rounded-lg shadow-sm">
+            <Mountain className="w-4 h-4 text-white" />
+          </div>
+          <h2 className="font-semibold text-gray-900 text-sm">Terrain & Obstacle Analysis</h2>
+        </div>
+        <p className="text-sm text-gray-600 leading-relaxed">
           Analyse terrain features and obstacles for your flight operations
         </p>
         {onClose && (
@@ -741,16 +759,19 @@ const TerrainAnalysisDashboard = forwardRef<TerrainAnalysisDashboardRef, Terrain
         )}
       </div>
       
+      {/* Enhanced Error Message */}
       {localError && (
-        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 mb-4">
-          <AlertTriangle className="inline-block w-4 h-4 mr-1" />
-          {localError}
+        <div className="p-4 bg-gradient-to-r from-red-50 to-pink-50 border-l-4 border-red-400 rounded-lg text-sm text-red-800 mb-4 shadow-sm">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+            <p className="leading-relaxed">{localError}</p>
+          </div>
         </div>
       )}
 
       {localError && (
         <button 
-          className="w-full py-2 px-4 mb-4 rounded text-white text-xs font-medium bg-blue-500 hover:bg-blue-600"
+          className="w-full py-3 px-4 mb-4 rounded-lg text-white text-sm font-semibold bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-[1.02]"
           onClick={handleResetAnalysis}
           disabled={isAnalyzing}
         >
@@ -758,10 +779,13 @@ const TerrainAnalysisDashboard = forwardRef<TerrainAnalysisDashboardRef, Terrain
         </button>
       )}
       
+      {/* Enhanced Success Message */}
       {successMessage && (
-        <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700 mb-4">
-          <CheckCircle className="inline-block w-4 h-4 mr-1" />
-          {successMessage}
+        <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 border-l-4 border-green-400 rounded-lg text-sm text-green-800 mb-4 shadow-sm">
+          <div className="flex items-start gap-2">
+            <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+            <p className="leading-relaxed">{successMessage}</p>
+          </div>
         </div>
       )}
       
@@ -779,7 +803,7 @@ const TerrainAnalysisDashboard = forwardRef<TerrainAnalysisDashboardRef, Terrain
         <AnalysisSection
           title="Terrain Profile Analysis"
           description="Analyse terrain elevation across your operating area."
-          icon={<Mountain className="w-4 h-4" />}
+          icon={<Mountain className="w-5 h-5" />}
           buttonText="Analyse Terrain Profile in AO"
           onButtonClick={handleRunAOAnalysis}
           checklistGroupId="terrainProfile"
@@ -797,7 +821,7 @@ const TerrainAnalysisDashboard = forwardRef<TerrainAnalysisDashboardRef, Terrain
         <PowerlineAnalysisSection
           title="Powerline Analysis"
           description="Show high-voltage (HV) or Dial Before You Dig (DBYD) powerlines in your operating area."
-          icon={<Zap className="w-4 h-4" />}
+          icon={<Zap className="w-5 h-5" />}
           hvButtonText="Show HV Powerlines"
           localButtonText="Show Local Powerlines"
           onHVButtonClick={handleTogglePowerlines}
@@ -814,7 +838,7 @@ const TerrainAnalysisDashboard = forwardRef<TerrainAnalysisDashboardRef, Terrain
         <AnalysisSection
           title="Tree Heights"
           description="Display tree heights within the Area of Operations."
-          icon={<Trees className="w-4 h-4" />}
+          icon={<Trees className="w-5 h-5" />}
           buttonText="Toggle Tree Heights"
           onButtonClick={toggleTreeHeights}
           prerequisitesMet={!!aoGeometry}
@@ -826,7 +850,7 @@ const TerrainAnalysisDashboard = forwardRef<TerrainAnalysisDashboardRef, Terrain
         <AnalysisSection
           title="Airspace Analysis"
           description="View airspace information in your operating area."
-          icon={<Plane className="w-4 h-4" />}
+          icon={<Plane className="w-5 h-5" />}
           buttonText="Show Airspace"
           onButtonClick={handleToggleAirspace}
           checklistGroupId="airspace"
@@ -836,10 +860,11 @@ const TerrainAnalysisDashboard = forwardRef<TerrainAnalysisDashboardRef, Terrain
         />
       </div>
       
-      <div className="mt-6 p-3 bg-gray-50 rounded-lg border border-gray-200 text-xs text-gray-600">
-        <div className="flex items-start gap-2">
-          <Signal className="w-4 h-4 text-gray-500 mt-0.5" />
-          <p>
+      {/* Enhanced Footer Info */}
+      <div className="mt-6 p-4 bg-gradient-to-r from-gray-50 to-blue-50 rounded-xl border border-gray-200 shadow-sm">
+        <div className="flex items-start gap-3">
+          <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+          <p className="text-xs text-gray-700 leading-relaxed">
             Terrain analysis is based on available digital elevation models. While accurate for general planning, 
             always maintain visual awareness during flight operations and comply with regulations.
           </p>

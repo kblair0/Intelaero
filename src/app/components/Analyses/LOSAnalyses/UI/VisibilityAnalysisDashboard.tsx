@@ -1,15 +1,17 @@
 /**
- * VisibilityAnalysisDashboard.tsx
+ * VisibilityAnalysisDashboard.tsx - Enhanced Visual Design
  * 
  * Purpose:
  * Main dashboard component for Line of Sight (LOS) analysis.
  * Organizes different analysis modes into collapsible sections and
  * provides a consistent interface for all LOS analysis capabilities.
  * 
- * This component:
- * - Manages expandable analysis sections
- * - Coordinates between different analysis card components
- * - Provides a unified UI for all LOS analysis features
+ * Visual Enhancements:
+ * - Modern card design with subtle shadows and gradients
+ * - Improved color hierarchy and visual feedback
+ * - Enhanced spacing and typography
+ * - Better visual separation between sections
+ * - Consistent with compact checklist theme
  * 
  * Related Components:
  * - FlightPathAnalysisCard: Analyzes visibility along flight path
@@ -33,7 +35,9 @@ import {
   Link, 
   ChevronDown, 
   Eye,
-  Signal, MapPin
+  Signal, 
+  MapPin,
+  Info
 } from "lucide-react";
 import { useMarkersContext } from "../../../../context/MarkerContext";
 import { trackEventWithForm as trackEvent } from "../../../tracking/tracking";
@@ -58,15 +62,13 @@ interface AnalysisDashboardProps {
 }
 
 /**
- * Button component for viewing all marker locations
- * Uses AnalysisControllerContext to trigger the marker locations modal at the app level
+ * Enhanced button component for viewing all marker locations
  */
 const ViewAllLocationsButton: React.FC = () => {
   const { markers } = useMarkersContext();
   const { setShowMarkerLocationsModal } = useAnalysisController();
 
   const handleViewLocations = useCallback(() => {
-    // Instead of managing modal locally, trigger it at the app level
     setShowMarkerLocationsModal(true);
     trackEvent("view_all_marker_locations", { 
       totalMarkers: markers.length
@@ -77,22 +79,22 @@ const ViewAllLocationsButton: React.FC = () => {
   if (markers.length === 0) return null;
 
   return (
-    <div className="mb-3">
+    <div className="mb-4">
       <button
         onClick={handleViewLocations}
-        className="w-full px-3 py-2 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors font-medium flex items-center justify-center gap-2"
+        className="w-full px-2 py-2 text-xs bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all duration-200 font-medium flex items-center justify-center gap-2 shadow-sm hover:shadow-md transform hover:scale-[1.02]"
         title="View all marker locations"
         aria-label="View all marker locations"
       >
         <MapPin className="w-4 h-4" />
-        View All Marker Coordinates ({markers.length})
+        View All Coordinates ({markers.length})
       </button>
     </div>
   );
 };
 
 /**
- * Collapsible section component for each analysis type
+ * Enhanced collapsible section component for each analysis type
  */
 const AnalysisSection: React.FC<AnalysisSectionProps> = ({
   title,
@@ -102,19 +104,28 @@ const AnalysisSection: React.FC<AnalysisSectionProps> = ({
   isExpanded,
   onToggle,
 }) => {
-  return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+    return (
+      <div className={`
+        bg-white rounded-xl shadow-sm border-2 overflow-hidden hover:shadow-md transition-all duration-200
+        ${isExpanded 
+          ? 'border-blue-400 bg-gradient-to-r from-blue-50 to-white' 
+          : 'border-gray-200'}
+      `}>    
       <button
-        className="w-full flex items-center gap-3 p-4 text-left hover:bg-gray-50 transition-colors"
+        className="w-full flex items-center gap-3 p-4 text-left hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 transition-all duration-200"
         onClick={onToggle}
       >
-        <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-blue-50 text-blue-600">
+        <div className={`flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl shadow-sm transition-all duration-200 ${
+          isExpanded 
+            ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white' 
+            : 'bg-gradient-to-br from-blue-50 to-blue-100 text-blue-600 hover:from-blue-100 hover:to-blue-200'
+        }`}>
           {icon}
         </div>
         <div className="flex-grow">
-          <h3 className="font-medium text-gray-900">{title}</h3>
+          <h3 className="font-semibold text-gray-900 text-sm">{title}</h3>
           {description && (
-            <p className="text-xs text-gray-500 mt-0.5">{description}</p>
+            <p className="text-xs text-gray-600 mt-1 leading-relaxed">{description}</p>
           )}
         </div>
         <ChevronDown
@@ -123,7 +134,7 @@ const AnalysisSection: React.FC<AnalysisSectionProps> = ({
       </button>
       
       {isExpanded && (
-        <div className="p-4 bg-gray-50 border-t border-gray-200">
+        <div className="p-1 bg-gradient-to-b from-gray-50 to-white border-t border-gray-100">
           {children}
         </div>
       )}
@@ -132,7 +143,7 @@ const AnalysisSection: React.FC<AnalysisSectionProps> = ({
 };
 
 /**
- * Main LOS Analysis Dashboard component
+ * Enhanced LOS Analysis Dashboard component
  */
 const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ initialSection = null }) => {
   // Track which sections are expanded
@@ -141,7 +152,7 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ initialSection = 
     station: initialSection === 'station',
     merged: initialSection === 'merged',
     stationLOS: initialSection === 'stationLOS',
-      mobileTowers: false, 
+    mobileTowers: false, 
   });
   
   const { gridAnalysisRef } = useAnalysisController();
@@ -154,7 +165,7 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ initialSection = 
         station: initialSection === 'station',
         merged: initialSection === 'merged',
         stationLOS: initialSection === 'stationLOS',
-          mobileTowers: false, 
+        mobileTowers: false, 
       });
     }
   }, [initialSection]);
@@ -173,32 +184,40 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ initialSection = 
   };
 
   return (
-    <div className="space-y-4 p-1">
-      <div className="mb-4">
-        <p className="text-sm text-gray-600">
-          Verify communication coverage and visibility for your flight plan
+    <div className="space-y-4">
+      {/* Enhanced Header */}
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-2">
+          <div className="p-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg shadow-sm">
+            <Eye className="w-4 h-4 text-white" />
+          </div>
+          <h2 className="font-semibold text-gray-900 text-sm">Visibility & Communication Analysis</h2>
+        </div>
+        <p className="text-sm text-gray-600 leading-relaxed">
+          Verify communication coverage and visibility for your flight operations
         </p>
       </div>
       
       <AnalysisSection
         title="Observer/Comms Visibility Analysis"
         description={descriptions.station}
-        icon={<RadioTower className="w-4 h-4" />}
+        icon={<RadioTower className="w-5 h-5" />}
         isExpanded={expandedSections.station}
         onToggle={() => toggleSection("station")}
       >
-        <div className="mb-3 p-2 bg-blue-50 rounded-md border border-blue-100">
-          <div className="flex items-start gap-2">
-            <Signal className="w-4 h-4 text-blue-500 mt-0.5" />
-            <p className="text-xs text-blue-700">
-              This analysis shows the ground features visible to each station. Place stations on the map and configure their parameters.
+        {/* Enhanced info box */}
+        <div className="mb-4 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+          <div className="flex items-start gap-3">
+            <Signal className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-blue-800 leading-relaxed">
+              This analysis shows the ground features visible to each station. Place stations on the map and configure their parameters for comprehensive coverage analysis.
             </p>
           </div>
         </div>
 
         <ViewAllLocationsButton />
         
-        <div className="space-y-4">
+        <div className="space-y-3">
           <StationAnalysisCard key="gcs" gridAnalysisRef={gridAnalysisRef} stationType="gcs" />
           <StationAnalysisCard key="observer" gridAnalysisRef={gridAnalysisRef} stationType="observer" />
           <StationAnalysisCard key="repeater" gridAnalysisRef={gridAnalysisRef} stationType="repeater" />
@@ -208,7 +227,7 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ initialSection = 
       <AnalysisSection
         title="Merged Analysis"
         description={descriptions.merged}
-        icon={<Layers className="w-4 h-4" />}
+        icon={<Layers className="w-5 h-5" />}
         isExpanded={expandedSections.merged}
         onToggle={() => toggleSection("merged")}
       >
@@ -218,7 +237,7 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ initialSection = 
       <AnalysisSection
         title="Observer/Comms Line of Sight Analysis"
         description={descriptions.stationLOS}
-        icon={<Link className="w-4 h-4" />}
+        icon={<Link className="w-5 h-5" />}
         isExpanded={expandedSections.stationLOS}
         onToggle={() => toggleSection("stationLOS")}
       >
@@ -228,7 +247,7 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ initialSection = 
       <AnalysisSection
         title="Flight Path Analysis"
         description={descriptions.flight}
-        icon={<Plane className="w-4 h-4" />}
+        icon={<Plane className="w-5 h-5" />}
         isExpanded={expandedSections.flight}
         onToggle={() => toggleSection("flight")}
       >
@@ -238,18 +257,19 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ initialSection = 
       <AnalysisSection
         title="Mobile Tower Coverage"
         description="View 3G, 4G, and 5G mobile towers in your operating area"
-        icon={<Signal className="w-4 h-4" />}
+        icon={<Signal className="w-5 h-5" />}
         isExpanded={expandedSections.mobileTowers}
         onToggle={() => toggleSection("mobileTowers")}
       >
         <MobileTowerAnalysisCard />
       </AnalysisSection>
       
-      <div className="mt-6 p-3 bg-gray-50 rounded-lg border border-gray-200 text-xs text-gray-600">
-        <div className="flex items-start gap-2">
-          <Eye className="w-4 h-4 text-gray-500 mt-0.5" />
-          <p>
-            Each analysis type will be displayed on the map when run. Use the toggle switches in each card to show/hide map layers.
+      {/* Enhanced footer info */}
+      <div className="mt-6 p-4 bg-gradient-to-r from-gray-50 to-blue-50 rounded-xl border border-gray-200">
+        <div className="flex items-start gap-3">
+          <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+          <p className="text-xs text-gray-700 leading-relaxed">
+            Each analysis type will be displayed on the map when run. Use the toggle switches in each card to show/hide map layers for better visualization.
           </p>
         </div>
       </div>

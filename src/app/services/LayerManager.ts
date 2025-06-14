@@ -335,10 +335,9 @@ class LayerManager {
       return false;
     }
   }
-
   /**
-   * Adds or updates an AO terrain grid to the map with sampling for visualization
-   * while preserving complete dataset for analysis
+   * Adds or updates an AO terrain grid to the map with improved persistence
+   * FIXED: Better source management and layer persistence
    */
   addAreaOfOperationsTerrain(gridCells: GridCell[]): boolean {
     if (!this.ensureMap()) return false;
@@ -386,101 +385,96 @@ class LayerManager {
         features
       };
       
-      // First add the source safely
+      // FIXED: Better source management
       const sourceId = MAP_LAYERS.AOTERRAIN_GRID;
       
+      // Always remove and recreate source to prevent stale data issues
       if (this.map!.getSource(sourceId)) {
-        try {
-          (this.map!.getSource(sourceId) as mapboxgl.GeoJSONSource).setData(gridFeatureCollection);
-        } catch (sourceError) {
-          console.warn("Error updating source, removing and recreating:", sourceError);
-          this.map!.removeSource(sourceId);
-          this.map!.addSource(sourceId, {
-            type: "geojson",
-            data: gridFeatureCollection
-          });
-        }
-      } else {
-        this.map!.addSource(sourceId, {
-          type: "geojson",
-          data: gridFeatureCollection
-        });
+        console.log("Removing existing terrain grid source");
+        this.map!.removeSource(sourceId);
       }
       
-      // Then add the layer with ENHANCED COLOR MAPPING
-      try {
-        if (this.map!.getLayer(sourceId)) {
-          this.map!.removeLayer(sourceId);
-        }
-        
-        // Determine the best color scale approach based on elevation range
-        const elevationRange = maxElevation - minElevation;
-        const medianElevation = this.calculateMedianElevation(gridCells);
-        const useEnhancedScale = elevationRange > 300; // For areas with large elevation differences
-        
-        // Create color expression based on distribution
-        let colorExpression;
-        if (useEnhancedScale) {
-          // Enhanced scale for large elevation differences
-          // This uses quantiles rather than linear interpolation
-          const quartile1 = minElevation + (medianElevation - minElevation) * 0.5;
-          const quartile3 = medianElevation + (maxElevation - medianElevation) * 0.5;
-          const highPoint = medianElevation + (maxElevation - medianElevation) * 0.8;
-          
-          colorExpression = [
-            "interpolate",
-            ["linear"],
-            ["get", "elevation"],
-            minElevation, "#0000FF",     // Lowest elevation (Blue)
-            quartile1, "#00AAFF",        // 1st quartile (Light Blue)
-            medianElevation, "#00FF00",  // Median elevation (Green)
-            quartile3, "#FFFF00",        // 3rd quartile (Yellow)
-            highPoint, "#FF0000",        // High elevation (Red)
-            maxElevation, "#800080"      // Highest elevation (Purple)
-          ];
-        } else {
-          // Standard linear scale for areas with moderate elevation change
-          colorExpression = [
-            "interpolate",
-            ["linear"],
-            ["get", "elevation"],
-            minElevation, "#0000FF",                                             // Lowest (Blue)
-            minElevation + (maxElevation - minElevation) * 0.2, "#00AAFF",       // 20% (Light Blue)
-            minElevation + (maxElevation - minElevation) * 0.4, "#00FF00",       // 40% (Green)
-            minElevation + (maxElevation - minElevation) * 0.6, "#FFFF00",       // 60% (Yellow)
-            minElevation + (maxElevation - minElevation) * 0.8, "#FF0000",       // 80% (Red)
-            maxElevation, "#800080"                                              // 100% (Purple)
-          ];
-        }
-        
-        // Add the layer with improved color mapping
-        this.map!.addLayer({
-          id: sourceId,
-          type: "fill",
-          source: sourceId,
-          layout: { visibility: "visible" },
-          paint: {
-            "fill-color": colorExpression,
-            "fill-opacity": 0.7,  // Increased opacity for better visibility
-            "fill-outline-color": [  // Add outline color for better cell connection
-              "interpolate",
-              ["linear"],
-              ["get", "elevation"],
-              minElevation, "#0000AA",  // Dark blue for low elevations
-              maxElevation, "#550055"   // Dark purple for high elevations
-            ]
-          }
-        }); 
-
-        
-        // Notify listeners
-        this.notifyListeners('layerAdded', sourceId, true);
-        
-        return true;
-      } catch (layerError) {
-        console.error("Error adding terrain grid layer:", layerError);
-        return false;
+      // Add fresh source
+      this.map!.addSource(sourceId, {
+        type: "geojson",
+        data: gridFeatureCollection
+      });
+      
+      // FIXED: Always remove layer before adding
+      if (this.map!.getLayer(sourceId)) {
+        this.map!.removeLayer(sourceId);
       }
+      
+      // Determine the best color scale approach based on elevation range
+      const elevationRange = maxElevation - minElevation;
+      const medianElevation = this.calculateMedianElevation(gridCells);
+      const useEnhancedScale = elevationRange > 300; // For areas with large elevation differences
+      
+      // Create color expression based on distribution
+      let colorExpression;
+      if (useEnhancedScale) {
+        // Enhanced scale for large elevation differences
+        // This uses quantiles rather than linear interpolation
+        const quartile1 = minElevation + (medianElevation - minElevation) * 0.5;
+        const quartile3 = medianElevation + (maxElevation - medianElevation) * 0.5;
+        const highPoint = medianElevation + (maxElevation - medianElevation) * 0.8;
+        
+        colorExpression = [
+          "interpolate",
+          ["linear"],
+          ["get", "elevation"],
+          minElevation, "#0000FF",     // Lowest elevation (Blue)
+          quartile1, "#00AAFF",        // 1st quartile (Light Blue)
+          medianElevation, "#00FF00",  // Median elevation (Green)
+          quartile3, "#FFFF00",        // 3rd quartile (Yellow)
+          highPoint, "#FF0000",        // High elevation (Red)
+          maxElevation, "#800080"      // Highest elevation (Purple)
+        ];
+      } else {
+        // Standard linear scale for areas with moderate elevation change
+        colorExpression = [
+          "interpolate",
+          ["linear"],
+          ["get", "elevation"],
+          minElevation, "#0000FF",                                             // Lowest (Blue)
+          minElevation + (maxElevation - minElevation) * 0.2, "#00AAFF",       // 20% (Light Blue)
+          minElevation + (maxElevation - minElevation) * 0.4, "#00FF00",       // 40% (Green)
+          minElevation + (maxElevation - minElevation) * 0.6, "#FFFF00",       // 60% (Yellow)
+          minElevation + (maxElevation - minElevation) * 0.8, "#FF0000",       // 80% (Red)
+          maxElevation, "#800080"                                              // 100% (Purple)
+        ];
+      }
+      
+      // Add the layer with improved color mapping and PERSISTENCE
+      this.map!.addLayer({
+        id: sourceId,
+        type: "fill",
+        source: sourceId,
+        layout: { 
+          visibility: "visible" // FIXED: Ensure always visible when added
+        },
+        paint: {
+          "fill-color": colorExpression,
+          "fill-opacity": 0.7,  // Increased opacity for better visibility
+          "fill-outline-color": [  // Add outline color for better cell connection
+            "interpolate",
+            ["linear"],
+            ["get", "elevation"],
+            minElevation, "#0000AA",  // Dark blue for low elevations
+            maxElevation, "#550055"   // Dark purple for high elevations
+          ]
+        }
+      }); 
+      
+      // FIXED: Properly register the layer for tracking
+      this.registerLayer(sourceId, true);
+      
+      // Notify listeners
+      this.notifyListeners('layerAdded', sourceId, true);
+      
+      console.log(`Successfully added terrain grid layer with ${features.length} features`);
+      
+      return true;
     } catch (error) {
       console.error("Error adding AO terrain grid:", error);
       return false;
@@ -569,6 +563,38 @@ class LayerManager {
       return false;
     }
   }
+
+  /**
+ * Debug method to check terrain layer status
+ * Add this method to LayerManager class
+ */
+debugTerrainLayer(): void {
+  if (!this.map) {
+    console.log("No map available for debugging");
+    return;
+  }
+  
+  const layerId = MAP_LAYERS.AOTERRAIN_GRID;
+  const hasSource = !!this.map.getSource(layerId);
+  const hasLayer = !!this.map.getLayer(layerId);
+  const visibility = hasLayer ? this.map.getLayoutProperty(layerId, 'visibility') : 'unknown';
+  const isTracked = this.layers.has(layerId);
+  
+  console.log("Terrain Layer Debug:", {
+    layerId,
+    hasSource,
+    hasLayer,
+    visibility,
+    isTracked,
+    trackedVisibility: this.layers.get(layerId)
+  });
+  
+  // Also check if source has data
+  if (hasSource) {
+    const source = this.map.getSource(layerId) as mapboxgl.GeoJSONSource;
+    console.log("Source data available:", !!source._data);
+  }
+}
 
   /**
    * Reset all layers
