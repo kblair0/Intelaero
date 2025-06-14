@@ -60,20 +60,22 @@ const WelcomeMessage: React.FC<WelcomeMessageProps> = ({ onGetStarted, onClose }
         />
         <h1 className="text-2xl font-bold">Welcome to DroneView</h1>
         <p className="text-lg font-bold text-gray-700 mt-1 mb-1">
-          Unmatched Visibility and Communications Coverage Analysis
+          Automated EVLOS/BVLOS Mission Planning & Validation
         </p>
       </div>
 
       {/* Body */}
       <div className="mt-2 text-center">
         <p className="text-md mb-1 text-gray-600 max-w-xl mx-auto">
-          Intel.Aero empowers drone pilots, from hobbyists to commercial operators, with clear insights into visibility and connectivity over any terrain.
+          Our intelligent "automation-first" design handles complex terrain analysis, visibility calculations, and safety validation 
+          in real-time – ensuring 100% visual contact and zero planning overhead.
         </p>
-        <p className="text-md mb-1 text-gray-600 max-w-xl mx-auto">
-          Fly worry-free, knowing you'll maintain visual contact and reliable connectivity (e.g. GCS/LTE) with your drone.
+                <p className="text-md mb-1 text-gray-600 max-w-xl mx-auto">
+        Plan EVLOS/BVLOS missions with confidence, 
+          maintain perfect line-of-sight, and scale your operations 10x faster.
         </p>
         <p className="mt-2 max-w-xl mx-auto mt-4 text-md">
-          <em>&apos;Your software has literally turned my planning from days into hours!&apos;</em> - Industry Partner
+          <em>&apos;Your software has literally turned my planning from days into hours! I can now quote 4x more jobs with complete confidence.&apos;</em> - Jeff, Mining Survey Operations Manager
         </p>
       </div>
 
