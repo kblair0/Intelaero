@@ -56,18 +56,6 @@ const ElegantPlaceholder: React.FC<ElegantPlaceholderProps> = ({
     window.open("/learn-more", "_blank");
   };
 
-  /**
-   * Handles the Help link click
-   */
-  const handleHelp = () => {
-    trackEvent("elegant_placeholder_help_clicked", {
-      source: "sidebar_placeholder"
-    });
-    
-    // TODO: Replace with actual help/support URL
-    window.open("/help", "_blank");
-  };
-
   return (
     <div className={`flex flex-col h-full bg-white rounded-l-xl ${className}`}>
       {/* Main Content Area */}
@@ -108,19 +96,6 @@ const ElegantPlaceholder: React.FC<ElegantPlaceholderProps> = ({
             <ExternalLink className="w-4 h-4" style={{ color: 'white' }} />
           </button>
         </div>
-      </div>
-
-      {/* Subtle Support Footer */}
-      <div className="border-t border-gray-100 px-6 py-4">
-        <button
-          onClick={handleHelp}
-          className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 
-                     transition-colors duration-200"
-          aria-label="Get help and support"
-        >
-          <HelpCircle className="w-3 h-3" />
-          <span>Need Help?</span>
-        </button>
       </div>
     </div>
   );

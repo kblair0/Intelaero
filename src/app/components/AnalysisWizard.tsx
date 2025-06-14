@@ -144,7 +144,7 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({
     {
       id: 'demo',
       title: 'Try Demo',
-      description: 'See analysis in action',
+      description: 'See it in action including flightplan and terrain analysis',
       icon: <PlayCircle className="w-5 h-5 text-green-600" />,
       iconBg: 'bg-green-100',
       action: handleTryDemo,
