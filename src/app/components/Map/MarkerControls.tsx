@@ -23,6 +23,7 @@ import PremiumButton from '../../components/UI/PremiumButton';
 import { Wifi, Radio, Eye, XCircle } from 'lucide-react';
 import { useChecklistContext } from '../../context/ChecklistContext';
 import { useMarkersContext } from '../../context/MarkerContext';
+import { DEMO_CONFIG } from '../../context/DemoOrchestrationContext';
 
 const MarkerControls: React.FC<{ 
   onCreateDemoObserver?: () => Promise<void>;
@@ -45,6 +46,7 @@ const MarkerControls: React.FC<{
     addObserver,
     addRepeater,
     removeAllAnalysisLayers,
+    markerRefs,
     error // This will be displayed to the user
   } = useMarkers({ 
     map, 
@@ -155,25 +157,18 @@ const MarkerControls: React.FC<{
 
 //demo observer creation handler
 const createDemoObserver = useCallback(async (): Promise<void> => {
-  // Clear any previous errors
   clearHighlight();
   
-  // Demo coordinates from DemoOrchestrationContext
-  const demoCoords = {
-    lat: -33.85361,    // Sydney Harbour
-    lng: 151.24677
-  };
+  const demoCoords = DEMO_CONFIG.OBSERVER_COORDINATES;
   
-  // First, pan the map to the demo coordinates
   if (map) {
     console.log('[MarkerControls] Panning map to demo coordinates:', demoCoords);
     map.flyTo({
       center: [demoCoords.lng, demoCoords.lat],
-      zoom: 12,
+      zoom: 15,  // Or whatever zoom level you prefer
       duration: 1000
     });
     
-    // Wait for the map to finish moving
     await new Promise(resolve => {
       const onMoveEnd = () => {
         map.off('moveend', onMoveEnd);
@@ -183,11 +178,31 @@ const createDemoObserver = useCallback(async (): Promise<void> => {
     });
   }
   
-  // Use the FULL handler that includes analysis, not just addObserver()
+  // Create the observer (this opens the popup)
   await handleAddObserver();
   
+  // 🔥 ADD: Auto-close popup after 1 second for demo only
+  setTimeout(() => {
+    try {
+      // Find the most recently created observer marker
+      const observerMarkers = markers.filter(m => m.type === 'observer');
+      if (observerMarkers.length > 0) {
+        // Get the marker ref for the most recent observer
+        const latestObserver = observerMarkers[observerMarkers.length - 1];
+        const markerRef = markerRefs.current.find(ref => ref.id === latestObserver.id);
+        
+        if (markerRef && markerRef.marker.getPopup()?.isOpen()) {
+          markerRef.marker.togglePopup();
+          console.log('[MarkerControls] Demo observer popup auto-closed');
+        }
+      }
+    } catch (error) {
+      console.debug('Demo popup auto-close: marker no longer exists');
+    }
+  }, 1000);
+  
   console.log('[MarkerControls] Demo observer created with analysis');
-}, [handleAddObserver, clearHighlight, map]);
+}, [handleAddObserver, clearHighlight, map, markers, markerRefs]);
 
   // ADD this useEffect to expose the function to parent:
   useEffect(() => {

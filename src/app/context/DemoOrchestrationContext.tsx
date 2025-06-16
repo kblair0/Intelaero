@@ -29,16 +29,19 @@ import { useChecklistContext } from './ChecklistContext';
 import { trackEventWithForm as trackEvent } from '../components/tracking/tracking';
 import FlightPlanUploader, { FlightPlanUploaderRef } from '../components/FlightPlanUploader';
 import TerrainAnalysisDashboard, { TerrainAnalysisDashboardRef } from '../components/Analyses/ObstacleAnalysis/TerrainAnalysisDashboard';
+import GridAnalysisController, { GridAnalysisRef } from '../components/Analyses/Services/GridAnalysis/GridAnalysisController';
+import { useFlightPlanContext } from './FlightPlanContext';
 
 
 // Demo step enumeration for type safety
 export enum DemoStep {
   IDLE = 0,
   LOADING_FLIGHT_PLAN = 1,
-  PLACING_OBSERVER = 2,
-  RUNNING_TERRAIN_ANALYSIS = 3,
-  COMPLETING_DEMO = 4,
-  COMPLETED = 5,
+  RUNNING_TERRAIN_ANALYSIS = 2,
+  PLACING_OBSERVER = 3,
+  RUNNING_FLIGHT_PATH_VISIBILITY = 4,  // 🔥 NEW STEP
+  COMPLETING_DEMO = 5,                  // 🔧 SHIFTED from 4
+  COMPLETED = 6,                        // 🔧 SHIFTED from 5
   ERROR = -1
 }
 
@@ -69,6 +72,7 @@ interface DemoOrchestrationContextType {
   executeStepPlaceObserver: () => Promise<boolean>;
   executeStepRunTerrainAnalysis: () => Promise<boolean>;
   executeStepCompleteDemo: () => Promise<boolean>;
+  executeStepRunFlightPathVisibility: () => Promise<boolean>;
 }
 
 // Context creation with undefined default (forces provider usage)
@@ -76,23 +80,24 @@ const DemoOrchestrationContext = createContext<DemoOrchestrationContextType | un
 
 // Demo configuration constants
 const DEMO_CONFIG = {
-  STEP_DELAY_MS: 2000, // 2 second delay between steps
+  STEP_DELAY_MS: 1500,
   OBSERVER_COORDINATES: {
-    lat: -33.85361,    // : In Sydney Harbour
-    lng: 151.24677,
-    elevation: 2
+    lat: -20.91124,
+    lng: 140.69715,
+    elevation: 5     
   },
-  FLIGHT_PLAN_PATH: "/example.geojson",
+  FLIGHT_PLAN_PATH: "/example2.waypoints",
   TERRAIN_REFERENCE_ALTITUDE: 120,
-  STEP_MESSAGES: {
-    [DemoStep.IDLE]: "Ready to start demo",
-    [DemoStep.LOADING_FLIGHT_PLAN]: "Loading demo flight plan...",
-    [DemoStep.PLACING_OBSERVER]: "Placing optimal observer position...",
-    [DemoStep.RUNNING_TERRAIN_ANALYSIS]: "Analyzing terrain and obstacles...",
-    [DemoStep.COMPLETING_DEMO]: "Finalizing demo setup...",
-    [DemoStep.COMPLETED]: "Demo complete! ✅",
-    [DemoStep.ERROR]: "Demo encountered an error"
-  }
+STEP_MESSAGES: {
+  [DemoStep.IDLE]: "Ready to start demo",
+  [DemoStep.LOADING_FLIGHT_PLAN]: "Loading demo flight plan...",
+  [DemoStep.RUNNING_TERRAIN_ANALYSIS]: "Analysing terrain and obstacles...",
+  [DemoStep.PLACING_OBSERVER]: "Placing optimal observer position...",
+  [DemoStep.RUNNING_FLIGHT_PATH_VISIBILITY]: "Analysing high fidelity flight path visibility...",  
+  [DemoStep.COMPLETING_DEMO]: "Finalising demo setup...",
+  [DemoStep.COMPLETED]: "Demo complete! ✅",
+  [DemoStep.ERROR]: "Demo encountered an error"
+}
 } as const;
 
 /**
@@ -112,6 +117,10 @@ const DemoOrchestrationInner: React.FC<{
   const flightPlanUploaderRef = useRef<FlightPlanUploaderRef>(null);
   // TerrainAnalysisDashboard ref for programmatic access
   const terrainDashboardRef = useRef<TerrainAnalysisDashboardRef>(null);
+  // gridanalysiscontroller ref for programmatic access
+  const gridAnalysisRef = useRef<GridAnalysisRef>(null);
+  const { flightPlan } = useFlightPlanContext();
+  
 
   // Core demo state
   const [demoState, setDemoState] = useState<DemoState>({
@@ -178,8 +187,6 @@ const DemoOrchestrationInner: React.FC<{
         currentStep: DemoStep.LOADING_FLIGHT_PLAN,
         progress: 20
       });
-
-      console.log('[DemoOrchestration] Step 1: Loading flight plan via FlightPlanUploader');
       
       // Set demo defaults
       setDefaultElevationOffset('observer', 2);
@@ -196,8 +203,6 @@ const DemoOrchestrationInner: React.FC<{
       if (!success) {
         throw new Error('Failed to load example flight plan');
       }
-      
-      console.log('[DemoOrchestration] Flight plan loaded successfully');
       await delay(DEMO_CONFIG.STEP_DELAY_MS);
       return true;
     } catch (error) {
@@ -215,15 +220,12 @@ const DemoOrchestrationInner: React.FC<{
     try {
       updateDemoState({
         currentStep: DemoStep.PLACING_OBSERVER,
-        progress: 40
+        progress: 60
       });
-
-      console.log('[DemoOrchestration] Step 2: Placing observer');
       
       // Use the passed-in observer creation function
       if (onCreateObserver) {
         await onCreateObserver();
-        console.log('[DemoOrchestration] Observer created and analysis triggered');
       } else {
         console.warn('[DemoOrchestration] No observer creation function provided');
       }
@@ -245,13 +247,10 @@ const DemoOrchestrationInner: React.FC<{
     try {
       updateDemoState({
         currentStep: DemoStep.RUNNING_TERRAIN_ANALYSIS,
-        progress: 70
+        progress: 40
       });
-
-      console.log('[DemoOrchestration] Step 3: Running terrain analysis via TerrainAnalysisDashboard');
       
       // Wait for AO to be generated from flight plan
-      console.log('[DemoOrchestration] Waiting for AO generation...');
       await delay(1000); // Reduced wait time
       
       // Use TerrainAnalysisDashboard's programmatic method via ref
@@ -264,7 +263,6 @@ const DemoOrchestrationInner: React.FC<{
         console.warn('[DemoOrchestration] Terrain analysis failed but continuing demo');
         // Don't fail the demo if terrain analysis doesn't work
       } else {
-        console.log('[DemoOrchestration] Terrain analysis completed successfully');
       }
       
       await delay(DEMO_CONFIG.STEP_DELAY_MS);
@@ -276,8 +274,46 @@ const DemoOrchestrationInner: React.FC<{
       return true;
     }
   }, [updateDemoState, delay]);
+
   /**
-   * STEP 4: Complete Demo
+   * STEP 4: Run Flight Path Visibility Analysis
+   */
+  const executeStepRunFlightPathVisibility = useCallback(async (): Promise<boolean> => {
+    if (abortRef.current) return false;
+    
+    try {
+      updateDemoState({
+        currentStep: DemoStep.RUNNING_FLIGHT_PATH_VISIBILITY,
+        progress: 80
+      });
+      
+      // Use GridAnalysisController for flight path visibility
+      if (!gridAnalysisRef.current) {
+        throw new Error('GridAnalysisController ref not available');
+      }
+      
+      const results = await gridAnalysisRef.current.runFlightPathVisibilityAnalysis({
+        showLayer: true,
+        sampleInterval: 10
+      });
+      
+      if (!results.flightPathVisibility) {
+        console.warn('[DemoOrchestration] Flight path visibility analysis failed but continuing demo');
+      } else {
+      }
+      
+      await delay(DEMO_CONFIG.STEP_DELAY_MS);
+      return true;
+    } catch (error) {
+      console.warn('[DemoOrchestration] Flight path visibility analysis error (continuing demo):', error);
+      // Don't fail the demo if this analysis doesn't work
+      await delay(DEMO_CONFIG.STEP_DELAY_MS);
+      return true;
+    }
+  }, [updateDemoState, delay, gridAnalysisRef]);
+    
+  /**
+   * STEP 5: Complete Demo
    */
   const executeStepCompleteDemo = useCallback(async (): Promise<boolean> => {
     if (abortRef.current) return false;
@@ -287,11 +323,8 @@ const DemoOrchestrationInner: React.FC<{
         currentStep: DemoStep.COMPLETING_DEMO,
         progress: 90
       });
-
-      console.log('[DemoOrchestration] Step 4: Completing demo');
       
       // Complete demo checklist items
-      console.log('[DemoOrchestration] Completing demo checklist items');
       completeDemoChecks();
       
       // Give a moment for the checklist to update
@@ -322,8 +355,6 @@ const DemoOrchestrationInner: React.FC<{
       console.warn('[DemoOrchestration] Demo already running, ignoring start request');
       return;
     }
-
-    console.log('[DemoOrchestration] Starting automated demo sequence');
     trackEvent('demo_started', { source: 'orchestration_context' });
     
     // Reset abort flag and initialize demo state
@@ -341,14 +372,14 @@ const DemoOrchestrationInner: React.FC<{
       // Execute each step in sequence
       const steps = [
         executeStepLoadFlightPlan,
-        executeStepPlaceObserver,
         executeStepRunTerrainAnalysis,
+        executeStepPlaceObserver,
+        executeStepRunFlightPathVisibility,
         executeStepCompleteDemo
       ];
 
       for (const step of steps) {
         if (abortRef.current) {
-          console.log('[DemoOrchestration] Demo aborted by user');
           break;
         }
 
@@ -362,13 +393,11 @@ const DemoOrchestrationInner: React.FC<{
     } catch (error) {
       handleDemoError(error, 'startDemo');
     }
-  }, [demoState.isRunning, updateDemoState, executeStepLoadFlightPlan, executeStepPlaceObserver, executeStepRunTerrainAnalysis, executeStepCompleteDemo, handleDemoError]);
-
+  }, [demoState.isRunning, updateDemoState, executeStepLoadFlightPlan, executeStepPlaceObserver, executeStepRunTerrainAnalysis, executeStepRunFlightPathVisibility, executeStepCompleteDemo, handleDemoError]);
   /**
    * Aborts the currently running demo
    */
   const abortDemo = useCallback(() => {
-    console.log('[DemoOrchestration] Aborting demo');
     abortRef.current = true;
     updateDemoState({
       isRunning: false,
@@ -381,7 +410,6 @@ const DemoOrchestrationInner: React.FC<{
    * Resets demo state to initial values
    */
   const resetDemo = useCallback(() => {
-    console.log('[DemoOrchestration] Resetting demo state');
     abortRef.current = false;
     setDemoState({
       currentStep: DemoStep.IDLE,
@@ -403,6 +431,7 @@ const DemoOrchestrationInner: React.FC<{
     executeStepLoadFlightPlan,
     executeStepPlaceObserver,
     executeStepRunTerrainAnalysis,
+    executeStepRunFlightPathVisibility,
     executeStepCompleteDemo
   };
 
@@ -420,6 +449,10 @@ const DemoOrchestrationInner: React.FC<{
         <TerrainAnalysisDashboard
           ref={terrainDashboardRef}
           onClose={() => {}} // No-op since it's hidden
+        />
+        <GridAnalysisController
+          ref={gridAnalysisRef}
+          flightPlan={flightPlan || undefined} // Need to get this from context
         />
       </div>
       {children}

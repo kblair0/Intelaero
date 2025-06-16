@@ -18,7 +18,7 @@
  */
 
 import React from 'react';
-import { CheckCircle, Loader2, Plane, User, Mountain, Settings } from 'lucide-react';
+import { CheckCircle, Loader2, Plane, Radio, User, Mountain, Settings } from 'lucide-react';
 
 interface DemoProgressProps {
   step: number; // DemoStep enum value
@@ -39,12 +39,13 @@ const DemoProgress: React.FC<DemoProgressProps> = ({
   const stepConfig = [
     { id: 0, label: 'Ready', icon: Settings },
     { id: 1, label: 'Flight Plan', icon: Plane },
-    { id: 2, label: 'Observer', icon: User },
-    { id: 3, label: 'Analysis', icon: Mountain },
-    { id: 4, label: 'Complete', icon: CheckCircle }
+    { id: 2, label: 'Terrain', icon: Mountain },       // 🔥 MOVED UP
+    { id: 3, label: 'Observer', icon: User },          // 🔥 MOVED DOWN  
+    { id: 4, label: 'Visibility', icon: Radio },
+    { id: 5, label: 'Complete', icon: CheckCircle }
   ];
 
-  const isComplete = step === 4;
+  const isComplete = step === 6;
   const isError = step === -1;
 
   return (
@@ -53,7 +54,8 @@ const DemoProgress: React.FC<DemoProgressProps> = ({
       {/* Demo Progress Card - Bottom toast style */}
       <div className="bg-white/95 backdrop-blur-sm rounded-lg shadow-xl border border-gray-200 mx-auto max-w-md
                       sm:max-w-lg
-                      landscape:max-w-sm">
+                      landscape:max-w-sm
+                  p-4 sm:p-5 landscape:p-3"> 
         
         {/* Header Section - More compact for bottom position */}
         <div className="text-center mb-4 landscape:mb-3">
@@ -113,7 +115,7 @@ const DemoProgress: React.FC<DemoProgressProps> = ({
                   w-6 h-6 rounded-full flex items-center justify-center mb-1 transition-all
                   landscape:w-5 landscape:h-5
                   ${isCurrentStep 
-                    ? 'bg-blue-500 text-white ring-1 ring-blue-200' 
+                    ? 'bg-blue-500 text-white'
                     : isCompletedStep 
                     ? 'bg-green-500 text-white' 
                     : 'bg-gray-200 text-gray-500'
@@ -123,7 +125,7 @@ const DemoProgress: React.FC<DemoProgressProps> = ({
                     <CheckCircle className="w-3 h-3 landscape:w-2.5 landscape:h-2.5" />
                   ) : (
                     <StepIcon className={`w-3 h-3 landscape:w-2.5 landscape:h-2.5 ${
-                      isCurrentStep ? 'animate-pulse' : ''
+                      isCurrentStep ? '': ''
                     }`} />
                   )}
                 </div>

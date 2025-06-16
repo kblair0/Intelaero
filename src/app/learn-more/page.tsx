@@ -185,14 +185,21 @@ const LandingPage: React.FC = () => {
       <div className="min-h-screen bg-white">
         {/* Logo and Get Started Button - Fixed Toolbar */}
         <div className="fixed top-0 left-0 w-full bg-white border-b border-gray-200 py-4 sm:px-6 lg:px-8 z-10 shadow-md">
-          <div className="max-w-6xl mx-auto flex justify-between items-center">
-            <Image
-              src="/Logototonobakgrnd.png"
-              alt="Intel Aero Logo"
-              width={100}
-              height={20}
-              style={{ objectFit: "contain", width: "auto", height: "auto" }}
-            />
+          <div className="max-w-6xl mx-auto p-2 flex justify-between items-center">
+            <a
+              href="/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:opacity-80 transition-opacity cursor-pointer"
+            >
+              <Image
+                src="/Logototonobakgrnd.png"
+                alt="Intel Aero Logo"
+                width={100}
+                height={20}
+                style={{ objectFit: "contain", width: "auto", height: "auto" }}
+              />
+            </a>
             <a
               href="/"
               className="bg-yellow-500 text-white py-2 px-4 rounded-md text-md font-medium hover:bg-yellow-600 transition-colors inline-block"
