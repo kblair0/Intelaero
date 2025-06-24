@@ -32,6 +32,7 @@ import { trackEventWithForm as trackEvent } from "../tracking/tracking";
 import { 
   BasicChecksCard, 
   EnergyAnalysisCard, 
+  SandboxCard, 
   TerrainAnalysisCard,
   VisibilityAnalysisCard 
 } from "./Cards";
@@ -218,6 +219,13 @@ const ToolsDashboard: React.FC<ToolsDashboardProps & { activePanel?: string | nu
       {/* Experimental Cards */}
       {showExperimental && (
         <>
+          <SandboxCard>
+            <div className="p-4">
+              <h3 className="font-semibold text-gray-900 text-sm">Sandbox Features</h3>
+              <p className="text-xs text-gray-600 mt-1 leading-relaxed">Experimental & demo tools</p>
+            </div>
+          </SandboxCard>
+          
           <EnergyAnalysisCard 
             isExpanded={expandedSection === 'energy'}
             onToggleExpanded={() => setExpandedSection(expandedSection === 'energy' ? null : 'energy')}

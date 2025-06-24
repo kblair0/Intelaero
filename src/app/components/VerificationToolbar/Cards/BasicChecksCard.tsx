@@ -1,29 +1,44 @@
 /**
- * PlanVerification/Cards/BasicChecksCard.tsx
- * 
- * Purpose:
- * Provides essential validation for flight plans, checking for common issues
- * like zero altitude points, duplicate waypoints, and validating the height mode.
- * 
- * This component:
- * - Checks for zero altitude waypoints
- * - Validates flight plan height modes
- * - Detects duplicate waypoints
- * - Checks for KMZ-specific issues
- * - Displays analyzed terrain height data when available
- * 
+ * BasicChecksCard.tsx - Enhanced Visual Design
+ *
+ * Purpose: Provides essential validation for flight plans with modern UI
+ * This enhanced card maintains expandable functionality while adopting the modern
+ * card design pattern. It performs comprehensive flight plan validation including
+ * zero altitude checks, duplicate waypoints, height mode validation, and terrain analysis.
+ *
+ * Visual Enhancements:
+ * - Modern card design with blue gradients for validation theme
+ * - Enhanced icon container with gradient background
+ * - Improved expandable content layout with better visual hierarchy
+ * - Status badges for quick scanning of validation results
+ * - Better organized validation sections with clear visual separation
+ * - Consistent with enhanced dashboard theme
+ *
+ * Validation Features:
+ * - Zero altitude waypoint detection
+ * - Duplicate waypoint identification
+ * - Height mode validation
+ * - 120m AGL compliance checking
+ * - KMZ-specific safety warnings
+ * - Terrain profile analysis integration
+ *
  * Related Components:
  * - ToolsDashboard: Renders this as a verification card
  * - ObstacleAnalysisContext: Provides terrain elevation data
  * - FlightPlanContext: Provides flight plan data for validation
+ * - ObstacleChartModal: Shows detailed terrain analysis
  */
-
+'use client';
 import React, { useState, useEffect } from "react";
 import { 
   CheckCircle, 
   XCircle, 
   AlertTriangle,
-  Plane, Mountain
+  Plane, 
+  Mountain,
+  ChevronDown,
+  ChevronRight,
+  Shield
 } from "lucide-react";
 import { useObstacleAnalysis } from "../../../context/ObstacleAnalysisContext";
 import ObstacleChartModal from "../../Analyses/ObstacleAnalysis/ObstacleChartModal";
@@ -37,10 +52,9 @@ import {
 import { trackEventWithForm as trackEvent } from "../../tracking/tracking";
 import { useMapContext } from "../../../context/mapcontext";
 
-
-
 /**
- * Provides basic flight plan validation
+ * Enhanced Basic Flight Plan Validation Card
+ * Provides comprehensive flight plan validation with modern UI
  */
 const BasicChecksCard: React.FC<VerificationCardProps> = ({
   isExpanded,
@@ -117,11 +131,24 @@ const BasicChecksCard: React.FC<VerificationCardProps> = ({
     return "success";
   };
 
+  // Status badge component for validation results
+  const StatusBadge: React.FC<{ status: 'success' | 'warning' | 'error', children: React.ReactNode }> = ({ status, children }) => {
+    const bgColor = status === 'success' ? 'bg-green-100 text-green-800' : 
+                   status === 'warning' ? 'bg-yellow-100 text-yellow-800' : 
+                   'bg-red-100 text-red-800';
+    
+    return (
+      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${bgColor}`}>
+        {children}
+      </span>
+    );
+  };
+
   // Render height check content based on analysis results
   const renderHeightCheckContent = () => {
     if (!results) {
       return (
-        <div className="text-sm text-gray-500">Terrain analysis pending</div>
+        <StatusBadge status="warning">Pending</StatusBadge>
       );
     }
 
@@ -134,14 +161,16 @@ const BasicChecksCard: React.FC<VerificationCardProps> = ({
     
     if (exceedsHeightLimit) {
       return (
-        <div className="text-sm text-yellow-600">
-          ⚠️ Maximum height above ground exceeds 120m: {maxClearance.toFixed(1)}m AGL
+        <div className="flex flex-col items-end">
+          <StatusBadge status="warning">Exceeds limit</StatusBadge>
+          <span className="text-xs text-gray-600 mt-1">{maxClearance.toFixed(1)}m AGL</span>
         </div>
       );
     } else {
       return (
-        <div className="text-sm text-green-600">
-          ✓ Maximum height above ground: {maxClearance.toFixed(1)}m AGL (within 120m limit)
+        <div className="flex flex-col items-end">
+          <StatusBadge status="success">Within limits</StatusBadge>
+          <span className="text-xs text-gray-600 mt-1">{maxClearance.toFixed(1)}m AGL</span>
         </div>
       );
     }
@@ -157,113 +186,134 @@ const BasicChecksCard: React.FC<VerificationCardProps> = ({
     }
   };
 
+  const handleToggleExpanded = () => {
+    if (onToggleExpanded) {
+      onToggleExpanded();
+    }
+  };
+
   return (
-    <div className="border rounded-lg bg-white shadow-sm overflow-hidden">
+    <div className="border-2 border-gray-200 m-1 rounded-xl bg-white shadow-sm overflow-hidden hover:shadow-md hover:border-blue-300 transition-all duration-200">
       <button
-        onClick={onToggleExpanded}
-        className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50"
+        onClick={handleToggleExpanded}
+        className="w-full px-4 py-3 flex items-center justify-between hover:bg-gradient-to-r hover:from-blue-50 hover:to-white transition-all duration-200"
       >
         <div className="flex items-center gap-3">
-          {getOverallStatus() === "success" && <CheckCircle className="w-5 h-5 text-green-500" />}
-          {getOverallStatus() === "error" && <XCircle className="w-5 h-5 text-red-500" />}
-          {getOverallStatus() === "warning" && <AlertTriangle className="w-5 h-5 text-yellow-500" />}
-          {getOverallStatus() === "pending" && <Plane className="w-5 h-5 text-gray-400" />}
+          <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-sm">
+            {getOverallStatus() === "success" && <CheckCircle className="w-5 h-5" />}
+            {getOverallStatus() === "error" && <XCircle className="w-5 h-5" />}
+            {getOverallStatus() === "warning" && <AlertTriangle className="w-5 h-5" />}
+            {getOverallStatus() === "pending" && <Shield className="w-5 h-5" />}
+          </div>
           
-          <div className="text-left">
+          <div className="text-left flex-1">
             <div className="flex items-center gap-2">
-              <h3 className="font-medium text-gray-900">Basic Flight Plan Checks</h3>
-              <a
-                href="https://youtu.be/iUYkmdUv46A"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex gap-1 items-center"
-                aria-label="Watch YouTube guide for Basic Flight Plan Checks"
-              >
-                <svg
-                  className="w-5 h-5 text-red-600 hover:text-red-700 transition-colors"
-                  fill="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path d="M23.5 6.2c-.3-1.1-1.1-2-2.2-2.3C19.1 3.5 12 3.5 12 3.5s-7.1 0-9.3.4c-1.1.3-1.9 1.2-2.2 2.3C.5 8.4.5 12 .5 12s0 3.6.4 5.8c.3 1.1 1.1 2 2.2 2.3 2.2.4 9.3.4 9.3.4s7.1 0 9.3-.4c-1.1-.3 1.9-1.2 2.2-2.3.4-2.2.4-5.8.4-5.8s0-3.6-.4-5.8zM9.8 15.5V8.5l6.2 3.5-6.2 3.5z" />
-                </svg>
-                <span className="text-xs text-red-600 hover:text-red-700 transition-colors">Guide</span>
-              </a>
+              <h3 className="font-semibold text-gray-900 text-sm">Flight Plan Validation</h3>
             </div>
-            <p className="text-sm text-gray-500">Essential flight plan validation</p>
+            <p className="text-xs text-gray-600 mt-1 leading-relaxed">Essential safety & compliance checks</p>
           </div>
         </div>
+        {isExpanded ? (
+          <ChevronDown className="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors" />
+        ) : (
+          <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors" />
+        )}
       </button>
 
       {isExpanded && (
-        <div className="px-4 py-3 bg-gray-50 border-t space-y-4">
-          {/* Height Mode Check */}
-          <div className="space-y-2">
-            <h4 className="font-medium text-gray-700">Explicit Height Mode</h4>
-            <div className="text-sm">
-              {!heightModeInfo.isValid ? (
-                <span className="text-yellow-600">⚠️ Height mode not detected</span>
-              ) : (
-                <span className="text-green-600">✓ {heightModeInfo.display}</span>
-              )}
+        <div className="px-4 py-4 bg-gradient-to-br from-gray-50 to-blue-50/30 border-t border-gray-200">
+          {/* Validation Results Grid */}
+          <div className="grid gap-2 mb-4">
+            
+            {/* Height Mode Check */}
+            <div className="bg-white rounded-lg p-3 border border-gray-100 shadow-sm">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-medium text-gray-800 text-sm">Height Mode Validation</h4>
+                {!heightModeInfo.isValid ? (
+                  <StatusBadge status="warning">Not detected</StatusBadge>
+                ) : (
+                  <StatusBadge status="success">Valid</StatusBadge>
+                )}
+              </div>
+              <p className="text-xs text-gray-600">
+                {heightModeInfo.isValid ? heightModeInfo.display : "Height mode not explicitly set"}
+              </p>
             </div>
-          </div>
 
-          {/* Zero Altitude Check */}
-          <div className="space-y-2">
-            <h4 className="font-medium text-gray-700">Zero Altitude Check</h4>
-            <div>
-              {zeroAltitudePoints.length > 0 ? (
-                <div className="text-sm text-red-600">
-                  Found {zeroAltitudePoints.length} zero altitude points:
-                  {zeroAltitudePoints.map((point, idx) => (
-                    <div key={idx} className="ml-2">
-                      • Waypoint {point.index + 1}: (
-                      {point.coord.map((v) => v.toFixed(2)).join(", ")})
+            {/* Zero Altitude Check */}
+            <div className="bg-white rounded-lg p-3 border border-gray-100 shadow-sm">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-medium text-gray-800 text-sm">Zero Altitude Check</h4>
+                {zeroAltitudePoints.length > 0 ? (
+                  <StatusBadge status="error">{zeroAltitudePoints.length} issues</StatusBadge>
+                ) : (
+                  <StatusBadge status="success">All valid</StatusBadge>
+                )}
+              </div>
+              {zeroAltitudePoints.length > 0 && (
+                <div className="space-y-1">
+                  {zeroAltitudePoints.slice(0, 3).map((point, idx) => (
+                    <div key={idx} className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded">
+                      Waypoint {point.index + 1}: ({point.coord.map((v) => v.toFixed(2)).join(", ")})
                     </div>
                   ))}
+                  {zeroAltitudePoints.length > 3 && (
+                    <div className="text-xs text-gray-500">...and {zeroAltitudePoints.length - 3} more</div>
+                  )}
                 </div>
-              ) : (
-                <div className="text-sm text-green-600">✓ All waypoints have valid altitudes</div>
               )}
               {kmzTakeoffWarning && (
-                <div className="text-sm text-yellow-600 mt-2">⚠️ {kmzTakeoffWarning}</div>
+                <div className="text-xs text-yellow-600 bg-yellow-50 px-2 py-1 rounded mt-2">
+                  {kmzTakeoffWarning}
+                </div>
+              )}
+            </div>
+
+            {/* 120m AGL Height Check */}
+            <div className="bg-white rounded-lg p-3 border border-gray-100 shadow-sm">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-medium text-gray-800 text-sm">120m AGL Compliance</h4>
+                {renderHeightCheckContent()}
+              </div>
+              <p className="text-xs text-gray-600">
+                Maximum allowed height above ground level
+              </p>
+            </div>
+
+            {/* Duplicate Waypoints Check */}
+            <div className="bg-white rounded-lg p-3 border border-gray-100 shadow-sm">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-medium text-gray-800 text-sm">Duplicate Waypoints</h4>
+                {duplicateWaypoints.length > 0 ? (
+                  <StatusBadge status="error">{duplicateWaypoints.length} duplicates</StatusBadge>
+                ) : (
+                  <StatusBadge status="success">None found</StatusBadge>
+                )}
+              </div>
+              {duplicateWaypoints.length > 0 && (
+                <div className="space-y-1">
+                  {duplicateWaypoints.slice(0, 3).map((point, idx) => (
+                    <div key={idx} className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded">
+                      Waypoint {point.index + 1}: ({point.coord.map((v) => v.toFixed(2)).join(", ")})
+                    </div>
+                  ))}
+                  {duplicateWaypoints.length > 3 && (
+                    <div className="text-xs text-gray-500">...and {duplicateWaypoints.length - 3} more</div>
+                  )}
+                </div>
               )}
             </div>
           </div>
 
-          {/* 120m AGL Height Check */}
-          <div className="space-y-2">
-            <h4 className="font-medium text-gray-700">120m AGL Height Check</h4>
-            {renderHeightCheckContent()}
-          </div>
-
-          {/* Duplicate Waypoints Check */}
-          <div className="space-y-2">
-            <h4 className="font-medium text-gray-700">Duplicate Waypoints Check</h4>
-            {duplicateWaypoints.length > 0 ? (
-              <div className="text-sm text-red-600">
-                Found {duplicateWaypoints.length} duplicate waypoints:
-                {duplicateWaypoints.map((point, idx) => (
-                  <div key={idx} className="ml-2">
-                    • Waypoint {point.index + 1}: (
-                    {point.coord.map((v) => v.toFixed(2)).join(", ")})
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-sm text-green-600">✓ No duplicate waypoints found</div>
-            )}
-          </div>
-
-          {/* Actions */}
-          <div className="flex flex-col gap-2 mt-3">
+          {/* Terrain Analysis Action */}
+          <div className="pt-3 border-t border-gray-200">
             <button
               onClick={handleRunTerrainAnalysis}
               disabled={!flightPlan || status === 'loading'}
-              className="flex gap-2 px-3 py-1.5 bg-green-500 justify-center text-white text-sm rounded-md hover:bg-green-600 transition-colors disabled:bg-gray-300"
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-medium rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all duration-200 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed shadow-sm"
             >
               <Mountain className="w-4 h-4" />
-              {status === 'loading' ? 'Analyzing...' : 'Show Terrain Profile'}
+              {status === 'loading' ? 'Analyzing Terrain...' : 'Show Terrain Profile'}
             </button>
           </div>
         </div>
