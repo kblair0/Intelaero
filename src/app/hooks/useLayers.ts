@@ -9,11 +9,14 @@ import { MobileTowerFilters } from '../types/mobileTowers';
 import type { GeoJSON } from 'geojson';
 import * as turf from '@turf/turf';
 import mapboxgl from 'mapbox-gl';
+import { fetchMeshblockLayers } from '../sandbox/meshblox/MeshblockService';
+import { useMeshblockContext } from '../sandbox/meshblox/MeshblockContext';
 
 export function useLayers() {
   const { map, toggleLayer, setLayerVisibility } = useMapContext();
   const { aoGeometry } = useAreaOfOpsContext();
   const { showAreaOfOperations } = useAreaOpsProcessor();
+  const { selectMeshblock } = useMeshblockContext();
 
   /**
    * Add a flight plan to the map
@@ -54,8 +57,8 @@ export function useLayers() {
         type: 'line' as const,
         source: MAP_LAYERS.FLIGHT_PATH,
         layout: {
-          'line-join': 'round',
-          'line-cap': 'round',
+          'line-join': 'round' as 'round',
+          'line-cap': 'round' as 'round',
         },
         paint: {
           'line-width': 2,
@@ -377,15 +380,115 @@ export function useLayers() {
     return true;
   }, []);
 
-  return {
-    addFlightPath,
-    resetLayers,
-    toggleLayer,
-    togglePowerlines,
-    toggleDBYDPowerlines,
-    toggleAirspace,
-    toggleMobileTowers,
-    filterMobileTowersLayer,
-    toggleTreeHeights,
-  };
+/**
+ * Toggle meshblock layers (ABS meshblock data visualization)
+ * Only activates at zoom > 13 as per requirements
+ * @returns {Promise<boolean>} Success status
+ */
+const toggleMeshblocks = useCallback(async () => {
+  if (!map) {
+    console.warn('toggleMeshblocks: Map not available');
+    return false;
+  }
+  if (!aoGeometry) {
+    console.warn('toggleMeshblocks: AO geometry not available');
+    return false;
+  }
+
+  // Validate zoom level - only activate at zoom > 13 as per requirements
+  const currentZoom = map.getZoom();
+  if (currentZoom <= 13) {
+    console.warn(`toggleMeshblocks: Zoom level ${currentZoom.toFixed(1)} too low. Meshblocks require zoom > 13.`);
+    return false;
+  }
+
+  try {
+    // Ensure AO is visible
+    showAreaOfOperations();
+
+    // Check if layers already exist
+    const meshblockLayerExists = !!map.getLayer(MAP_LAYERS.MESHBLOCK_LANDUSE);
+    
+    if (meshblockLayerExists) {
+      // Layers exist - toggle their visibility
+      const isVisible = map.getLayoutProperty(MAP_LAYERS.MESHBLOCK_LANDUSE, 'visibility') === 'visible';
+      
+      if (isVisible) {
+        // Hide meshblock layers
+        console.log('toggleMeshblocks: Hiding meshblock layers');
+        
+        if (map.getLayer(MAP_LAYERS.MESHBLOCK_LANDUSE)) {
+          map.setLayoutProperty(MAP_LAYERS.MESHBLOCK_LANDUSE, 'visibility', 'none');
+        }
+        if (map.getLayer(MAP_LAYERS.MESHBLOCK_POPULATION)) {
+          map.setLayoutProperty(MAP_LAYERS.MESHBLOCK_POPULATION, 'visibility', 'none');
+        }
+        if (map.getLayer(MAP_LAYERS.MESHBLOCK_FLIGHT_INTERSECT)) {
+          map.setLayoutProperty(MAP_LAYERS.MESHBLOCK_FLIGHT_INTERSECT, 'visibility', 'none');
+        }
+        
+        // ✅ REMOVE click handlers when hiding layers
+        const { removeMeshblockClickHandlers } = await import('../sandbox/meshblox/MeshblockService');
+        removeMeshblockClickHandlers(map);
+        
+        console.log('toggleMeshblocks: Meshblock layers hidden and click handlers removed');
+      } else {
+        // Show meshblock layers
+        console.log('toggleMeshblocks: Showing meshblock layers');
+        
+        if (map.getLayer(MAP_LAYERS.MESHBLOCK_LANDUSE)) {
+          map.setLayoutProperty(MAP_LAYERS.MESHBLOCK_LANDUSE, 'visibility', 'visible');
+        }
+        if (map.getLayer(MAP_LAYERS.MESHBLOCK_POPULATION)) {
+          map.setLayoutProperty(MAP_LAYERS.MESHBLOCK_POPULATION, 'visibility', 'none'); // Hidden by default
+        }
+        if (map.getLayer(MAP_LAYERS.MESHBLOCK_FLIGHT_INTERSECT)) {
+          map.setLayoutProperty(MAP_LAYERS.MESHBLOCK_FLIGHT_INTERSECT, 'visibility', 'none'); // Hidden by default
+        }
+        
+        // ✅ RE-ATTACH click handlers when showing layers
+        console.log('toggleMeshblocks: Re-attaching click handlers with selectMeshblock:', !!selectMeshblock);
+        
+        const { addMeshblockClickHandlers } = await import('../sandbox/meshblox/MeshblockService');
+        addMeshblockClickHandlers(map, selectMeshblock);
+        
+        console.log('toggleMeshblocks: Meshblock layers shown and click handlers attached');
+      }
+      
+      return true;
+      
+    } else {
+      // Load meshblock data for the first time
+      console.log('toggleMeshblocks: Loading meshblock data for first time');
+      console.log('toggleMeshblocks: selectMeshblock function available:', !!selectMeshblock);
+      
+      // ✅ FIXED: Handle the new return type structure
+      const result = await fetchMeshblockLayers(map, aoGeometry, setLayerVisibility, selectMeshblock);
+      
+      if (result.success) {
+        console.log('toggleMeshblocks: Meshblock layers loaded successfully with click handlers');
+        console.log('toggleMeshblocks: Loaded', result.data?.features.length, 'meshblock features');
+        return true;
+      } else {
+        console.error('toggleMeshblocks: Failed to load meshblock layers:', result.error);
+        return false;
+      }
+    }
+  } catch (error) {
+    console.error('toggleMeshblocks: Error toggling meshblock layers:', error);
+    return false;
+  }
+}, [map, aoGeometry, showAreaOfOperations, setLayerVisibility, selectMeshblock]);
+return {
+  addFlightPath,
+  resetLayers,
+  toggleLayer,
+  togglePowerlines,
+  toggleDBYDPowerlines,
+  toggleAirspace,
+  toggleMobileTowers,
+  filterMobileTowersLayer,
+  toggleTreeHeights,
+  toggleMeshblocks,
+};
 }

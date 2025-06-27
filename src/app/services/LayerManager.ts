@@ -27,6 +27,11 @@ export const MAP_LAYERS = {
   BYDA_DEVICE: "byda-device-layer",
   MOBILE_TOWERS: "mobile-towers-layer",
   TREE_HEIGHTS: 'tree-height-raster',
+  MESHBLOCK_LANDUSE: "meshblock-landuse-layer",
+  MESHBLOCK_POPULATION: "meshblock-population-layer",
+  MESHBLOCK_FLIGHT_INTERSECT: "meshblock-flight-intersect-layer",
+  MESHBLOCK_ANALYSIS_BUFFER_FILL: "meshblock-analysis-buffer-fill",
+  MESHBLOCK_ANALYSIS_BUFFER_OUTLINE: "meshblock-analysis-buffer-outline",
 } as const;
 
 export type LayerId = typeof MAP_LAYERS[keyof typeof MAP_LAYERS];
@@ -335,6 +340,94 @@ class LayerManager {
       return false;
     }
   }
+  /**
+ * Adds or updates a Meshblock Analysis Buffer to the map
+ */
+addMeshblockAnalysisBuffer(flightPath: GeoJSON.LineString, bufferDistance: number): boolean {
+  if (!this.ensureMap()) return false;
+  
+  try {
+    // Remove existing buffer layers if present
+    this.removeLayer(MAP_LAYERS.MESHBLOCK_ANALYSIS_BUFFER_OUTLINE);
+    this.removeLayer(MAP_LAYERS.MESHBLOCK_ANALYSIS_BUFFER_FILL);
+    
+    // Create buffer geometry around flight path
+    const flightLine = turf.lineString(flightPath.coordinates);
+    const bufferedGeometry = turf.buffer(flightLine, bufferDistance, { units: 'meters' });
+    
+    const bufferFeatureCollection = {
+      type: "FeatureCollection" as const,
+      features: [bufferedGeometry]
+    };
+    
+    // Add outline layer
+    this.addLayer(
+      MAP_LAYERS.MESHBLOCK_ANALYSIS_BUFFER_OUTLINE,
+      {
+        type: "geojson",
+        data: bufferFeatureCollection
+      },
+      {
+        id: MAP_LAYERS.MESHBLOCK_ANALYSIS_BUFFER_OUTLINE,
+        type: "line",
+        source: MAP_LAYERS.MESHBLOCK_ANALYSIS_BUFFER_OUTLINE,
+        layout: { visibility: "visible" },
+        paint: {
+          "line-color": "#9333EA", // Purple color to match meshblock theme
+          "line-width": 2,
+          "line-opacity": 0.8,
+          "line-dasharray": [3, 3]
+        }
+      },
+      undefined,
+      true // Make visible initially
+    );
+    
+    // Add fill layer
+    this.addLayer(
+      MAP_LAYERS.MESHBLOCK_ANALYSIS_BUFFER_FILL,
+      {
+        type: "geojson",
+        data: bufferFeatureCollection
+      },
+      {
+        id: MAP_LAYERS.MESHBLOCK_ANALYSIS_BUFFER_FILL,
+        type: "fill",
+        source: MAP_LAYERS.MESHBLOCK_ANALYSIS_BUFFER_FILL,
+        layout: { visibility: "visible" },
+        paint: {
+          "fill-color": "#9333EA", // Purple to match meshblock theme
+          "fill-opacity": 0.15 // Very subtle fill
+        }
+      },
+      undefined,
+      true // Make visible initially
+    );
+    
+    // Notify listeners
+    this.notifyListeners('layerAdded', MAP_LAYERS.MESHBLOCK_ANALYSIS_BUFFER_OUTLINE, true);
+    this.notifyListeners('layerAdded', MAP_LAYERS.MESHBLOCK_ANALYSIS_BUFFER_FILL, true);
+    
+    return true;
+  } catch (error) {
+    console.error("Error adding meshblock analysis buffer:", error);
+    return false;
+  }
+}
+
+/**
+ * Remove meshblock analysis buffer layers
+ */
+removeMeshblockAnalysisBuffer(): boolean {
+  try {
+    this.removeLayer(MAP_LAYERS.MESHBLOCK_ANALYSIS_BUFFER_OUTLINE);
+    this.removeLayer(MAP_LAYERS.MESHBLOCK_ANALYSIS_BUFFER_FILL);
+    return true;
+  } catch (error) {
+    console.error("Error removing meshblock analysis buffer:", error);
+    return false;
+  }
+}
   /**
    * Adds or updates an AO terrain grid to the map with improved persistence
    * FIXED: Better source management and layer persistence

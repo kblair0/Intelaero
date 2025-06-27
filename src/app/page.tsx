@@ -36,7 +36,7 @@ import { ChecklistProvider } from "./context/ChecklistContext";
 import Card from "./components/UI/Card";
 import { ObstacleAnalysisProvider } from "./context/ObstacleAnalysisContext";
 import MapSidePanel from "./components/UI/MapSidePanel";
-import { Battery, Radio, Mountain, MapPin, Search, Loader2 } from "lucide-react";
+import { Battery, Radio, Mountain, MapPin, Search, Info, Loader2 } from "lucide-react";
 import { trackEventWithForm as trackEvent } from "./components/tracking/tracking";
 import { MapProvider } from "./context/mapcontext";
 import { AnalysisControllerProvider, useAnalysisController } from "./context/AnalysisControllerContext";
@@ -45,6 +45,12 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import Image from "next/image";
 import ReloadButton from "./components/UI/ReloadButton";
 import MobileOrientationGuard from "./components/UI/MobileOrientationGuard";
+import { MeshblockProvider } from "./sandbox/meshblox/MeshblockContext";
+import MeshblockDashboard from "./sandbox/meshblox/MeshblockDashboard";
+import MeshblockDisplay from "./sandbox/meshblox/MeshblockDisplay";
+
+const CalculationMethodologyModal = lazy(() => import("./sandbox/meshblox/CalculationMethodologyModal"));
+import { useMeshblockContext } from "./sandbox/meshblox/MeshblockContext";
 
 //payment and premium access
 import { PremiumProvider } from "./context/PremiumContext";
@@ -66,9 +72,9 @@ const MapSelectionPanel = lazy(() => import("./components/AO/MapSelectionPanel")
 const ToolsDashboard = lazy(() => import("./components/VerificationToolbar/ToolsDashboard"));
 const CompactDisclaimerWidget = lazy(() => import("./components/CompactDisclaimerWidget"));
 const ElegantPlaceholder = lazy(() => import("./components/UI/ElegantPlaceholder"));
-const DemoProgress = lazy(() => import("./components/DemoProgress")); // ADDED IMPORT
+const DemoProgress = lazy(() => import("./components/DemoProgress"));
 
-// ========================================
+  // ========================================
 // LOADING COMPONENTS
 // ========================================
 const AnalysisLoadingSpinner: React.FC = () => (
@@ -92,7 +98,7 @@ const ModalLoadingPlaceholder: React.FC = () => (
  * Inner content component that uses the demo context
  */
 const HomeContentInner = () => {
-  const [activePanel, setActivePanel] = useState<"energy" | "los" | "terrain" | null>(null);
+  const [activePanel, setActivePanel] = useState<"energy" | "los" | "terrain" | "meshblock" | null>(null);
   const [initialSection, setInitialSection] = useState<'flight' | 'station' | 'merged' | 'stationLOS' | null>(null);
   const [showUploader, setShowUploader] = useState(false);
   const [showAreaOpsUploader, setShowAreaOpsUploader] = useState(false);
@@ -109,11 +115,18 @@ const HomeContentInner = () => {
   // ✅ Now this hook is called INSIDE the provider
   const { demoState } = useDemoOrchestration();
 
-  const togglePanel = (panel: "energy" | "los" | "terrain" | null, section?: 'flight' | 'station' | 'merged' | 'stationLOS' | null) => {
-    setActivePanel((prev) => (prev === panel ? null : panel));
-    setInitialSection(panel === 'los' ? section || null : null);
-    trackEvent("toggle_analysis_panel", { panel, section });
-  };
+const togglePanel = (panel: "energy" | "los" | "terrain" | "meshblock" | null, section?: 'flight' | 'station' | 'merged' | 'stationLOS' | null) => {
+  console.log('🔍 togglePanel called with:', panel, 'current activePanel:', activePanel);
+  
+  setActivePanel((prev) => {
+    const newPanel = prev === panel ? null : panel;
+    console.log('🔍 activePanel changing from:', prev, 'to:', newPanel);
+    return newPanel;
+  });
+  
+  setInitialSection(panel === 'los' ? section || null : null);
+  trackEvent("toggle_analysis_panel", { panel, section });
+};
 
   const handleAreaOps = () => {
     setShowAreaOpsUploader(true);
@@ -339,7 +352,7 @@ const HomeContentInner = () => {
             )}
           </div>
 
-          {/* Analysis Panels - UNCHANGED */}
+          {/* Analysis Panels */}
           <MapSidePanel
             title="Energy Analysis"
             icon={<Battery className="w-5 h-5 landscape:w-4 landscape:h-4" />}
@@ -373,6 +386,19 @@ const HomeContentInner = () => {
           >
             <Suspense fallback={<AnalysisLoadingSpinner />}>
               <ObstacleAnalysisDashboard />
+            </Suspense>
+          </MapSidePanel>
+
+          {/* NEW: Meshblock Analysis Panel */}
+          <MapSidePanel
+            title="Meshblock Analysis"
+            icon={<Info className="w-5 h-5" />}
+            isExpanded={activePanel === "meshblock"}
+            onToggle={() => togglePanel("meshblock")}
+            className="z-30"
+          >
+            <Suspense fallback={<AnalysisLoadingSpinner />}>
+              <MeshblockDashboard />
             </Suspense>
           </MapSidePanel>
         </div>
@@ -417,6 +443,26 @@ const MarkerLocationsModalWrapper: React.FC = () => {
   );
 };
 
+// Meshblock Methodology Modal Wrapper
+const MethodologyModalWrapper: React.FC = () => {
+  const { showMethodologyModal, setShowMethodologyModal } = useMeshblockContext();
+  
+  if (!showMethodologyModal) return null;
+  
+  return (
+    <div className="fixed inset-0 z-[200] bg-black bg-opacity-50 flex items-center justify-center p-4">
+      <div className="max-w-4xl w-full max-h-[90vh] overflow-hidden">
+        <Suspense fallback={<ModalLoadingPlaceholder />}>
+          <CalculationMethodologyModal
+            isOpen={showMethodologyModal}
+            onClose={() => setShowMethodologyModal(false)}
+          />
+        </Suspense>
+      </div>
+    </div>
+  );
+};
+
 const UpgradeModalWrapper: React.FC = () => {
   return (
     <Suspense fallback={null}>
@@ -444,9 +490,13 @@ export default function Home() {
                     <LOSAnalysisProvider>
                       <ObstacleAnalysisProvider>
                         <ChecklistProvider>
-                          <HomeContent />
-                          <UpgradeModalWrapper />
-                          <MarkerLocationsModalWrapper />
+                          <MeshblockProvider>
+                            <HomeContent />
+                            <UpgradeModalWrapper />
+                            <MarkerLocationsModalWrapper />
+                            <MethodologyModalWrapper />
+                            <MeshblockDisplay />
+                          </MeshblockProvider>
                         </ChecklistProvider>
                       </ObstacleAnalysisProvider>
                     </LOSAnalysisProvider>

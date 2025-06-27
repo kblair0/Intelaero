@@ -23,12 +23,15 @@ import GridAnalysisController, { GridAnalysisRef } from '../Analyses/Services/Gr
 import { useAnalysisController } from "../../context/AnalysisControllerContext";
 import { trackEventWithForm as trackEvent } from '../tracking/tracking';
 
+import { useMeshblockContext } from '../../sandbox/meshblox/MeshblockContext';
+import MeshblockPopup from '../../sandbox/meshblox/MeshblockPopup';
+
 /**
  * Props for the Map component
  */
 interface MapProps {
-  activePanel?: 'energy' | 'los' | 'terrain' | null;
-  togglePanel?: (panel: 'energy' | 'los' | 'terrain') => void;
+  activePanel?: 'energy' | 'los' | 'terrain' | 'meshblock' | null;
+  togglePanel?: (panel: 'energy' | 'los' | 'terrain' | 'meshblock') => void;
   flightPlan?: any;
   setShowUploader?: (show: boolean) => void;
   onCreateDemoObserver?: () => Promise<void>;
@@ -243,6 +246,9 @@ const Map: FC<MapProps> = ({ activePanel, togglePanel, flightPlan, setShowUpload
         </div>
       )}
 
+      {/*Meshblock Popup on Map */}
+      <MeshblockPopupOverlay />
+
       {map && (
         <GridAnalysisController
           ref={gridAnalysisRef}
@@ -262,6 +268,27 @@ const Map: FC<MapProps> = ({ activePanel, togglePanel, flightPlan, setShowUpload
     </div>
   );
 };
+
+/**
+ * Meshblock popup overlay component
+ */
+const MeshblockPopupOverlay: React.FC = () => {
+  const { selectedMeshblock, showPopup, closePopup, viewMode, flightPathAnalysis } = useMeshblockContext();
+  if (!showPopup || !selectedMeshblock) {
+    return null;
+  }
+  return (
+    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50">
+      <MeshblockPopup
+        meshblock={selectedMeshblock}
+        viewMode={viewMode}
+        onClose={closePopup}
+        includeAnalysisData={!!flightPathAnalysis}
+      />
+    </div>
+  );
+};
+
 
 Map.displayName = 'Map';
 

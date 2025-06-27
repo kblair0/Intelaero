@@ -444,7 +444,7 @@ const AnalysisWizard: React.FC<AnalysisWizardProps> = ({
               {showAreaOptions && (
                 <div className="border rounded-lg p-3 bg-yellow-50 border-yellow-200">
                   <p className="text-xs text-yellow-700 mb-2">
-                    By default, we'll analyze the area around your flight path. Upload a KML file to define a custom boundary.
+                    By default, we'll analyse the area around your flight path. Upload a KML file to define a custom boundary.
                   </p>
                   <SmartUploader
                     mode="compact"

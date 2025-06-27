@@ -1,5 +1,5 @@
 /**
- * PlanVerification/Utils/types.ts
+ * verificationtoolbar/Utils/types.ts
  * 
  * Purpose:
  * Defines shared types and interfaces for the Plan Verification system.
@@ -58,14 +58,14 @@ export interface VerificationCardProps {
   isExpanded: boolean;             // Whether section is expanded
   onToggleExpanded: () => void;    // Toggle expansion callback
   flightPlan: FlightPlanData | null; // Current flight plan
-  onTogglePanel?: (panel: "energy" | "los" | "terrain" | null) => void; // Panel toggle callback
+  onTogglePanel?: (panel: 'energy' | 'los' | 'terrain' | 'meshblock' | null) => void; // Panel toggle callback
 }
 
 /**
  * Props for the ToolsDashboard
  */
 export interface ToolsDashboardProps {
-  onTogglePanel: (panel: "energy" | "los" | "terrain" | null) => void;
+  onTogglePanel: (panel: "energy" | "los" | "terrain" | "meshblock" | null) => void;
 }
 
 /**
