@@ -40,11 +40,12 @@ import { Battery, Radio, Mountain, MapPin, Search, Info, Loader2 } from "lucide-
 import { trackEventWithForm as trackEvent } from "./components/tracking/tracking";
 import { MapProvider } from "./context/mapcontext";
 import { AnalysisControllerProvider, useAnalysisController } from "./context/AnalysisControllerContext";
-import { DemoOrchestrationProvider, useDemoOrchestration } from "./context/DemoOrchestrationContext"; // ADDED IMPORT
+import { DemoOrchestrationProvider, useDemoOrchestration } from "./context/DemoOrchestrationContext";
 import 'mapbox-gl/dist/mapbox-gl.css';
 import Image from "next/image";
 import ReloadButton from "./components/UI/ReloadButton";
 import MobileOrientationGuard from "./components/UI/MobileOrientationGuard";
+import { TreeHeightProvider } from "./context/TreeHeightContext";
 import { MeshblockProvider } from "./sandbox/meshblox/MeshblockContext";
 import MeshblockDashboard from "./sandbox/meshblox/MeshblockDashboard";
 import MeshblockDisplay from "./sandbox/meshblox/MeshblockDisplay";
@@ -73,6 +74,7 @@ const ToolsDashboard = lazy(() => import("./components/VerificationToolbar/Tools
 const CompactDisclaimerWidget = lazy(() => import("./components/CompactDisclaimerWidget"));
 const ElegantPlaceholder = lazy(() => import("./components/UI/ElegantPlaceholder"));
 const DemoProgress = lazy(() => import("./components/DemoProgress"));
+
 
   // ========================================
 // LOADING COMPONENTS
@@ -491,12 +493,14 @@ export default function Home() {
                       <ObstacleAnalysisProvider>
                         <ChecklistProvider>
                           <MeshblockProvider>
+                            <TreeHeightProvider>
                             <HomeContent />
-                            <UpgradeModalWrapper />
-                            <MarkerLocationsModalWrapper />
+                              <UpgradeModalWrapper />
+                              <MarkerLocationsModalWrapper />
                             <MethodologyModalWrapper />
                             <MeshblockDisplay />
                           </MeshblockProvider>
+                          </TreeHeightProvider>
                         </ChecklistProvider>
                       </ObstacleAnalysisProvider>
                     </LOSAnalysisProvider>
@@ -510,3 +514,23 @@ export default function Home() {
     </MobileOrientationGuard>
   );
 }
+
+
+// structure of the page.tsx file and its components:
+//page.tsx (Root)
+//├── HomeContent (wrapped in DemoOrchestrationProvider)
+//    ├── HomeContentInner
+  //      ├── Map component (/components/Map/index.tsx) 
+    //    │   └── [TARGET: Where TreeHeightQueryResults modal should render]
+      //  ├── Right Sidebar (conditionally rendered)
+     //   │   └── ToolsDashboard (/components/VerificationToolbar/ToolsDashboard.tsx)
+   //     │       └── TerrainAnalysisCard (/components/VerificationToolbar/Cards/TerrainAnalysisCard.tsx)
+//        │           └── [onClick] → calls onTogglePanel("terrain")
+  //      └── MapSidePanel (/components/UI/MapSidePanel.tsx) - slides in from right
+    //        └── [when activePanel === "terrain"]
+      //          └── TerrainAnalysisDashboard (lazy loaded as ObstacleAnalysisDashboard)
+        //            ├── useTreeHeights hook (local state)
+          //          ├── handleQueryTreeHeights function
+            //        └── TreeHeightQueryResults modal ← **CURRENT LOCATION**
+              //          └── [Currently constrained within MapSidePanel width/positioning]
+

@@ -1,5 +1,5 @@
 /**
- * PlanVerification/Utils/terrainAnalysis.ts
+ * verificationtoolbar/Utils/terrainAnalysis.ts
  * 
  * Purpose:
  * Utilities for terrain analysis and elevation data processing.

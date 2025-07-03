@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useRef, FC } from 'react';
+import { Loader2 } from 'lucide-react';
 import { useMap } from './Hooks/useMap';
 import { useMapContext } from '../../context/mapcontext';
 import { useFlightPlanContext } from '../../context/FlightPlanContext';
@@ -21,6 +22,9 @@ import MapboxLayerHandler from './MapboxLayerHandler';
 import GridAnalysisController, { GridAnalysisRef } from '../Analyses/Services/GridAnalysis/GridAnalysisController';
 import { useAnalysisController } from "../../context/AnalysisControllerContext";
 import { trackEventWithForm as trackEvent } from '../tracking/tracking';
+import { useTreeHeightContext } from '../../context/TreeHeightContext';
+import TreeHeightQueryResults from '../Analyses/TreeHeights/TreeHeightQueryResults';
+
 
 import { useMeshblockContext } from '../../sandbox/meshblox/MeshblockContext';
 import MeshblockPopup from '../../sandbox/meshblox/MeshblockPopup';
@@ -35,6 +39,34 @@ interface MapProps {
   setShowUploader?: (show: boolean) => void;
   onCreateDemoObserver?: () => Promise<void>;
 }
+
+const TreeHeightModal: React.FC = () => {
+  const { 
+    treeHeightResults, 
+    showTreeHeightModal, 
+    hideModal, 
+    queryTreeHeightsInAO 
+  } = useTreeHeightContext();
+
+  if (!treeHeightResults || !showTreeHeightModal) {
+    return null;
+  }
+
+  return (
+    <TreeHeightQueryResults
+      result={treeHeightResults}
+      isOpen={showTreeHeightModal}
+      onClose={hideModal}
+      onRerun={() => {
+        hideModal();
+        queryTreeHeightsInAO();
+      }}
+      onExport={(format: 'csv' | 'json') => { // FIX: Add proper typing
+        console.log(`Exporting tree height data as ${format}`);
+      }}
+    />
+  );
+};
 
 /**
  * Map component that renders the Mapbox map and associated controls
@@ -52,7 +84,7 @@ const Map: FC<MapProps> = ({ activePanel, togglePanel, flightPlan, setShowUpload
     'map-container',
     {
       style: 'mapbox://styles/intelaero/cm7pqu42s000601svdp7m3h0b',
-      center: [0, 0],
+      center: [133.583333, -23.583333],
       zoom: 2.5,
       projection: 'globe',
     } as any
@@ -224,6 +256,8 @@ const Map: FC<MapProps> = ({ activePanel, togglePanel, flightPlan, setShowUpload
 
       <FlightPathDisplay />
       <AODisplay />
+
+
       {error && (
         <div className="absolute bottom-4 left-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center">
           <span>⚠️</span>
@@ -256,6 +290,9 @@ const Map: FC<MapProps> = ({ activePanel, togglePanel, flightPlan, setShowUpload
           }}
         />
       )}
+      {/* Tree Height Modal - Full Screen Overlay */}
+      
+      <TreeHeightModal />
     </div>
   );
 };

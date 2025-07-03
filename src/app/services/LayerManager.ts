@@ -610,22 +610,24 @@ removeMeshblockAnalysisBuffer(): boolean {
       let minLat = Infinity;
       let maxLng = -Infinity;
       let maxLat = -Infinity;
-      
+
       try {
         // First try with turf
         const bbox = turf.bbox(geometry);
-        this.map!.fitBounds(
-          [
-            [bbox[0], bbox[1]],
-            [bbox[2], bbox[3]]
-          ],
-          { padding: 50, duration: 200 }
-        );
-        return true;
+        if (bbox && bbox.length === 4) {
+          this.map!.fitBounds(
+            [
+              [bbox[0], bbox[1]],
+              [bbox[2], bbox[3]]
+            ],
+            { padding: 50, duration: 200 }
+          );
+          return true;
+        }
       } catch (turfError) {
         console.warn("Turf bbox calculation failed, using manual calculation:", turfError);
+        // manual calculation fallback
         
-        // Manual calculation as fallback
         geometry.features.forEach(feature => {
           if (feature.geometry.type === 'Polygon') {
             const coordinates = feature.geometry.coordinates[0];
@@ -686,6 +688,69 @@ debugTerrainLayer(): void {
   if (hasSource) {
     const source = this.map.getSource(layerId) as mapboxgl.GeoJSONSource;
     console.log("Source data available:", !!source._data);
+  }
+}
+
+/**
+ * Initialize Studio layers that already exist in the map style
+ * Call this after map loads to register pre-existing layers
+ */
+initializeStudioLayers(): boolean {
+  if (!this.ensureMap()) return false;
+  
+  try {
+    // Check if forest-height layer exists in Studio style
+    const forestLayer = this.map!.getLayer('forest-height');
+    if (forestLayer) {
+      // Start hidden and register with LayerManager
+      this.map!.setLayoutProperty('forest-height', 'visibility', 'none');
+      this.registerLayer('forest-height', false);
+      console.log('✅ Registered Studio forest-height layer');
+      return true;
+    } else {
+      console.warn('⚠️ forest-height layer not found in Studio style');
+      return false;
+    }
+  } catch (error) {
+    console.error('❌ Error initializing Studio layers:', error);
+    return false;
+  }
+}
+
+/**
+ * Enhanced toggle for Studio layers that need special handling
+ */
+toggleStudioLayer(layerId: string): boolean {
+  if (!this.ensureMap()) return false;
+  
+  try {
+    if (!this.map!.getLayer(layerId)) {
+      console.warn(`Studio layer ${layerId} does not exist`);
+      return false;
+    }
+    
+    // Get current actual visibility (not tracked state)
+    const currentVisibility = this.map!.getLayoutProperty(layerId, 'visibility');
+    const newVisibility = currentVisibility === 'visible' ? 'none' : 'visible';
+    
+    // Set new visibility
+    this.map!.setLayoutProperty(layerId, 'visibility', newVisibility);
+    
+    // Move to top when making visible (for Studio layers)
+    if (newVisibility === 'visible') {
+      this.map!.moveLayer(layerId);
+    }
+    
+    // Update tracking
+    const isVisible = newVisibility === 'visible';
+    this.layers.set(layerId, isVisible);
+    this.notifyListeners('visibilityChange', layerId, isVisible);
+    
+    console.log(`✅ Studio layer ${layerId} toggled to: ${newVisibility}`);
+    return true;
+  } catch (error) {
+    console.error(`❌ Error toggling Studio layer ${layerId}:`, error);
+    return false;
   }
 }
 

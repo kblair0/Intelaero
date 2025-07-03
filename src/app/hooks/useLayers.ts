@@ -38,7 +38,9 @@ export function useLayers() {
   const { selectMeshblock } = useMeshblockContext();
 
   /**
-   * Add a flight plan to the map
+   * Add a flight plan to the map with enhanced bounds fitting
+   * @param geojson - Flight plan as GeoJSON FeatureCollection
+   * @returns boolean indicating success
    */
   const addFlightPath = useCallback(
     (geojson: GeoJSON.FeatureCollection) => {
@@ -57,7 +59,7 @@ export function useLayers() {
         return false;
       }
 
-      // Create source data
+      // Create source data with line metrics for advanced styling
       const source = {
         type: 'geojson' as const,
         data: geojson,
@@ -70,14 +72,14 @@ export function useLayers() {
         message: 'GeoJSON source prepared'
       });
 
-      // Create layer config
+      // Create layer config with enhanced styling
       const layerConfig = {
         id: MAP_LAYERS.FLIGHT_PATH,
         type: 'line' as const,
         source: MAP_LAYERS.FLIGHT_PATH,
         layout: {
-          'line-join': 'round' as 'round',
-          'line-cap': 'round' as 'round',
+          'line-join': 'round' as const,
+          'line-cap': 'round' as const,
         },
         paint: {
           'line-width': 2,
@@ -119,7 +121,7 @@ export function useLayers() {
       }
 
       if (success) {
-        // Check geometry type before accessing coordinates
+        // Enhanced bounds calculation with geometry validation
         const feature = geojson.features[0];
         const geometryType = feature?.geometry?.type;
         console.log('addFlightPath: geometry check', {
@@ -146,7 +148,7 @@ export function useLayers() {
           message: 'Extracted coordinates for bounds calculation'
         });
 
-        // Calculate bounds
+        // Calculate bounds with improved algorithm
         const bounds = coordinates.reduce(
           (acc, coord) => {
             const [lng, lat] = coord;
@@ -165,7 +167,7 @@ export function useLayers() {
           message: 'Bounds calculated from coordinates'
         });
 
-        // Fit map to bounds with animation
+        // Fit map to bounds with optimized animation settings
         try {
           map.fitBounds(
             bounds as [number, number, number, number],
@@ -204,7 +206,8 @@ export function useLayers() {
 
   /**
    * Toggle high-voltage powerlines layer
-   * @returns {boolean} Success status
+   * Uses static layers configured in Mapbox Studio
+   * @returns boolean indicating success
    */
   const togglePowerlines = useCallback(() => {
     toggleLayer(MAP_LAYERS.POWERLINES);
@@ -232,7 +235,7 @@ export function useLayers() {
     }
 
     try {
-      // Ensure AO is visible
+      // Ensure AO is visible for context
       showAreaOfOperations();
 
       // Use the new toggle system that handles both creation and visibility
@@ -270,7 +273,8 @@ export function useLayers() {
 
   /**
    * Toggle airspace layers
-   * @returns {boolean} Success status
+   * Uses static layers for airfields and labels
+   * @returns boolean indicating success
    */
   const toggleAirspace = useCallback(() => {
     if (!map) {
@@ -302,7 +306,8 @@ export function useLayers() {
 
   /**
    * Toggle mobile towers layer
-   * @returns {Promise<boolean>} Success status
+   * Loads data from Mapbox tilesets and manages clustering
+   * @returns Promise<boolean> indicating success
    */
   const toggleMobileTowers = useCallback(async () => {
     if (!map) {
@@ -315,7 +320,7 @@ export function useLayers() {
     }
 
     try {
-      // Ensure AO is visible
+      // Ensure AO is visible for context
       showAreaOfOperations();
 
       // Check if layers already exist
@@ -337,7 +342,7 @@ export function useLayers() {
         
         return true;
       } else {
-        // Display towers with the new implementation
+        // Display towers with the service implementation
         const success = await displayMobileTowers(map, aoGeometry, setLayerVisibility);
         return success;
       }
@@ -358,8 +363,8 @@ export function useLayers() {
 
   /**
    * Filter mobile towers by carrier, technology, and frequency band
-   * @param {MobileTowerFilters} filters Filter criteria
-   * @returns {boolean} Success status
+   * @param filters - Filter criteria for towers
+   * @returns boolean indicating success
    */
   const filterMobileTowersLayer = useCallback((filters: MobileTowerFilters) => {
     if (!map || !map.getLayer('mobile-towers-unclustered-point')) {
@@ -374,7 +379,7 @@ export function useLayers() {
    * Reset all layers
    */
   const resetLayers = useCallback(() => {
-    // Reset analysis layers
+    // Reset analysis layers only
     layerManager.removeLayer(MAP_LAYERS.ELOS_GRID);
     layerManager.removeLayer(MAP_LAYERS.GCS_GRID);
     layerManager.removeLayer(MAP_LAYERS.OBSERVER_GRID);
