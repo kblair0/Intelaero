@@ -71,6 +71,16 @@ interface AnalysisSectionProps {
   onTerrainOpacityChange?: (opacity: number) => void;
   isAnalyzing?: boolean;
   aoTerrainGrid?: GridCell[] | null;
+  secondButtonText?: string;
+  onSecondButtonClick?: () => void;
+  isSecondButtonLoading?: boolean;
+  showSecondButton?: boolean;
+  secondButtonFeatureId?: FeatureId;
+  
+  // BUFFER PROPS:
+  bufferDistance?: number;
+  onBufferDistanceChange?: (distance: number) => void;
+  hasFlightPlan?: boolean;
 }
 
 /**
@@ -106,7 +116,19 @@ const AnalysisSection: React.FC<AnalysisSectionProps> = ({
   terrainOpacity,
   onTerrainOpacityChange,
   isAnalyzing,
-  aoTerrainGrid
+  aoTerrainGrid,
+  
+  // Second button props:
+  secondButtonText,
+  onSecondButtonClick,
+  isSecondButtonLoading,
+  showSecondButton,
+  secondButtonFeatureId,
+  
+  // BUFFER PROPS:
+  bufferDistance,
+  onBufferDistanceChange,
+  hasFlightPlan
 }) => {
   const { checks } = useChecklistContext();
   
@@ -198,27 +220,112 @@ const AnalysisSection: React.FC<AnalysisSectionProps> = ({
             ) : buttonText}
           </button>
         )}
+
+          {/* ADD THIS SECOND BUTTON LOGIC: */}
+  {showSecondButton && secondButtonText && onSecondButtonClick && (
+    secondButtonFeatureId ? (
+      <PremiumButton 
+        featureId={secondButtonFeatureId}
+        onClick={onSecondButtonClick}
+        disabled={!prerequisitesMet || isSecondButtonLoading}
+        className={`
+          w-full py-2 px-2 rounded-lg text-white text-xs font-medium transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-[1.02]
+          ${prerequisitesMet 
+            ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700' 
+            : 'bg-gray-300 cursor-not-allowed'}
+        `}
+      >
+        {isSecondButtonLoading ? (
+          <span className="flex items-center justify-center gap-2">
+            <Loader className="w-4 h-4 animate-spin" />
+            Loading...
+          </span>
+        ) : secondButtonText}
+      </PremiumButton>
+    ) : (
+      <button 
+        className={`
+          w-full py-2 px-2 rounded-lg text-white text-xs font-medium transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-[1.02]
+          ${prerequisitesMet 
+            ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700' 
+            : 'bg-gray-300 cursor-not-allowed'}
+        `}
+        onClick={onSecondButtonClick}
+        disabled={!prerequisitesMet || isSecondButtonLoading}
+      >
+        {isSecondButtonLoading ? (
+          <span className="flex items-center justify-center gap-2">
+            <Loader className="w-4 h-4 animate-spin" />
+            Loading...
+          </span>
+        ) : secondButtonText}
+      </button>
+    )
+  )}
         
-        {/* Enhanced opacity slider for Terrain Profile Analysis */}
-        {title === "Terrain Profile Analysis" && terrainOpacity !== undefined && onTerrainOpacityChange && aoTerrainGrid && aoTerrainGrid.length > 0 && (
-          <div className="mt-3 p-3 bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg border border-gray-200">
-            <label htmlFor="terrain-opacity-slider" className="text-xs text-gray-700 flex justify-between items-center mb-2">
-              <span className="font-medium">Terrain Opacity:</span>
-              <span className="font-semibold text-blue-600">{Math.round(terrainOpacity * 100)}%</span>
-            </label>
-            <input
-              id="terrain-opacity-slider"
-              type="range"
-              min="0"
-              max="1"
-              step="0.05"
-              value={terrainOpacity}
-              onChange={(e) => onTerrainOpacityChange(Number(e.target.value))}
-              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
-              disabled={isAnalyzing || !layerManager.isLayerVisible(MAP_LAYERS.AOTERRAIN_GRID)}
-            />
+        {/* Enhanced sliders for Terrain Profile Analysis */}
+        {title === "Terrain Profile Analysis" && (
+          <div className="mt-3 space-y-3">
+            {/* Terrain Opacity Slider */}
+            {terrainOpacity !== undefined && onTerrainOpacityChange && aoTerrainGrid && aoTerrainGrid.length > 0 && (
+              <div className="p-3 bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg border border-gray-200">
+                <label htmlFor="terrain-opacity-slider" className="text-xs text-gray-700 flex justify-between items-center mb-2">
+                  <span className="font-medium">Terrain Opacity:</span>
+                  <span className="font-semibold text-blue-600">{Math.round(terrainOpacity * 100)}%</span>
+                </label>
+                <input
+                  id="terrain-opacity-slider"
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={terrainOpacity}
+                  onChange={(e) => onTerrainOpacityChange(Number(e.target.value))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                  disabled={isAnalyzing || !layerManager.isLayerVisible(MAP_LAYERS.AOTERRAIN_GRID)}
+                />
+              </div>
+            )}
+            
+            {/* Buffer Distance Slider */}
+            {bufferDistance !== undefined && onBufferDistanceChange && (
+              <div className="p-3 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border border-green-200">
+                {!hasFlightPlan && (
+                  <div className="mb-3 p-2 bg-gradient-to-r from-yellow-50 to-orange-50 rounded border border-yellow-200">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="w-3 h-3 text-yellow-600 mt-0.5 flex-shrink-0" />
+                      <p className="text-xs text-yellow-800 leading-relaxed">
+                        No flight plan loaded. Buffer applies to manually defined areas.
+                      </p>
+                    </div>
+                  </div>
+                )}
+                <label htmlFor="buffer-slider" className="text-xs text-gray-700 flex justify-between items-center mb-2">
+                  <span className="font-medium">Buffer Distance:</span>
+                  <span className="font-semibold text-green-600">{bufferDistance}m</span>
+                </label>
+                <input
+                  id="buffer-slider"
+                  type="range"
+                  min="100"
+                  max="2000"
+                  step="50"
+                  value={bufferDistance}
+                  onChange={(e) => onBufferDistanceChange(Number(e.target.value))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-500"
+                  disabled={isAnalyzing}
+                />
+                <div className="flex justify-between text-xs text-gray-500 mt-2">
+                  <span>100m</span>
+                  <span>500m</span>
+                  <span>1000m</span>
+                  <span>2000m</span>
+                </div>
+              </div>
+            )}
           </div>
         )}
+
       </div>
     </div>
   );
@@ -320,74 +427,6 @@ const PowerlineAnalysisSection: React.FC<PowerlineAnalysisSectionProps> = ({
             </span>
           ) : localButtonText}
         </PremiumButton>
-      </div>
-    </div>
-  );
-};
-
-/**
- * Enhanced AO Buffer Section Component 
- */
-interface AOBufferSectionProps {
-  bufferDistance: number;
-  onBufferDistanceChange: (distance: number) => void;
-  hasFlightPlan: boolean;
-  isAnalyzing: boolean;
-}
-
-const AOBufferSection: React.FC<AOBufferSectionProps> = ({
-  bufferDistance,
-  onBufferDistanceChange,
-  hasFlightPlan,
-  isAnalyzing
-}) => {
-  return (
-    <div className="bg-white rounded-xl p-4 border border-gray-200 mb-4 shadow-sm hover:shadow-md transition-all duration-200">
-      <div className="flex items-start mb-4">
-        <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl mr-3 bg-gradient-to-br from-blue-50 to-blue-100 text-blue-600 shadow-sm">
-          <Move className="w-5 h-5" />
-        </div>
-        <div className="flex-1">
-          <h3 className="font-semibold text-sm text-gray-900">Area of Operations Buffer</h3>
-          <p className="text-xs text-gray-600 mt-1 leading-relaxed">
-            Adjust the safety margin around your flight path or operating area
-          </p>
-        </div>
-      </div>
-      
-      {!hasFlightPlan && (
-        <div className="mb-4 p-3 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg border border-yellow-200">
-          <div className="flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
-            <p className="text-xs text-yellow-800 leading-relaxed">
-              No flight plan loaded. Buffer will apply to manually defined areas.
-            </p>
-          </div>
-        </div>
-      )}
-      
-      <div className="p-3 bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg border border-gray-200">
-        <label htmlFor="ao-buffer-slider" className="text-sm text-gray-700 flex justify-between items-center mb-3">
-          <span className="font-medium">Buffer Distance:</span>
-          <span className="font-semibold text-blue-600">{bufferDistance}m</span>
-        </label>
-        <input
-          id="ao-buffer-slider"
-          type="range"
-          min="100"
-          max="2000"
-          step="50"
-          value={bufferDistance}
-          onChange={(e) => onBufferDistanceChange(Number(e.target.value))}
-          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
-          disabled={isAnalyzing}
-        />
-        <div className="flex justify-between text-xs text-gray-500 mt-2">
-          <span>100m</span>
-          <span>500m</span>
-          <span>1000m</span>
-          <span>2000m</span>
-        </div>
       </div>
     </div>
   );
@@ -788,16 +827,7 @@ const TerrainAnalysisDashboard = forwardRef<TerrainAnalysisDashboardRef, Terrain
           </div>
         </div>
       )}
-      
-      {flightPlan && (
-        <AOBufferSection 
-          bufferDistance={localBufferDistance}
-          onBufferDistanceChange={handleBufferDistanceChange}
-          hasFlightPlan={true}
-          isAnalyzing={isAnalyzing}
-        />
-      )}
-      
+            
       <div className="space-y-4">
         {/* Terrain Profile Analysis Section */}
         <AnalysisSection
@@ -815,6 +845,9 @@ const TerrainAnalysisDashboard = forwardRef<TerrainAnalysisDashboardRef, Terrain
           onTerrainOpacityChange={handleTerrainOpacityChange}
           isAnalyzing={isAnalyzing}
           aoTerrainGrid={aoTerrainGrid}
+          bufferDistance={localBufferDistance}
+          onBufferDistanceChange={handleBufferDistanceChange}
+          hasFlightPlan={!!flightPlan}
         />
         
         {/* Powerline Analysis Section with Two Buttons */}

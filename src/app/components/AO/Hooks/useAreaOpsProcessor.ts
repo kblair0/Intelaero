@@ -104,7 +104,7 @@ export const useAreaOpsProcessor = () => {
         const cleanedLine = cleanCoords(line);
         
         const buffer = customBufferDistance !== undefined ? customBufferDistance : bufferDistance;
-        const buffered = turf.buffer(cleanedLine, bufferDistance / 1000, { units: 'kilometers' });
+        const buffered = turf.buffer(cleanedLine, buffer / 1000, { units: 'kilometers' });
         
         if (!buffered) {
           throw new Error("Buffering resulted in undefined geometry");

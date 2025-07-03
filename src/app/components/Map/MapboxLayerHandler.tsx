@@ -51,9 +51,10 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
       const mapboxgl = mapboxModule.default;
       const extMap = map as ExtendedMapboxMap;
 
-      // **POWERLINES LAYER SETUP**
+      // **POWERLINES LAYER SETUP WITH FILTERING**
       const powerSourceLayerName = "Electricity_Transmission_Line-08vle5";
 
+      // Add the vector source if it doesn't exist
       if (!map.getSource("electricity-lines")) {
         map.addSource("electricity-lines", {
           type: "vector",
@@ -61,6 +62,7 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
         });
       }
 
+      // Add main powerlines layer with filter to exclude below ground lines
       if (!map.getLayer("Electricity Transmission Lines")) {
         map.addLayer({
           id: "Electricity Transmission Lines",
@@ -68,6 +70,8 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
           source: "electricity-lines",
           "source-layer": powerSourceLayerName,
           layout: { visibility: "none" },
+          // ADD FILTER: Exclude below ground powerlines
+          filter: ["!=", ["get", "RELATIONSHIP"], "Below Ground"],
           paint: {
             "line-color": "#f00",
             "line-width": ["interpolate", ["linear"], ["zoom"], 11, 1, 14, 2],
@@ -75,8 +79,10 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
           minzoom: 10,
         });
         layerManager.registerLayer("Electricity Transmission Lines");
+        console.log("✅ Added filtered Electricity Transmission Lines layer (excluding Below Ground)");
       }
 
+      // Add hitbox layer with same filter
       if (!map.getLayer("Electricity Transmission Lines Hitbox")) {
         map.addLayer({
           id: "Electricity Transmission Lines Hitbox",
@@ -84,13 +90,19 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
           source: "electricity-lines",
           "source-layer": powerSourceLayerName,
           layout: { visibility: "none" },
-          paint: { "line-width": 20, "line-color": "rgba(0,0,0,0)" },
+          // ADD FILTER: Exclude below ground powerlines (same as main layer)
+          filter: ["!=", ["get", "RELATIONSHIP"], "Below Ground"],
+          paint: { 
+            "line-width": 20, 
+            "line-color": "rgba(0,0,0,0)" 
+          },
           minzoom: 10,
         });
         layerManager.registerLayer("Electricity Transmission Lines Hitbox");
+        console.log("✅ Added filtered Electricity Transmission Lines Hitbox layer (excluding Below Ground)");
       }
 
-      // **POWERLINES INTERACTIVITY**
+      // **POWERLINES INTERACTIVITY** (unchanged)
       const handlePowerlineMouseEnter = (
         e: mapboxgl.MapMouseEvent & { features?: mapboxgl.MapboxGeoJSONFeature[] }
       ) => {
@@ -101,11 +113,16 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
         currentFeatureRef.current = feature;
         const voltage = feature.properties?.CAPACITY_KV || "unknown";
         const height = voltage !== "unknown" ? getHeightForVoltage(String(voltage)) : "N/A";
+        const relationship = feature.properties?.RELATIONSHIP || "unknown";
+        const operationalStatus = feature.properties?.OPERATIONAL_STATUS || "unknown";
 
+        // Enhanced popup content with operational status
         const popupContent = `
           <strong>Powerline</strong><br/>
           <strong>Voltage (kV):</strong> ${voltage}<br/>
-          <strong>Height:</strong> ${height}
+          <strong>Height:</strong> ${height}<br/>
+          <strong>Type:</strong> ${relationship}<br/>
+          <strong>Status:</strong> ${operationalStatus}
         `;
 
         if (extMap.__currentPopup) extMap.__currentPopup.remove();
@@ -149,7 +166,7 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
       map.on("mouseleave", "Electricity Transmission Lines Hitbox", handlePowerlineMouseLeave);
       map.on("mousemove", handleMapMouseMove);
 
-      // **AIRFIELDS LAYER SETUP**
+      // **AIRFIELDS LAYER SETUP** (unchanged)
       if (!map.getSource("airfields")) {
         map.addSource("airfields", {
           type: "vector",
@@ -201,10 +218,10 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
         onMapMouseMove: handleMapMouseMove,
       };
 
-      console.log("✅ MapboxLayerHandler initialization complete");
+      console.log("✅ MapboxLayerHandler initialization complete with powerline filtering");
     });
 
-    // Cleanup function
+    // Cleanup function (unchanged)
     return () => {
       if (!map) return;
       

@@ -45,16 +45,6 @@ import {
 } from "./Cards";
 import { useChecklistContext } from "../../context/ChecklistContext";
 import ReloadButton from "../UI/ReloadButton";
-import CompactDisclaimerWidget from "../../components/CompactDisclaimerWidget";
-
-// Dynamic imports for map layer handlers
-import dynamic from "next/dynamic";
-
-// Only load layer handlers on client
-const DBYDLayerHandler = dynamic(
-  () => import("../Map/DBYDLayerHandler").then(m => m.default),
-  { ssr: false }
-);
 
 // ========================================
 // TYPES - Panel and Section Management
@@ -241,11 +231,6 @@ const ToolsDashboard: React.FC<ToolsDashboardProps & { activePanel?: string | nu
           <span className="text-sm">Analysing flight plan...</span>
         </div>
       )}
-      
-      {/* Hidden Layer Handler */}
-      <div className="hidden">
-        <DBYDLayerHandler map={map || null} />
-      </div>
 
       {/* ========================================
           MAIN VERIFICATION CARDS
@@ -264,6 +249,7 @@ const ToolsDashboard: React.FC<ToolsDashboardProps & { activePanel?: string | nu
         isExpanded={expandedSection === 'terrain'}
         onToggleExpanded={() => toggleSectionExpansion('terrain')}
         flightPlan={flightPlan}
+        onTogglePanel={onTogglePanel}
         onTogglePanel={toggleSidePanel}
       />
 

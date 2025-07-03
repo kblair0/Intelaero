@@ -1,9 +1,28 @@
+/**
+ * useLayers.ts - Fixed DBYD Powerlines Toggle
+ * 
+ * Purpose:
+ * Manages map layers for flight operations EXCEPT tree heights.
+ * Tree height functionality is handled directly by TreeHeightService via useTreeHeights hook.
+ * 
+ * Key Changes:
+ * - Updated toggleDBYDPowerlines to use new toggleDBYDLayers function
+ * - Proper layer initialization and toggle support
+ * - Consistent with other layer management patterns
+ * 
+ * Related Files:
+ * - LayerManager.ts: Core layer management service  
+ * - BYDAService.ts: DBYD powerlines data fetching and layer management
+ * - MobileTowerService.ts: Mobile tower display and filtering
+ * - useTreeHeights.ts: Tree height hook (use this directly for tree heights)
+ */
+
 import { useCallback } from 'react';
 import { useMapContext } from '../context/mapcontext';
 import { layerManager, MAP_LAYERS } from '../services/LayerManager';
 import { useAreaOfOpsContext } from '../context/AreaOfOpsContext';
 import { useAreaOpsProcessor } from '../components/AO/Hooks/useAreaOpsProcessor';
-import { fetchBYDALayers } from '../services/BYDAService';
+import { toggleDBYDLayers, initializeDBYDLayers } from '../services/BYDAService';
 import { displayMobileTowers, filterMobileTowers } from '../services/MobileTowerService';
 import { MobileTowerFilters } from '../types/mobileTowers';
 import type { GeoJSON } from 'geojson';
@@ -199,8 +218,9 @@ export function useLayers() {
   }, [toggleLayer]);
 
   /**
-   * Toggle DBYD (Dial Before You Dig) powerlines layers
-   * @returns {Promise<boolean>} Success status
+   * Toggle DBYD (Dial Before You Dig) powerlines layers - FIXED VERSION
+   * Uses new unified toggle system that properly handles layer visibility
+   * @returns Promise<boolean> indicating success
    */
   const toggleDBYDPowerlines = useCallback(async () => {
     if (!map) {
@@ -210,20 +230,13 @@ export function useLayers() {
       });
       return false;
     }
-    if (!aoGeometry) {
-      console.warn('toggleDBYDPowerlines: AO geometry not available', {
-        timestamp: new Date().toISOString(),
-        message: 'Cannot fetch DBYD powerlines without AO'
-      });
-      return false;
-    }
 
     try {
       // Ensure AO is visible
       showAreaOfOperations();
 
-      // Fetch and update DBYD layers
-      const success = await fetchBYDALayers(map, aoGeometry, setLayerVisibility);
+      // Use the new toggle system that handles both creation and visibility
+      const success = await toggleDBYDLayers(map, aoGeometry, setLayerVisibility);
 
       if (success) {
         console.log('toggleDBYDPowerlines: success', {
@@ -235,12 +248,12 @@ export function useLayers() {
             MAP_LAYERS.BYDA_OTHER,
             MAP_LAYERS.BYDA_DEVICE,
           ],
-          message: 'DBYD powerlines layers toggled'
+          message: 'DBYD powerlines layers toggled successfully'
         });
       } else {
-        console.error('toggleDBYDPowerlines: failed to fetch layers', {
+        console.error('toggleDBYDPowerlines: failed to toggle layers', {
           timestamp: new Date().toISOString(),
-          message: 'Failed to fetch DBYD powerlines data'
+          message: 'Failed to toggle DBYD powerlines'
         });
       }
 
@@ -335,6 +348,15 @@ export function useLayers() {
   }, [map, aoGeometry, showAreaOfOperations, setLayerVisibility]);
 
   /**
+   * Add tree height functionality back to useLayers for consistency
+   */
+  const toggleTreeHeights = useCallback(() => {
+    console.log('toggleTreeHeights: Called via useLayers');
+    toggleLayer(MAP_LAYERS.TREE_HEIGHTS);
+    return true;
+  }, [toggleLayer]);
+
+  /**
    * Filter mobile towers by carrier, technology, and frequency band
    * @param {MobileTowerFilters} filters Filter criteria
    * @returns {boolean} Success status
@@ -347,24 +369,6 @@ export function useLayers() {
     return filterMobileTowers(map, filters);
   }, [map]);
 
-  /**
-   * Toggle tree height raw data visualization
-   * Calls the custom toggle function exposed by MapboxLayerHandler
-   */
-  const toggleTreeHeights = useCallback(() => {
-    if (!map) {
-      console.warn('toggleTreeHeights: Map not available');
-      return;
-    }
-    
-    // Call the custom toggle function we exposed from MapboxLayerHandler
-    if ((map as any).toggleTreeHeights) {
-      (map as any).toggleTreeHeights();
-      console.log('toggleTreeHeights: Raw data visualization toggled');
-    } else {
-      console.warn('toggleTreeHeights: Tree height system not initialized');
-    }
-  }, [map]);
 
   /**
    * Reset all layers
@@ -491,4 +495,24 @@ return {
   toggleTreeHeights,
   toggleMeshblocks,
 };
+  return {
+    // Core flight functionality
+    addFlightPath,
+    resetLayers,
+    
+    // Layer management
+    toggleLayer,
+    
+    // Infrastructure layers
+    togglePowerlines,
+    toggleDBYDPowerlines, // Now uses the fixed unified system
+    toggleAirspace,
+    
+    // Mobile infrastructure
+    toggleMobileTowers,
+    filterMobileTowersLayer,
+
+    // Tree heights
+    toggleTreeHeights,
+  };
 }

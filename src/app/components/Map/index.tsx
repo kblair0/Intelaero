@@ -18,7 +18,6 @@ import LOSModal from './LOSModal';
 import FlightPathDisplay from './FlightPathDisplay';
 import AODisplay from '../AO/AODisplay';
 import MapboxLayerHandler from './MapboxLayerHandler';
-import DBYDLayerHandler from './DBYDLayerHandler';
 import GridAnalysisController, { GridAnalysisRef } from '../Analyses/Services/GridAnalysis/GridAnalysisController';
 import { useAnalysisController } from "../../context/AnalysisControllerContext";
 import { trackEventWithForm as trackEvent } from '../tracking/tracking';
@@ -46,7 +45,6 @@ const Map: FC<MapProps> = ({ activePanel, togglePanel, flightPlan, setShowUpload
   const { isAnalyzing, setIsAnalyzing, setResults, setError, error, resetAnalysis } = useLOSAnalysis();
   const { aoGeometry } = useAreaOfOpsContext();
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const DBYDLayerHandlerRef = useRef<{ fetchLayers: () => void } | null>(null);
   const { gridAnalysisRef } = useAnalysisController();
   const hasSetMapRef = useRef(false);
   
@@ -199,7 +197,6 @@ const Map: FC<MapProps> = ({ activePanel, togglePanel, flightPlan, setShowUpload
       {map && (
         <>
           <MapboxLayerHandler map={map} />
-          {aoGeometry && <DBYDLayerHandler ref={DBYDLayerHandlerRef} map={map} />}
         </>
       )}
       <MarkerControls 
@@ -208,12 +205,6 @@ const Map: FC<MapProps> = ({ activePanel, togglePanel, flightPlan, setShowUpload
       />
       <div className="absolute top-4 left-4 z-10 flex flex-col gap-4">
         <LayerControls
-          onToggleDBYD={() => {
-            if (DBYDLayerHandlerRef.current) {
-              trackEvent('dbyd_powerlines_requested', {});
-              DBYDLayerHandlerRef.current.fetchLayers();
-            }
-          }}
           activePanel={activePanel}
           togglePanel={togglePanel}
           flightPlan={flightPlan}
