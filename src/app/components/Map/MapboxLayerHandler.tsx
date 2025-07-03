@@ -4,7 +4,6 @@ import { useEffect, useRef } from "react";
 import type mapboxgl from "mapbox-gl";
 import { useMapContext } from "../../context/mapcontext";
 import { layerManager } from "../../services/LayerManager";
-import { useTreeHeights } from "../../hooks/useTreeHeights";
 
 interface MapboxLayerHandlerProps {
   map: mapboxgl.Map | null;
@@ -34,7 +33,6 @@ const getHeightForVoltage = (voltageValue: string): string => {
 
 const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
   const { } = useMapContext();
-  const { toggleTreeHeights, handleTreeHeightClick, cleanup: cleanupTreeHeights, isInitialized } = useTreeHeights(map);
 
   const eventHandlersRef = useRef<{
     onPowerlineMouseEnter?: (e: mapboxgl.MapMouseEvent & { features?: mapboxgl.MapboxGeoJSONFeature[] }) => void;
@@ -231,57 +229,10 @@ const MapboxLayerHandler: React.FC<MapboxLayerHandlerProps> = ({ map }) => {
         extMap.__airfieldsPopup.remove();
         extMap.__airfieldsPopup = null;
       }
-
-      if (cleanupTreeHeights) {
-        cleanupTreeHeights();
-      }
       
       console.log("✅ MapboxLayerHandler cleanup complete");
     };
-  }, [map, cleanupTreeHeights]);
-
-  // Separate useEffect for tree heights integration
-  useEffect(() => {
-    if (!map || !isInitialized) return;
-
-    // Attach tree heights functionality only when initialized
-    (map as any).toggleTreeHeights = toggleTreeHeights;
-    if (handleTreeHeightClick) {
-      map.on("click", handleTreeHeightClick);
-    }
-
-    // ADD HOVER HANDLERS HERE:
-    const handleTreeHover = (e: mapboxgl.MapMouseEvent) => {
-      if (!isInitialized || !map) return;
-      
-      const treeHeightVisible = layerManager.isLayerVisible("tree-height-raster");
-      if (!treeHeightVisible) return;
-      
-      // Simple hover effect - change cursor over map when tree layer is active
-      map.getCanvas().style.cursor = 'crosshair';
-    };
-
-    const handleTreeHoverLeave = () => {
-      if (!map) return;
-      map.getCanvas().style.cursor = '';
-    };
-
-    // Add hover listeners only when tree heights are visible
-    if (layerManager.isLayerVisible("tree-height-raster")) {
-      map.on('mousemove', handleTreeHover);
-      map.on('mouseleave', handleTreeHoverLeave);
-    }
-
-    return () => {
-      delete (map as any).toggleTreeHeights;
-      if (handleTreeHeightClick) {
-        map.off("click", handleTreeHeightClick);
-      }
-      // Clean up hover listeners
-      map.off('mousemove', handleTreeHover);
-      map.off('mouseleave', handleTreeHoverLeave);
-    };
-  }, [map, isInitialized, toggleTreeHeights, handleTreeHeightClick]);
+  }, [map]);
 
   return null;
 };

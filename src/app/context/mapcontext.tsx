@@ -3,6 +3,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import mapboxgl from 'mapbox-gl';
 import { layerManager, MAP_LAYERS, LayerVisibilityMap, LayerEventType } from '../services/LayerManager';
 import { ElevationService } from '../services/ElevationService';
+import { TreeHeightService } from '../services/TreeHeightService';
 
 /**
  * Defines the properties available in the MapContext.
@@ -11,6 +12,7 @@ interface MapContextProps {
   map: mapboxgl.Map | null;
   terrainLoaded: boolean;
   elevationService: ElevationService | null;
+  treeHeightService: TreeHeightService | null;
   layerVisibility: LayerVisibilityMap;
   setMap: (map: mapboxgl.Map | null, terrainLoaded: boolean) => void;
   toggleLayer: (layerId: string) => void;
@@ -36,6 +38,7 @@ export const MapProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [map, setMapInstance] = useState<mapboxgl.Map | null>(null);
   const [terrainLoaded, setTerrainLoaded] = useState(false);
   const [elevationService, setElevationService] = useState<ElevationService | null>(null);
+  const [treeHeightService, setTreeHeightService] = useState<TreeHeightService | null>(null);
   const [layerVisibility, setLayerVisibility] = useState<LayerVisibilityMap>(initialLayerState);
 
   /**
@@ -44,19 +47,21 @@ export const MapProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
    * @param newTerrainLoaded - Indicates if the terrain source is loaded.
    */
   const setMap = (mapInstance: mapboxgl.Map | null, newTerrainLoaded: boolean) => {
-
     if (mapInstance === map && newTerrainLoaded === terrainLoaded) return;
 
-    if (mapInstance) {
-      layerManager.setMap(mapInstance);
-      layerManager.registerKnownLayers();
-      const layerState = layerManager.getLayerState();
-      setLayerVisibility(layerState);
-      const elevService = new ElevationService(mapInstance);
-      setElevationService(elevService);
-    } else {
-      setElevationService(null);
-
+  if (mapInstance) {
+    layerManager.setMap(mapInstance);
+    layerManager.registerKnownLayers();
+    layerManager.initializeStudioLayers();
+    const layerState = layerManager.getLayerState();
+    setLayerVisibility(layerState);
+    const elevService = new ElevationService(mapInstance);
+    setElevationService(elevService);
+    const treeService = new TreeHeightService(mapInstance);
+    setTreeHeightService(treeService);
+      } else {
+        setElevationService(null);
+        setTreeHeightService(null);
     }
 
     setMapInstance(mapInstance);
@@ -101,6 +106,7 @@ export const MapProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     map,
     terrainLoaded,
     elevationService,
+    treeHeightService,
     layerVisibility,
     setMap,
     toggleLayer,

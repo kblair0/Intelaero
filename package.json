@@ -20,6 +20,7 @@
     "lucide-react": "^0.474.0",
     "mapbox-gl": "^3.9.4",
     "next": "^15.1.4",
+    "pako": "^2.1.0",
     "react": "^18.3.1",
     "react-chartjs-2": "^5.2.0",
     "react-dom": "^18.3.1",
@@ -30,6 +31,7 @@
   },
   "devDependencies": {
     "@types/node": "^20",
+    "@types/pako": "^2.0.3",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "@types/uuid": "^10.0.0",

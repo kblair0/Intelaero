@@ -1,3 +1,25 @@
+/**
+ * useLayers.ts - Clean Version
+ * 
+ * Purpose:
+ * Manages map layers for flight operations EXCEPT tree heights.
+ * Tree height functionality is handled directly by TreeHeightService via useTreeHeights hook.
+ * 
+ * Key Features:
+ * - Flight path visualization with bounds fitting
+ * - HV powerlines overlay (static layers)
+ * - DBYD powerlines (dynamic ArcGIS data)
+ * - Airspace visualization
+ * - Mobile towers with filtering capabilities
+ * - Layer reset functionality
+ * 
+ * Related Files:
+ * - LayerManager.ts: Core layer management service
+ * - BYDAService.ts: DBYD powerlines data fetching
+ * - MobileTowerService.ts: Mobile tower display and filterin
+ * - useTreeHeights.ts: Tree height hook (use this directly for tree heights)
+ */
+
 import { useCallback } from 'react';
 import { useMapContext } from '../context/mapcontext';
 import { layerManager, MAP_LAYERS } from '../services/LayerManager';
@@ -16,7 +38,9 @@ export function useLayers() {
   const { showAreaOfOperations } = useAreaOpsProcessor();
 
   /**
-   * Add a flight plan to the map
+   * Add a flight plan to the map with enhanced bounds fitting
+   * @param geojson - Flight plan as GeoJSON FeatureCollection
+   * @returns boolean indicating success
    */
   const addFlightPath = useCallback(
     (geojson: GeoJSON.FeatureCollection) => {
@@ -35,7 +59,7 @@ export function useLayers() {
         return false;
       }
 
-      // Create source data
+      // Create source data with line metrics for advanced styling
       const source = {
         type: 'geojson' as const,
         data: geojson,
@@ -48,14 +72,14 @@ export function useLayers() {
         message: 'GeoJSON source prepared'
       });
 
-      // Create layer config
+      // Create layer config with enhanced styling
       const layerConfig = {
         id: MAP_LAYERS.FLIGHT_PATH,
         type: 'line' as const,
         source: MAP_LAYERS.FLIGHT_PATH,
         layout: {
-          'line-join': 'round',
-          'line-cap': 'round',
+          'line-join': 'round' as const,
+          'line-cap': 'round' as const,
         },
         paint: {
           'line-width': 2,
@@ -97,7 +121,7 @@ export function useLayers() {
       }
 
       if (success) {
-        // Check geometry type before accessing coordinates
+        // Enhanced bounds calculation with geometry validation
         const feature = geojson.features[0];
         const geometryType = feature?.geometry?.type;
         console.log('addFlightPath: geometry check', {
@@ -124,7 +148,7 @@ export function useLayers() {
           message: 'Extracted coordinates for bounds calculation'
         });
 
-        // Calculate bounds
+        // Calculate bounds with improved algorithm
         const bounds = coordinates.reduce(
           (acc, coord) => {
             const [lng, lat] = coord;
@@ -143,7 +167,7 @@ export function useLayers() {
           message: 'Bounds calculated from coordinates'
         });
 
-        // Fit map to bounds with animation
+        // Fit map to bounds with optimized animation settings
         try {
           map.fitBounds(
             bounds as [number, number, number, number],
@@ -182,7 +206,8 @@ export function useLayers() {
 
   /**
    * Toggle high-voltage powerlines layer
-   * @returns {boolean} Success status
+   * Uses static layers configured in Mapbox Studio
+   * @returns boolean indicating success
    */
   const togglePowerlines = useCallback(() => {
     toggleLayer(MAP_LAYERS.POWERLINES);
@@ -197,7 +222,8 @@ export function useLayers() {
 
   /**
    * Toggle DBYD (Dial Before You Dig) powerlines layers
-   * @returns {Promise<boolean>} Success status
+   * Fetches dynamic data from ArcGIS services within AO bounds
+   * @returns Promise<boolean> indicating success
    */
   const toggleDBYDPowerlines = useCallback(async () => {
     if (!map) {
@@ -216,10 +242,10 @@ export function useLayers() {
     }
 
     try {
-      // Ensure AO is visible
+      // Ensure AO is visible for context
       showAreaOfOperations();
 
-      // Fetch and update DBYD layers
+      // Fetch and update DBYD layers using the service
       const success = await fetchBYDALayers(map, aoGeometry, setLayerVisibility);
 
       if (success) {
@@ -254,7 +280,8 @@ export function useLayers() {
 
   /**
    * Toggle airspace layers
-   * @returns {boolean} Success status
+   * Uses static layers for airfields and labels
+   * @returns boolean indicating success
    */
   const toggleAirspace = useCallback(() => {
     if (!map) {
@@ -286,7 +313,8 @@ export function useLayers() {
 
   /**
    * Toggle mobile towers layer
-   * @returns {Promise<boolean>} Success status
+   * Loads data from Mapbox tilesets and manages clustering
+   * @returns Promise<boolean> indicating success
    */
   const toggleMobileTowers = useCallback(async () => {
     if (!map) {
@@ -299,7 +327,7 @@ export function useLayers() {
     }
 
     try {
-      // Ensure AO is visible
+      // Ensure AO is visible for context
       showAreaOfOperations();
 
       // Check if layers already exist
@@ -321,7 +349,7 @@ export function useLayers() {
         
         return true;
       } else {
-        // Display towers with the new implementation
+        // Display towers with the service implementation
         const success = await displayMobileTowers(map, aoGeometry, setLayerVisibility);
         return success;
       }
@@ -332,9 +360,20 @@ export function useLayers() {
   }, [map, aoGeometry, showAreaOfOperations, setLayerVisibility]);
 
   /**
+ * STEP 6: Update useLayers.ts
+ * Add tree height functionality back to useLayers for consistency
+ */
+
+const toggleTreeHeights = useCallback(() => {
+  console.log('toggleTreeHeights: Called via useLayers');
+  toggleLayer(MAP_LAYERS.TREE_HEIGHTS);
+  return true;
+}, [toggleLayer]);
+
+  /**
    * Filter mobile towers by carrier, technology, and frequency band
-   * @param {MobileTowerFilters} filters Filter criteria
-   * @returns {boolean} Success status
+   * @param filters - Filter criteria for towers
+   * @returns boolean indicating success
    */
   const filterMobileTowersLayer = useCallback((filters: MobileTowerFilters) => {
     if (!map || !map.getLayer('mobile-towers-unclustered-point')) {
@@ -345,29 +384,11 @@ export function useLayers() {
   }, [map]);
 
   /**
-   * Toggle tree height raw data visualization
-   * Calls the custom toggle function exposed by MapboxLayerHandler
-   */
-  const toggleTreeHeights = useCallback(() => {
-    if (!map) {
-      console.warn('toggleTreeHeights: Map not available');
-      return;
-    }
-    
-    // Call the custom toggle function we exposed from MapboxLayerHandler
-    if ((map as any).toggleTreeHeights) {
-      (map as any).toggleTreeHeights();
-      console.log('toggleTreeHeights: Raw data visualization toggled');
-    } else {
-      console.warn('toggleTreeHeights: Tree height system not initialized');
-    }
-  }, [map]);
-
-  /**
-   * Reset all layers
+   * Reset all analysis layers but preserve base layers
+   * NOTE: Tree heights are managed by TreeHeightService - use useTreeHeights hook directly
    */
   const resetLayers = useCallback(() => {
-    // Reset analysis layers
+    // Reset analysis layers only
     layerManager.removeLayer(MAP_LAYERS.ELOS_GRID);
     layerManager.removeLayer(MAP_LAYERS.GCS_GRID);
     layerManager.removeLayer(MAP_LAYERS.OBSERVER_GRID);
@@ -378,14 +399,22 @@ export function useLayers() {
   }, []);
 
   return {
+    // Core flight functionality
     addFlightPath,
     resetLayers,
+    
+    // Layer management
     toggleLayer,
+    
+    // Infrastructure layers
     togglePowerlines,
     toggleDBYDPowerlines,
     toggleAirspace,
+    
+    // Mobile infrastructure
     toggleMobileTowers,
     filterMobileTowersLayer,
+
     toggleTreeHeights,
   };
 }

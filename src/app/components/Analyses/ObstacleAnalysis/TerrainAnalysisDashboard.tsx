@@ -45,6 +45,11 @@ import { usePremium, FeatureId } from '../../../context/PremiumContext';
 import { layerManager, MAP_LAYERS } from '../../../services/LayerManager';
 import { GridCell } from '../Types/GridAnalysisTypes';
 
+import { useMapContext } from '../../../context/mapcontext';
+import { useTreeHeightContext } from '../../../context/TreeHeightContext';
+
+
+
 interface TerrainAnalysisDashboardProps {
   onClose?: () => void;
 }
@@ -71,6 +76,13 @@ interface AnalysisSectionProps {
   onTerrainOpacityChange?: (opacity: number) => void;
   isAnalyzing?: boolean;
   aoTerrainGrid?: GridCell[] | null;
+  
+  // ADD THESE NEW OPTIONAL PROPS:
+  secondButtonText?: string;
+  onSecondButtonClick?: () => void;
+  isSecondButtonLoading?: boolean;
+  showSecondButton?: boolean;
+  secondButtonFeatureId?: FeatureId;
 }
 
 /**
@@ -106,7 +118,14 @@ const AnalysisSection: React.FC<AnalysisSectionProps> = ({
   terrainOpacity,
   onTerrainOpacityChange,
   isAnalyzing,
-  aoTerrainGrid
+  aoTerrainGrid,
+  
+  // ADD THESE NEW PROPS:
+  secondButtonText,
+  onSecondButtonClick,
+  isSecondButtonLoading,
+  showSecondButton,
+  secondButtonFeatureId
 }) => {
   const { checks } = useChecklistContext();
   
@@ -198,6 +217,48 @@ const AnalysisSection: React.FC<AnalysisSectionProps> = ({
             ) : buttonText}
           </button>
         )}
+
+          {/* ADD THIS SECOND BUTTON LOGIC: */}
+  {showSecondButton && secondButtonText && onSecondButtonClick && (
+    secondButtonFeatureId ? (
+      <PremiumButton 
+        featureId={secondButtonFeatureId}
+        onClick={onSecondButtonClick}
+        disabled={!prerequisitesMet || isSecondButtonLoading}
+        className={`
+          w-full py-2 px-2 rounded-lg text-white text-xs font-medium transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-[1.02]
+          ${prerequisitesMet 
+            ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700' 
+            : 'bg-gray-300 cursor-not-allowed'}
+        `}
+      >
+        {isSecondButtonLoading ? (
+          <span className="flex items-center justify-center gap-2">
+            <Loader className="w-4 h-4 animate-spin" />
+            Loading...
+          </span>
+        ) : secondButtonText}
+      </PremiumButton>
+    ) : (
+      <button 
+        className={`
+          w-full py-2 px-2 rounded-lg text-white text-xs font-medium transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-[1.02]
+          ${prerequisitesMet 
+            ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700' 
+            : 'bg-gray-300 cursor-not-allowed'}
+        `}
+        onClick={onSecondButtonClick}
+        disabled={!prerequisitesMet || isSecondButtonLoading}
+      >
+        {isSecondButtonLoading ? (
+          <span className="flex items-center justify-center gap-2">
+            <Loader className="w-4 h-4 animate-spin" />
+            Loading...
+          </span>
+        ) : secondButtonText}
+      </button>
+    )
+  )}
         
         {/* Enhanced opacity slider for Terrain Profile Analysis */}
         {title === "Terrain Profile Analysis" && terrainOpacity !== undefined && onTerrainOpacityChange && aoTerrainGrid && aoTerrainGrid.length > 0 && (
@@ -424,6 +485,26 @@ const TerrainAnalysisDashboard = forwardRef<TerrainAnalysisDashboardRef, Terrain
 
   // Terrain layer opacity state
   const [terrainOpacity, setTerrainOpacity] = useState<number>(0.7);
+  const { map } = useMapContext();
+  const { 
+  queryTreeHeightsInAO, 
+  isQuerying: isTreeQuerying, 
+  toggleTreeHeights, 
+  isVisible,
+  error: treeHeightError 
+  } = useTreeHeightContext();
+
+  const handleQueryTreeHeights = async () => {
+    trackEvent("tree_heights_area_query", { panel: "TerrainAnalysisDashboard.tsx" });
+    
+    try {
+      await queryTreeHeightsInAO();
+      // Success message will be shown by the modal itself
+      setSuccessMessage(`Tree height analysis completed successfully`);
+    } catch (error) {
+      setLocalError(error instanceof Error ? error.message : "Failed to query tree heights");
+    }
+  };
  
   const { 
     checks, 
@@ -444,12 +525,12 @@ const TerrainAnalysisDashboard = forwardRef<TerrainAnalysisDashboardRef, Terrain
     terrainAnalysisResult
   } = useAreaOfOpsContext();
 
-  const { togglePowerlines, toggleDBYDPowerlines, toggleAirspace, toggleTreeHeights } = useLayers();
+  const { togglePowerlines, toggleDBYDPowerlines, toggleAirspace } = useLayers();
   const { generateTerrainGrid, generateAOFromFlightPlan } = useAreaOpsProcessor();
 
   const [localAnalyzing, setLocalAnalyzing] = useState(false);
   const isAnalyzing = aoIsAnalyzing || localAnalyzing;
-  
+
   
   useEffect(() => {
     if (guidedTarget) {
@@ -537,7 +618,7 @@ const TerrainAnalysisDashboard = forwardRef<TerrainAnalysisDashboardRef, Terrain
             terrainGrid,
             {
               referenceAltitude: 120,
-              onProgress: (progress) => {},
+              onProgress: (progress: number) => {},
               timeout: 20000
             }
           );
@@ -834,17 +915,26 @@ const TerrainAnalysisDashboard = forwardRef<TerrainAnalysisDashboardRef, Terrain
           isLocalLoading={isLoadingDBYD}
         />
 
-        {/* Tree Heights Analysis Section */}
+        {/* Tree Heights Analysis Section - ENHANCED DEBUG */}
+        <div className="space-y-2">
         <AnalysisSection
           title="Tree Heights"
           description="Display tree heights within the Area of Operations."
           icon={<Trees className="w-5 h-5" />}
-          buttonText="Toggle Tree Heights"
+          buttonText={isVisible ? "Hide Tree Heights" : "Show Tree Heights"}
           onButtonClick={toggleTreeHeights}
-          prerequisitesMet={!!aoGeometry}
-          prerequisitesMessage={!aoGeometry ? "Please define an operating area first" : undefined}
+          prerequisitesMet={true} // No prerequisites needed
           featureId="tree_heights"
+         
+          // ADD SECOND BUTTON PROPS:
+          secondButtonText="Query Tree Heights in AO"
+          onSecondButtonClick={handleQueryTreeHeights}
+          isSecondButtonLoading={isTreeQuerying}
+          showSecondButton={!!aoGeometry}
+          secondButtonFeatureId="tree_heights"
         />
+        
+      </div>
         
         {/* Airspace Analysis Section */}
         <AnalysisSection
