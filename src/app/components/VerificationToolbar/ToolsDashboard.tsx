@@ -45,6 +45,7 @@ import {
 } from "./Cards";
 import { useChecklistContext } from "../../context/ChecklistContext";
 import ReloadButton from "../UI/ReloadButton";
+import { CadastreDashboard } from '../../sandbox/cadastre';
 
 // ========================================
 // TYPES - Panel and Section Management
@@ -53,7 +54,7 @@ import ReloadButton from "../UI/ReloadButton";
 /**
  * Valid panel types that can be toggled (includes null for "close all panels")
  */
-type PanelType = "energy" | "los" | "terrain" | "meshblock" | null;
+type PanelType = "energy" | "los" | "terrain" | "meshblock" | "cadastre" | null;
 
 /**
  * Valid section types that can be expanded within the dashboard
@@ -250,7 +251,6 @@ const ToolsDashboard: React.FC<ToolsDashboardProps & { activePanel?: string | nu
         onToggleExpanded={() => toggleSectionExpansion('terrain')}
         flightPlan={flightPlan}
         onTogglePanel={onTogglePanel}
-        onTogglePanel={toggleSidePanel}
       />
 
       {/* ========================================

@@ -1,7 +1,7 @@
 /**
  * SandboxCard.tsx - Experimental Features with Meshblock Demo
  *
- * Purpose: Expandable experimental features card with single meshblock access button
+ * Purpose: Expandable experimental features card with compact meshblock and cadastre buttons
  * Opens the meshblock analysis panel and automatically loads meshblock data
  */
 
@@ -9,16 +9,18 @@
 import React, { useState } from "react";
 import { 
   Beaker, 
-  Map, 
+  Map,
+  MapPin,
   ArrowRight,
   Loader2
 } from "lucide-react";
 import { VerificationCardProps } from "../Utils/types";
 import { trackEventWithForm as trackEvent } from "../../tracking/tracking";
 import { useMeshblockContext } from "../../../sandbox/meshblox/MeshblockContext";
+import { useCadastreContext } from '../../../sandbox/cadastre';
 
 /**
- * Simplified Sandbox Card with Single Meshblock Access
+ * Simplified Sandbox Card with Compact Meshblock and Cadastre Buttons
  */
 const SandboxCard: React.FC<VerificationCardProps> = ({
   isExpanded,
@@ -26,7 +28,8 @@ const SandboxCard: React.FC<VerificationCardProps> = ({
   flightPlan,
   onTogglePanel
 }) => {
-  const [isLoading, setIsLoading] = useState(false);
+  const [isMeshblockLoading, setIsMeshblockLoading] = useState(false);
+  const [isCadastreLoading, setIsCadastreLoading] = useState(false);
   
   // Access meshblock context for auto-loading
   const { 
@@ -35,6 +38,14 @@ const SandboxCard: React.FC<VerificationCardProps> = ({
     layersVisible,
     error
   } = useMeshblockContext();
+
+  // Cadastre context
+  const { 
+    toggleCadastre, 
+    loading: cadastreLoading, 
+    layersVisible: cadastreVisible, 
+    error: cadastreError 
+  } = useCadastreContext();
 
   /**
    * Opens meshblock analysis panel AND automatically loads data
@@ -45,7 +56,7 @@ const SandboxCard: React.FC<VerificationCardProps> = ({
       autoLoad: true
     });
     
-    setIsLoading(true);
+    setIsMeshblockLoading(true);
     
     try {
       // First open the panel
@@ -61,13 +72,36 @@ const SandboxCard: React.FC<VerificationCardProps> = ({
     } catch (error) {
       console.error("Failed to auto-load meshblock data:", error);
     } finally {
-      setIsLoading(false);
+      setIsMeshblockLoading(false);
     }
   };
 
-  // Determine button state
-  const isButtonLoading = isLoading || meshblockLoading;
-  const isDataLoaded = layersVisible;
+  /**
+   * Opens cadastre dashboard and automatically loads data
+   */
+  const handleOpenCadastrePanel = async () => {
+    trackEvent('open_cadastre_analysis', { source: 'sandbox_card', autoLoad: true });
+    setIsCadastreLoading(true);
+    try {
+      if (onTogglePanel) {
+        onTogglePanel('cadastre');
+      }
+      if (!cadastreVisible) {
+        console.log('Auto-loading cadastre data from sandbox card');
+        await toggleCadastre();
+      }
+    } catch (error) {
+      console.error('Failed to auto-load cadastre data:', error);
+    } finally {
+      setIsCadastreLoading(false);
+    }
+  };
+
+  // Button states
+  const isMeshblockButtonLoading = isMeshblockLoading || meshblockLoading;
+  const isMeshblockDataLoaded = layersVisible;
+  const isCadastreButtonLoading = isCadastreLoading || cadastreLoading;
+  const isCadastreDataLoaded = cadastreVisible;
   const canLoad = true;
 
   return (
@@ -93,62 +127,95 @@ const SandboxCard: React.FC<VerificationCardProps> = ({
       {/* Expandable Content */}
       {isExpanded && (
         <div className="border-t border-gray-200 p-4">
-          {/* Meshblock Analysis Section */}
-          <div className="space-y-3">
+          <div className="space-y-2">
             
             {/* Status indicator */}
-            {error && (
+            {(error || cadastreError) && (
               <div className="text-xs text-red-600 bg-red-50 p-2 rounded">
-                {error}
+                {error || cadastreError}
               </div>
             )}
 
-            {/* Open Meshblock Analysis Button */}
-            <button
-              onClick={handleOpenMeshblockPanel}
-              disabled={isButtonLoading || !canLoad}
-              className={`w-full p-4 rounded-lg transition-all duration-200 transform shadow-sm ${
-                isDataLoaded 
-                  ? "bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700" 
-                  : "bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
-              } text-white ${
-                isButtonLoading || !canLoad 
-                  ? "opacity-50 cursor-not-allowed" 
-                  : "hover:scale-[1.02]"
-              }`}
-            >
-              <div className="flex items-center justify-center gap-3">
-                {isButtonLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : isDataLoaded ? (
-                  <Map className="w-4 h-4" />
-                ) : (
-                  <ArrowRight className="w-4 h-4" />
-                )}
-                
-                <div className="text-center">
-                  <div className="font-medium text-sm">
-                    {isButtonLoading 
-                      ? "Loading Meshblock Data..." 
-                      : isDataLoaded 
-                        ? "View Meshblock Analysis" 
-                        : "Start Meshblock Analysis"
-                    }
-                  </div>
-                  <div className="text-xs text-blue-100 mt-1">
-                    {isDataLoaded 
-                      ? "Data loaded - click to open analysis panel"
-                      : "Automatically loads population and land use data"
-                    }
+            {/* Compact Buttons Grid */}
+            <div className="grid grid-cols-1 gap-2">
+              
+              {/* Meshblock Button - Compact */}
+              <button
+                onClick={handleOpenMeshblockPanel}
+                disabled={isMeshblockButtonLoading || !canLoad}
+                className={`p-2 rounded-lg transition-all duration-200 shadow-sm ${
+                  isMeshblockDataLoaded 
+                    ? "bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700" 
+                    : "bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
+                } text-white ${
+                  isMeshblockButtonLoading || !canLoad 
+                    ? "opacity-50 cursor-not-allowed" 
+                    : "hover:scale-[1.01]"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  {isMeshblockButtonLoading ? (
+                    <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
+                  ) : isMeshblockDataLoaded ? (
+                    <Map className="w-3 h-3 flex-shrink-0" />
+                  ) : (
+                    <ArrowRight className="w-3 h-3 flex-shrink-0" />
+                  )}
+                  
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-xs truncate">
+                      {isMeshblockButtonLoading 
+                        ? "Loading..." 
+                        : isMeshblockDataLoaded 
+                          ? "Meshblock Analysis" 
+                          : "Start Meshblock Analysis"
+                      }
+                    </div>
                   </div>
                 </div>
-              </div>
-            </button>
+              </button>
 
-            {/* Quick status */}
-            {isDataLoaded && (
-              <div className="text-xs text-center text-green-600 bg-green-50 p-2 rounded">
-                ✅ Meshblock data loaded and ready for analysis
+              {/* Cadastre Button - Compact */}
+              <button
+                onClick={handleOpenCadastrePanel}
+                disabled={isCadastreButtonLoading || !canLoad}
+                className={`p-2 rounded-lg transition-all duration-200 shadow-sm ${
+                  isCadastreDataLoaded
+                    ? 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700'
+                    : 'bg-gradient-to-r from-blue-500 to-green-600 hover:from-blue-600 hover:to-green-700'
+                } text-white ${isCadastreButtonLoading || !canLoad ? 'opacity-50 cursor-not-allowed' : 'hover:scale-[1.01]'}`}
+              >
+                <div className="flex items-center gap-2">
+                  {isCadastreButtonLoading ? (
+                    <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
+                  ) : isCadastreDataLoaded ? (
+                    <MapPin className="w-3 h-3 flex-shrink-0" />
+                  ) : (
+                    <ArrowRight className="w-3 h-3 flex-shrink-0" />
+                  )}
+                  
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-xs truncate">
+                      {isCadastreButtonLoading
+                        ? 'Loading...'
+                        : isCadastreDataLoaded
+                          ? 'Cadastre Dashboard'
+                          : 'Start Cadastre Visualization'}
+                    </div>
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            {/* Compact Status Messages */}
+            {(isMeshblockDataLoaded || isCadastreDataLoaded) && (
+              <div className="text-xs text-center text-green-600 bg-green-50 p-1.5 rounded">
+                ✅ {isMeshblockDataLoaded && isCadastreDataLoaded 
+                  ? 'Both datasets loaded' 
+                  : isMeshblockDataLoaded 
+                    ? 'Meshblock data ready' 
+                    : 'Cadastre data ready'
+                }
               </div>
             )}
           </div>

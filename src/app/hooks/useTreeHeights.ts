@@ -16,8 +16,8 @@
 import { useCallback, useState } from 'react';
 import { useMapContext } from '../context/mapcontext';
 import { useAreaOfOpsContext } from '../context/AreaOfOpsContext';
-import { MAP_LAYERS } from '../services/LayerManager';
 import type { TreeHeightQueryResultsData } from '../services/TreeHeightService';
+import { layerManager, MAP_LAYERS } from '../services/LayerManager';
 
 export function useTreeHeights() {
   const { toggleLayer, layerVisibility, treeHeightService } = useMapContext();
@@ -25,19 +25,29 @@ export function useTreeHeights() {
   const [error, setError] = useState<string | null>(null);
   const [isQuerying, setIsQuerying] = useState(false);
   
-  /**
-   * Toggle tree height layer visibility (existing functionality)
-   */
-  const toggleTreeHeights = useCallback(async () => {
-    console.log('🌲 Toggling tree heights via LayerManager');
-    try {
-      setError(null);
+/**
+ * Toggle tree height layer visibility (optimized for Studio layers)
+ */
+const toggleTreeHeights = useCallback(async () => {
+  console.log('🌲 Toggling tree heights via LayerManager (Studio layer)');
+  try {
+    setError(null);
+    
+    // Since this is a Studio layer, use the Studio-optimized toggle
+    const success = layerManager.toggleStudioLayer(MAP_LAYERS.TREE_HEIGHTS);
+    
+    if (!success) {
+      // Fallback to regular toggle if Studio toggle fails
+      console.log('🌲 Studio toggle failed, using regular toggle as fallback');
       toggleLayer(MAP_LAYERS.TREE_HEIGHTS);
-    } catch (error) {
-      const errorMessage = `Failed to toggle tree heights: ${error instanceof Error ? error.message : 'Unknown error'}`;
-      setError(errorMessage);
     }
-  }, [toggleLayer]);
+    
+  } catch (error) {
+    const errorMessage = `Failed to toggle tree heights: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    console.error('🌲', errorMessage);
+    setError(errorMessage);
+  }
+}, [toggleLayer]);
 
 /**
  * Query tree heights within the Area of Operations

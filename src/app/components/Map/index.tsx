@@ -33,7 +33,7 @@ import MeshblockPopup from '../../sandbox/meshblox/MeshblockPopup';
  * Props for the Map component
  */
 interface MapProps {
-  activePanel?: 'energy' | 'los' | 'terrain' | 'meshblock' | null;
+  activePanel?: 'energy' | 'los' | 'terrain' | 'meshblock' | "cadastre" | null;
   togglePanel?: (panel: 'energy' | 'los' | 'terrain' | 'meshblock') => void;
   flightPlan?: any;
   setShowUploader?: (show: boolean) => void;

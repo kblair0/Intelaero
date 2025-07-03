@@ -31,11 +31,9 @@ import { FeatureId } from '../../types/PremiumTypes';
 
 interface LayerControlsProps {
   onToggleDBYD?: () => void;
-  activePanel?: 'energy' | 'los' | 'terrain' | 'meshblock' | null;
+  activePanel?: 'energy' | 'los' | 'terrain' | 'meshblock' | "cadastre" | null;
   togglePanel?: (panel: 'energy' | 'los' | 'terrain' | 'meshblock') => void;
-  // Remove onToggleDBYD prop
-  activePanel?: 'energy' | 'los' | 'terrain' | null;
-  togglePanel?: (panel: 'energy' | 'los' | 'terrain') => void;
+
   flightPlan?: any; // Replace with FlightPlan type if available
   setShowUploader?: (show: boolean) => void;
 }

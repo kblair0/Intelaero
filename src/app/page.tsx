@@ -52,6 +52,8 @@ import MeshblockDisplay from "./sandbox/meshblox/MeshblockDisplay";
 
 const CalculationMethodologyModal = lazy(() => import("./sandbox/meshblox/CalculationMethodologyModal"));
 import { useMeshblockContext } from "./sandbox/meshblox/MeshblockContext";
+import { CadastreProvider, CadastreDashboard, CadastreDisplay } from './sandbox/cadastre';
+
 
 //payment and premium access
 import { PremiumProvider } from "./context/PremiumContext";
@@ -100,7 +102,7 @@ const ModalLoadingPlaceholder: React.FC = () => (
  * Inner content component that uses the demo context
  */
 const HomeContentInner = () => {
-  const [activePanel, setActivePanel] = useState<"energy" | "los" | "terrain" | "meshblock" | null>(null);
+  const [activePanel, setActivePanel] = useState<"energy" | "los" | "terrain" | "meshblock" | "cadastre" | null>(null);
   const [initialSection, setInitialSection] = useState<'flight' | 'station' | 'merged' | 'stationLOS' | null>(null);
   const [showUploader, setShowUploader] = useState(false);
   const [showAreaOpsUploader, setShowAreaOpsUploader] = useState(false);
@@ -117,7 +119,7 @@ const HomeContentInner = () => {
   // ✅ Now this hook is called INSIDE the provider
   const { demoState } = useDemoOrchestration();
 
-const togglePanel = (panel: "energy" | "los" | "terrain" | "meshblock" | null, section?: 'flight' | 'station' | 'merged' | 'stationLOS' | null) => {
+const togglePanel = (panel: "energy" | "los" | "terrain" | "meshblock" | "cadastre" | null, section?: 'flight' | 'station' | 'merged' | 'stationLOS' | null) => {
   console.log('🔍 togglePanel called with:', panel, 'current activePanel:', activePanel);
   
   setActivePanel((prev) => {
@@ -403,6 +405,18 @@ const togglePanel = (panel: "energy" | "los" | "terrain" | "meshblock" | null, s
               <MeshblockDashboard />
             </Suspense>
           </MapSidePanel>
+
+          <MapSidePanel
+            title="NSW Cadastre"
+            icon={<MapPin className="w-5 h-5 landscape:w-4 landscape:h-4" />}
+            isExpanded={activePanel === "cadastre"}
+            onToggle={() => togglePanel("cadastre")}
+            className="z-30 landscape:w-72"
+          >
+            <Suspense fallback={<AnalysisLoadingSpinner />}>
+              <CadastreDashboard />
+            </Suspense>
+          </MapSidePanel>
         </div>
       </div>
     </div>
@@ -483,34 +497,37 @@ export default function Home() {
       suggestLargerDevice={true}
     >
       <MapProvider>
-        <AnalysisControllerProvider> 
-          <AreaOfOpsProvider>
-            <FlightPlanProvider>
-              <FlightConfigurationProvider>
-                <PremiumProvider>
-                  <MarkerProvider>
-                    <LOSAnalysisProvider>
-                      <ObstacleAnalysisProvider>
-                        <ChecklistProvider>
-                          <MeshblockProvider>
-                            <TreeHeightProvider>
-                            <HomeContent />
-                              <UpgradeModalWrapper />
-                              <MarkerLocationsModalWrapper />
-                            <MethodologyModalWrapper />
-                            <MeshblockDisplay />
-                          </MeshblockProvider>
-                          </TreeHeightProvider>
+  <AnalysisControllerProvider> 
+    <AreaOfOpsProvider>
+      <FlightPlanProvider>
+        <FlightConfigurationProvider>
+          <PremiumProvider>
+            <MarkerProvider>
+              <LOSAnalysisProvider>
+                <ObstacleAnalysisProvider>
+                  <TreeHeightProvider>
+                    <CadastreProvider>
+                      <MeshblockProvider>
+                        <ChecklistProvider>                          
+                          <HomeContent />
+                          <UpgradeModalWrapper />
+                          <MarkerLocationsModalWrapper />
+                          <MethodologyModalWrapper />
+                          <CadastreDisplay />
+                          <MeshblockDisplay />
                         </ChecklistProvider>
-                      </ObstacleAnalysisProvider>
-                    </LOSAnalysisProvider>
-                  </MarkerProvider>
-                </PremiumProvider>
-              </FlightConfigurationProvider>
-            </FlightPlanProvider>
-          </AreaOfOpsProvider>
-        </AnalysisControllerProvider>
-      </MapProvider>
+                      </MeshblockProvider>
+                    </CadastreProvider>
+                  </TreeHeightProvider>
+                </ObstacleAnalysisProvider>
+              </LOSAnalysisProvider>
+            </MarkerProvider>
+          </PremiumProvider>
+        </FlightConfigurationProvider>
+      </FlightPlanProvider>
+    </AreaOfOpsProvider>
+  </AnalysisControllerProvider>
+</MapProvider>
     </MobileOrientationGuard>
   );
 }

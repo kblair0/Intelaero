@@ -26,12 +26,15 @@ export const MAP_LAYERS = {
   BYDA_OTHER: "byda-other-layer",
   BYDA_DEVICE: "byda-device-layer",
   MOBILE_TOWERS: "mobile-towers-layer",
-  TREE_HEIGHTS: 'tree-height-raster',
+  TREE_HEIGHTS: 'forest-height',
   MESHBLOCK_LANDUSE: "meshblock-landuse-layer",
   MESHBLOCK_POPULATION: "meshblock-population-layer",
   MESHBLOCK_FLIGHT_INTERSECT: "meshblock-flight-intersect-layer",
   MESHBLOCK_ANALYSIS_BUFFER_FILL: "meshblock-analysis-buffer-fill",
   MESHBLOCK_ANALYSIS_BUFFER_OUTLINE: "meshblock-analysis-buffer-outline",
+  CADASTRE_PROPERTIES: 'cadastre-properties',
+  CADASTRE_SURVEY_MARKS: 'cadastre-survey-marks',
+  CADASTRE_PROPERTIES_FILL: 'cadastre-properties-fill',
 } as const;
 
 export type LayerId = typeof MAP_LAYERS[keyof typeof MAP_LAYERS];
@@ -428,6 +431,76 @@ removeMeshblockAnalysisBuffer(): boolean {
     return false;
   }
 }
+
+/**
+ * Initialize all Studio layers that already exist in the map style
+ * Call this after map loads to register pre-existing layers
+ */
+initializeAllStudioLayers(): boolean {
+  if (!this.ensureMap()) return false;
+  
+  let success = true;
+  
+  try {
+    // Initialize tree height layer (forest-height in Studio)
+    const forestLayer = this.map!.getLayer('forest-height');
+    if (forestLayer) {
+      // Start hidden and register with LayerManager
+      this.map!.setLayoutProperty('forest-height', 'visibility', 'none');
+      this.registerLayer('forest-height', false);
+      console.log('✅ Registered Studio forest-height layer');
+    } else {
+      console.warn('⚠️ forest-height layer not found in Studio style');
+      success = false;
+    }
+    
+    // Add other Studio layers here as needed
+
+    return success;
+  } catch (error) {
+    console.error('❌ Error initializing Studio layers:', error);
+    return false;
+  }
+}
+
+/**
+ * Enhanced toggle specifically for Studio layers
+ * Use this instead of regular toggleLayer for Studio layers
+ */
+toggleStudioLayer(layerId: string): boolean {
+  if (!this.ensureMap()) return false;
+  
+  try {
+    if (!this.map!.getLayer(layerId)) {
+      console.warn(`Studio layer ${layerId} does not exist`);
+      return false;
+    }
+    
+    // Get current actual visibility (not tracked state)
+    const currentVisibility = this.map!.getLayoutProperty(layerId, 'visibility');
+    const newVisibility = currentVisibility === 'visible' ? 'none' : 'visible';
+    
+    // Set new visibility
+    this.map!.setLayoutProperty(layerId, 'visibility', newVisibility);
+    
+    // Move to top when making visible (for Studio layers)
+    if (newVisibility === 'visible') {
+      this.map!.moveLayer(layerId);
+    }
+    
+    // Update tracking
+    const isVisible = newVisibility === 'visible';
+    this.layers.set(layerId, isVisible);
+    this.notifyListeners('visibilityChange', layerId, isVisible);
+    
+    console.log(`✅ Studio layer ${layerId} toggled to: ${newVisibility}`);
+    return true;
+  } catch (error) {
+    console.error(`❌ Error toggling Studio layer ${layerId}:`, error);
+    return false;
+  }
+}
+
   /**
    * Adds or updates an AO terrain grid to the map with improved persistence
    * FIXED: Better source management and layer persistence
